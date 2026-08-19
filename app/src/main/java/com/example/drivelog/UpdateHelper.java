@@ -88,15 +88,17 @@ public class UpdateHelper {
     }
 
     private static void showUpdateDialog(Activity activity, String name, String url, String notes) {
-        new AlertDialog.Builder(activity)
-                .setTitle("Nova Versão Disponível (" + name + ")")
-                .setMessage("Uma nova atualização do DriveLog foi encontrada no GitHub.\n\nDeseja baixar agora?\n\nO que há de novo:\n" + notes)
-                .setPositiveButton("BAIXAR E INSTALAR", (d, w) -> {
-                    // Aqui verificamos a permissão apenas no momento que ele decide baixar
+        AlertDialog dialog = new AlertDialog.Builder(activity)
+                .setTitle("🚀 Nova Versão Disponível (" + name + ")")
+                .setMessage("Uma nova atualização do DriveLog foi encontrada no GitHub.\n\n" +
+                           "O que há de novo:\n" + notes + "\n\n" +
+                           "Deseja atualizar agora?")
+                .setCancelable(false) // Força o usuário a escolher uma opção
+                .setPositiveButton("ATUALIZAR AGORA", (d, w) -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !activity.getPackageManager().canRequestPackageInstalls()) {
                         new AlertDialog.Builder(activity)
                                 .setTitle("Permissão Necessária")
-                                .setMessage("Para instalar a atualização, você precisa permitir que o DriveLog instale apps desconhecidos.")
+                                .setMessage("Para instalar a atualização, você precisa permitir que o DriveLog instale apps desconhecidos na próxima tela.")
                                 .setPositiveButton("CONFIGURAR", (d2, w2) -> {
                                     Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.getPackageName()));
                                     activity.startActivity(intent);
@@ -107,8 +109,12 @@ public class UpdateHelper {
                         startDownload(activity, url);
                     }
                 })
-                .setNegativeButton("MAIS TARDE", null)
-                .show();
+                .setNegativeButton("MAIS TARDE", (d, w) -> d.dismiss())
+                .create();
+        
+        if (!activity.isFinishing()) {
+            dialog.show();
+        }
     }
 
     private static void startDownload(Context context, String url) {
