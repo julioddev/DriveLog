@@ -167,11 +167,28 @@ public class LoginActivity extends AppCompatActivity {
     private void analyzeAndRestore(File tempDb) {
         new Thread(() -> {
             try {
+                // 1. Garantir que a instância atual do banco está fechada
                 AppDatabase.forceCloseInstance();
-                String userId = prefs.getString("current_user_id", "");
+                
+                // 2. Identificar o banco de destino correto
+                String userId = prefs.getString("current_user_id", "local");
                 String dbName = "entregas_db_" + userId.replaceAll("[^a-zA-Z0-9]", "_");
                 File dbFile = getDatabasePath(dbName);
 
+                // 3. Deletar arquivos auxiliares do banco de destino se existirem (evita conflitos de WAL)
+                File walFile = new File(dbFile.getPath() + "-wal");
+                File shmFile = new File(dbFile.getPath() + "-shm");
+                File journalFile = new File(dbFile.getPath() + "-journal");
+                if (walFile.exists()) walFile.delete();
+                if (shmFile.exists()) shmFile.delete();
+                if (journalFile.exists()) journalFile.delete();
+
+                // 4. Garantir que o diretório de destino existe
+                File dbDir = dbFile.getParentFile();
+                if (dbDir != null && !dbDir.exists()) dbDir.mkdirs();
+
+                // 5. Copiar o banco restaurado para o destino
+                Log.d("LoginActivity", "Copiando backup para: " + dbFile.getAbsolutePath());
                 try (FileInputStream in = new FileInputStream(tempDb);
                      FileOutputStream out = new FileOutputStream(dbFile)) {
                     byte[] buf = new byte[4096];
@@ -180,9 +197,20 @@ public class LoginActivity extends AppCompatActivity {
                     out.getFD().sync();
                 }
 
+                // 6. Carregar as preferências que foram salvas dentro do banco
+                // Isso também inicializa o banco pela primeira vez (migrações, etc)
                 SettingsSyncHelper.loadPrefsFromDb(this);
                 
-                // Limpeza do arquivo temporário
+                // 7. Verificação de integridade (Opcional, apenas para log)
+                try {
+                    AppDao dao = AppDatabase.getInstance(this).appDao();
+                    int routeCount = dao.getAllRoutes().size();
+                    Log.d("LoginActivity", "Restauração concluída. Rotas encontradas: " + routeCount);
+                } catch (Exception e) {
+                    Log.e("LoginActivity", "Erro ao verificar banco restaurado", e);
+                }
+                
+                // 8. Limpeza do arquivo temporário
                 if (tempDb.exists()) tempDb.delete();
 
                 runOnUiThread(() -> {

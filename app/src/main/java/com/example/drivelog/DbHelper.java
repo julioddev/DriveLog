@@ -110,17 +110,78 @@ public class DbHelper {
         }
 
         if (tablesToImport.contains("ROUTE_HEADERS")) {
-            if (!isMerge) { dao.clearRouteHeaders(); dao.clearRouteStops(); }
+            if (!isMerge) {
+                dao.clearRouteHeaders();
+                dao.clearRouteStops();
+                dao.clearRoutePoints();
+            }
+            
+            // 1. Importar Headers
             Cursor c = externalDb.rawQuery("SELECT * FROM route_headers", null);
             while (c.moveToNext()) {
                 RouteHeader h = new RouteHeader();
+                h.id = c.getInt(c.getColumnIndexOrThrow("id")); // Importante manter o ID para os Stops/Points
                 h.name = c.getString(c.getColumnIndexOrThrow("name"));
                 h.date = c.getLong(c.getColumnIndexOrThrow("date"));
                 h.isCompleted = c.getInt(c.getColumnIndexOrThrow("isCompleted")) == 1;
                 h.failedCount = c.getInt(c.getColumnIndexOrThrow("failedCount"));
+                try {
+                    h.isActive = c.getInt(c.getColumnIndexOrThrow("isActive")) == 1;
+                    h.startTime = c.getLong(c.getColumnIndexOrThrow("startTime"));
+                    h.endTime = c.getLong(c.getColumnIndexOrThrow("endTime"));
+                    h.totalPausedMs = c.getLong(c.getColumnIndexOrThrow("totalPausedMs"));
+                    h.lastPauseStartTime = c.getLong(c.getColumnIndexOrThrow("lastPauseStartTime"));
+                } catch (Exception ignored) {}
                 dao.insertRouteHeader(h);
             }
             c.close();
+
+            // 2. Importar Stops
+            try (Cursor cStops = externalDb.rawQuery("SELECT * FROM route_stops", null)) {
+                while (cStops.moveToNext()) {
+                    RouteStop s = new RouteStop();
+                    s.routeId = cStops.getInt(cStops.getColumnIndexOrThrow("routeId"));
+                    s.address = cStops.getString(cStops.getColumnIndexOrThrow("address"));
+                    s.latitude = cStops.getDouble(cStops.getColumnIndexOrThrow("latitude"));
+                    s.longitude = cStops.getDouble(cStops.getColumnIndexOrThrow("longitude"));
+                    s.deliveryStatus = cStops.getInt(cStops.getColumnIndexOrThrow("deliveryStatus"));
+                    s.sortOrder = cStops.getInt(cStops.getColumnIndexOrThrow("sortOrder"));
+                    s.packageCount = cStops.getInt(cStops.getColumnIndexOrThrow("packageCount"));
+                    try {
+                        s.buyerCount = cStops.getInt(cStops.getColumnIndexOrThrow("buyerCount"));
+                    } catch (Exception ignored) {}
+                    dao.insertRouteStop(s);
+                }
+            } catch (Exception e) {
+                Log.e("DbHelper", "Error importing route_stops", e);
+            }
+
+            // 3. Importar Groups
+            try (Cursor cGroups = externalDb.rawQuery("SELECT * FROM route_groups", null)) {
+                while (cGroups.moveToNext()) {
+                    RouteGroup g = new RouteGroup();
+                    g.routeId = cGroups.getInt(cGroups.getColumnIndexOrThrow("routeId"));
+                    g.name = cGroups.getString(cGroups.getColumnIndexOrThrow("name"));
+                    g.color = cGroups.getString(cGroups.getColumnIndexOrThrow("color"));
+                    dao.insertRouteGroup(g);
+                }
+            } catch (Exception e) {
+                Log.e("DbHelper", "Error importing route_groups", e);
+            }
+
+            // 4. Importar Points (Traçado do GPS - No banco de dados antigo isso estava ligado ao DailyKm)
+            try (Cursor cPoints = externalDb.rawQuery("SELECT * FROM route_points", null)) {
+                while (cPoints.moveToNext()) {
+                    RoutePoint p = new RoutePoint();
+                    p.dailyKmId = cPoints.getInt(cPoints.getColumnIndexOrThrow("dailyKmId"));
+                    p.latitude = cPoints.getDouble(cPoints.getColumnIndexOrThrow("latitude"));
+                    p.longitude = cPoints.getDouble(cPoints.getColumnIndexOrThrow("longitude"));
+                    p.timestamp = cPoints.getLong(cPoints.getColumnIndexOrThrow("timestamp"));
+                    dao.insertRoutePoint(p);
+                }
+            } catch (Exception e) {
+                Log.e("DbHelper", "Error importing route_points", e);
+            }
         }
 
         if (tablesToImport.contains("CORRECTED_ADDRESSES")) {
