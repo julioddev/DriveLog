@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Base Sombra -->
+    <path
+        android:fillColor="#40000000"
+        android:pathData="M12,3L2,20L12,23L22,20L12,3Z" />
+    <!-- Parte Esquerda (Branco Brilhante) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2L3,19L12,22L12,2Z" />
+    <!-- Parte Direita (Cinza Claro para efeito 3D) -->
+    <path
+        android:fillColor="#E0E0E0"
+        android:pathData="M12,2L12,22L21,19L12,2Z" />
+</vector>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#000000">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="TERMINAL DE LOGS (DRIVELOG v1.0)"
+        android:padding="8dp"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:textColor="#00FF00"
+        android:background="#1A1A1A"
+        android:fontFamily="monospace"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerScannerLogs"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="4dp"
+        android:clipToPadding="false" />
+
+</LinearLayout>

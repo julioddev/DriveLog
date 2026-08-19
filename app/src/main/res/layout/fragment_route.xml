@@ -1,0 +1,986 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <org.osmdroid.views.MapView
+            android:id="@+id/mapRoute"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Aviso de Intervalo de Descanso -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardRestWarningRoute"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_margin="16dp"
+            android:visibility="gone"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="10dp"
+            app:cardBackgroundColor="@android:color/holo_orange_light"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="INTERVALO DE DESCANSO ATIVO"
+                    android:textStyle="bold"
+                    android:textColor="@android:color/black"
+                    android:textSize="16sp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="A localização está pausada para economizar bateria."
+                    android:textColor="@android:color/black"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"/>
+                <TextView
+                    android:id="@+id/btnDisableRestInRoute"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CLIQUE AQUI PARA DESATIVAR"
+                    android:textStyle="bold"
+                    android:textColor="@android:color/holo_blue_dark"
+                    android:layout_marginTop="12dp"
+                    android:padding="8dp"
+                    android:background="?attr/selectableItemBackground"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Barra de Busca e Menu (Modo Mapa) -->
+        <RelativeLayout
+            android:id="@+id/layoutSearchContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="12dp"
+            android:paddingTop="0dp"
+            android:clipToPadding="false"
+            app:layout_constraintTop_toTopOf="parent">
+
+
+            <!-- Container do Botão Hamburger com Badge -->
+            <FrameLayout
+                android:id="@+id/layoutOpenDrawerInside"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_alignParentTop="true"
+                android:visibility="gone">
+
+                <ImageButton
+                    android:id="@+id/btnOpenRoutesDrawerInside"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/bg_circle_dark"
+                    android:src="@drawable/ic_menu_white"
+                    android:padding="12dp"
+                    android:scaleType="centerInside"
+                    android:elevation="8dp"
+                    android:contentDescription="Abrir Menu Lateral" />
+
+                <View
+                    android:id="@+id/badgeOpenDrawerKm"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:background="@drawable/bg_circle_red"
+                    android:elevation="10dp"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnToggleStatsSummary"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_alignParentEnd="true"
+                android:layout_alignParentTop="true"
+                android:layout_marginTop="8dp"
+                android:layout_marginStart="8dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+                <ImageView
+                    android:id="@+id/imageToggleStatsSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/ic_arrow_up"
+                    android:padding="8dp"
+                    app:tint="?attr/colorPrimary"
+                    android:contentDescription="Ocultar Estatísticas" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardSearch"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_toStartOf="@id/btnToggleStatsSummary"
+                android:layout_marginStart="8dp"
+                android:layout_alignParentTop="true"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="6dp"
+                app:contentPadding="0dp">
+
+                <LinearLayout
+                    android:id="@+id/layoutSearchBalloonOuter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:id="@+id/layoutSearchBalloonInner"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:orientation="horizontal"
+                        android:gravity="end|center_vertical"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="4dp">
+
+                        <EditText
+                            android:id="@+id/editSearchAddress"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@android:color/transparent"
+                            android:hint="Buscar endereço..."
+                            android:imeOptions="actionSearch"
+                            android:inputType="text"
+                            android:textSize="14sp"
+                            android:importantForAutofill="no"
+                            android:gravity="center_vertical"
+                            android:visibility="gone" />
+
+                        <ImageButton
+                            android:id="@+id/btnToggleSearch"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@android:drawable/ic_menu_search"
+                            android:padding="12dp"
+                            android:scaleType="centerInside"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Mostrar Busca" />
+
+                        <ImageButton
+                            android:id="@+id/btnSearchAddress"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@android:drawable/ic_menu_search"
+                            android:padding="12dp"
+                            android:scaleType="centerInside"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Pesquisar"
+                            android:visibility="gone" />
+
+                        <ImageButton
+                            android:id="@+id/btnAddStopManual"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@android:drawable/ic_menu_add"
+                            android:padding="12dp"
+                            android:scaleType="centerInside"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Adicionar Parada Manual" />
+
+                        <ImageButton
+                            android:id="@+id/btnRouteMenu"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_more_vert"
+                            android:padding="12dp"
+                            android:scaleType="centerInside"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Menu da Rota" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recyclerSuggestions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxHeight="300dp"
+                        android:visibility="gone"
+                        android:padding="8dp"/>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </RelativeLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardFixMode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="8dp"
+            app:cardBackgroundColor="?attr/colorPrimary"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/layoutSearchContainer"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:gravity="center_vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Toque no mapa para corrigir"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:layout_marginEnd="12dp"/>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancelFix"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="CANCELAR"
+                android:textColor="@android:color/white"
+                android:padding="0dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:textSize="12sp"/>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardLassoMode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="8dp"
+            app:cardBackgroundColor="?attr/colorPrimary"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/layoutSearchContainer"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="4dp"
+            android:gravity="center_vertical">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStartLassoDraw"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Desenhar o primeiro grupo"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"/>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="24dp"
+                android:background="#80FFFFFF"
+                android:layout_marginHorizontal="8dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnUndoLasso"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Desfazer"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                android:textAllCaps="false"/>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="24dp"
+                android:background="#80FFFFFF"
+                android:layout_marginHorizontal="8dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnExitLasso"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sair"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                android:textAllCaps="false"/>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+        <!-- Summary Cards (Right Side) -->
+        <LinearLayout
+            android:id="@+id/layoutSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="12dp"
+            android:gravity="end"
+            app:layout_constraintTop_toBottomOf="@id/layoutSearchContainer"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- Grupo de Estatísticas com Toggle -->
+            <LinearLayout
+                android:id="@+id/layoutStatsContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="end"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:id="@+id/layoutStatsGroup"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="end"
+                    android:visibility="visible">
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardSuccessSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:cardCornerRadius="8dp"
+                        app:cardElevation="4dp"
+                        app:cardBackgroundColor="@android:color/white"
+                        android:layout_marginBottom="8dp">
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:padding="8dp"
+                            android:gravity="center_vertical">
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/checkbox_on_background"
+                                app:tint="@android:color/holo_green_dark"
+                                android:layout_marginEnd="4dp" />
+                            <TextView
+                                android:id="@+id/textSuccessCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textStyle="bold"
+                                android:textColor="@android:color/holo_green_dark"
+                                android:layout_marginEnd="8dp"/>
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@drawable/ic_package"
+                                app:tint="@android:color/holo_green_dark"
+                                android:layout_marginEnd="4dp" />
+                            <TextView
+                                android:id="@+id/textSuccessPackageCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textStyle="bold"
+                                android:textColor="@android:color/holo_green_dark" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardFailedSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:cardCornerRadius="8dp"
+                        app:cardElevation="4dp"
+                        app:cardBackgroundColor="@android:color/white"
+                        android:layout_marginBottom="8dp">
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:padding="8dp"
+                            android:gravity="center_vertical">
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/ic_delete"
+                                app:tint="@android:color/holo_red_dark"
+                                android:layout_marginEnd="4dp" />
+                            <TextView
+                                android:id="@+id/textFailedCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textStyle="bold"
+                                android:textColor="@android:color/holo_red_dark" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardPendingSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:cardCornerRadius="8dp"
+                        app:cardElevation="4dp"
+                        app:cardBackgroundColor="@android:color/white"
+                        android:layout_marginBottom="8dp">
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:padding="8dp"
+                            android:gravity="center_vertical">
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/ic_menu_myplaces"
+                                app:tint="?attr/colorPrimary"
+                                android:layout_marginEnd="4dp" />
+                            <TextView
+                                android:id="@+id/textPendingCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textStyle="bold"
+                                android:textColor="?attr/colorPrimary"
+                                android:layout_marginEnd="8dp"/>
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@drawable/ic_package"
+                                app:tint="?attr/colorPrimary"
+                                android:layout_marginEnd="4dp" />
+                            <TextView
+                                android:id="@+id/textPendingPackageCount"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textStyle="bold"
+                                android:textColor="?attr/colorPrimary" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+            </LinearLayout>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardWeatherSummary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="@android:color/white"
+                android:visibility="gone"
+                android:layout_marginBottom="8dp">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="8dp"
+                    android:gravity="center_vertical">
+                    <ImageView
+                        android:id="@+id/imageWeatherIcon"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:src="@android:drawable/ic_menu_report_image"
+                        app:tint="#FFB300"
+                        android:layout_marginEnd="4dp" />
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+                        <TextView
+                            android:id="@+id/textWeatherCity"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Cidade"
+                            android:textSize="9sp"
+                            android:textColor="#888888"
+                            android:visibility="gone"/>
+                        <TextView
+                            android:id="@+id/textWeatherTemp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="--°C"
+                            android:textStyle="bold"
+                            android:textColor="#333333" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+
+        <!-- Summary Cards (Left Side) -->
+        <LinearLayout
+            android:id="@+id/layoutLeftSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="6dp"
+            android:layout_marginStart="12dp"
+            android:gravity="start"
+            app:layout_constraintTop_toBottomOf="@id/layoutSearchContainer"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <!-- Navegação: Agora no lado esquerdo, abaixo do menu lateral -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardNavigationMode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="6dp"
+                app:cardBackgroundColor="@android:color/white"
+                android:visibility="gone">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="8dp"
+                    android:gravity="center_vertical">
+                    <ImageView
+                        android:id="@+id/imageNavManeuver"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@android:drawable/ic_menu_directions"
+                        app:tint="?attr/colorPrimary"
+                        android:layout_marginEnd="8dp" />
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            <TextView
+                                android:id="@+id/textNavDistance"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="200m"
+                                android:textSize="14sp"
+                                android:textStyle="bold"
+                                android:textColor="?attr/colorPrimary" />
+                            <TextView
+                                android:id="@+id/textNavTotalTime"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="(5 min)"
+                                android:textSize="12sp"
+                                android:textStyle="normal"
+                                android:textColor="#888888"
+                                android:layout_marginStart="4dp"
+                                android:visibility="gone"/>
+                        </LinearLayout>
+                        <TextView
+                            android:id="@+id/textNavInstruction"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Dobre à esquerda"
+                            android:textSize="11sp"
+                            android:textColor="#666666" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/layoutSwitchContainer"
+            android:layout_width="140dp"
+            android:layout_height="40dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="12dp"
+            android:clipChildren="true"
+            app:layout_constraintTop_toBottomOf="@id/layoutSummary"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- 1. GAVETA AZUL -->
+            <TextView
+                android:id="@+id/textSwitchDistance"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_switch_drawer_left_rounded"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp"
+                android:paddingEnd="30dp"
+                android:text="0m"
+                android:textColor="@android:color/white"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="invisible"
+                android:layout_marginEnd="19dp"
+                app:layout_constraintTop_toTopOf="@id/layoutFakeThumb"
+                app:layout_constraintBottom_toBottomOf="@id/layoutFakeThumb"
+                app:layout_constraintEnd_toEndOf="@id/layoutFakeThumb" />
+
+            <!-- 2. ÍCONE REDONDO -->
+            <FrameLayout
+                android:id="@+id/layoutFakeThumb"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@drawable/custom_switch_thumb"
+                android:elevation="10dp"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_map"
+                    app:tint="@color/selector_map_icon_tint" />
+            </FrameLayout>
+
+            <!-- 3. ÁREA DE TOQUE -->
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switchTraceLine"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:alpha="0"
+                android:elevation="12dp"
+                android:checked="true"
+                app:layout_constraintTop_toTopOf="@id/layoutFakeThumb"
+                app:layout_constraintBottom_toBottomOf="@id/layoutFakeThumb"
+                app:layout_constraintStart_toStartOf="@id/layoutFakeThumb"
+                app:layout_constraintEnd_toEndOf="@id/layoutFakeThumb" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardRouteTotalTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="12dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="@android:color/white"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/layoutSwitchContainer"
+            app:layout_constraintEnd_toEndOf="parent">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="8dp"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@android:drawable/ic_menu_recent_history"
+                    app:tint="?attr/colorPrimary"
+                    android:layout_marginEnd="4dp" />
+                <TextView
+                    android:id="@+id/textRouteTotalTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00:00"
+                    android:textStyle="bold"
+                    android:textColor="#333333"
+                    android:textSize="12sp" />
+                <ImageView
+                    android:id="@+id/imageHomeWarning"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@android:drawable/stat_sys_warning"
+                    app:tint="#F44336"
+                    android:layout_marginStart="4dp"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Side FABs -->
+        <LinearLayout
+            android:id="@+id/layoutSideFabs"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="210dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabDeliveryApp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:src="@drawable/ic_map"
+                app:backgroundTint="@android:color/white"
+                app:elevation="4dp"
+                app:borderWidth="0dp"
+                app:fabCustomSize="48dp"
+                app:maxImageSize="30dp"
+                app:tint="@null"
+                android:visibility="visible"
+                android:contentDescription="Abrir App de Entrega" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabReportHazard"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:src="@android:drawable/ic_dialog_alert"
+                app:backgroundTint="@android:color/white"
+                app:fabCustomSize="48dp"
+                app:maxImageSize="30dp"
+                app:tint="@android:color/holo_orange_dark"
+                android:contentDescription="Reportar Alerta" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabCenterMap"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:src="@drawable/ic_my_location"
+                app:backgroundTint="@android:color/white"
+                app:fabCustomSize="48dp"
+                app:maxImageSize="30dp"
+                app:tint="?attr/colorPrimary"
+                android:contentDescription="Minha Localização" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabMapOrientation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:src="@android:drawable/ic_menu_compass"
+                app:backgroundTint="@android:color/white"
+                app:fabCustomSize="48dp"
+                app:maxImageSize="30dp"
+                app:tint="?attr/colorPrimary"
+                android:contentDescription="Orientação do Mapa" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabAddStop"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:src="@android:drawable/ic_input_add"
+                app:backgroundTint="?attr/colorPrimary"
+                app:fabCustomSize="48dp"
+                app:maxImageSize="30dp"
+                app:tint="@android:color/white"
+                android:visibility="gone"
+                android:contentDescription="Adicionar Parada" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabNewRoute"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@android:drawable/ic_menu_add"
+                app:fabCustomSize="48dp"
+                app:maxImageSize="30dp"
+                app:backgroundTint="@android:color/holo_green_dark"
+                app:tint="@android:color/white"
+                android:contentDescription="Nova Rota" />
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Bottom Sheet for Stops -->
+    <LinearLayout
+        android:id="@+id/bottomSheetStops"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        android:orientation="vertical"
+        app:behavior_hideable="false"
+        app:behavior_peekHeight="110dp"
+        app:paddingBottomSystemWindowInsets="false"
+        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+        <!-- Handle -->
+        <View
+            android:layout_width="60dp"
+            android:layout_height="6dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="0dp"
+            android:background="@drawable/bg_handle" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="4dp">
+
+            <!-- ViewPager (Visible when collapsed) -->
+            <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/viewPagerStops"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <!-- Content Container for the List -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <!-- List Header (Visible when expanded) -->
+                <LinearLayout
+                    android:id="@+id/layoutSheetHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="8dp"
+                        android:paddingTop="8dp">
+
+                        <ImageButton
+                            android:id="@+id/btnCollapseSheet"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_back_white"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Fechar Lista" />
+
+                        <TextView
+                            android:id="@+id/textSheetHeader"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Lista de Paradas"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:layout_marginStart="4dp"/>
+
+                        <EditText
+                            android:id="@+id/editSearchStops"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:background="@android:drawable/edit_text"
+                            android:hint="Nº ou Endereço"
+                            android:textSize="14sp"
+                            android:paddingHorizontal="8dp"
+                            android:imeOptions="actionSearch"
+                            android:inputType="text"
+                            android:visibility="gone"
+                            android:layout_marginEnd="8dp"
+                            android:importantForAutofill="no"/>
+
+                        <ImageButton
+                            android:id="@+id/btnToggleSearchStops"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@android:drawable/ic_menu_search"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Buscar Parada" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingBottom="8dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnEditList"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Editar Lista"
+                            android:textSize="12sp"
+                            app:icon="@android:drawable/ic_menu_edit"
+                            android:layout_marginEnd="8dp"/>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnCreateGroup"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Criar Grupo"
+                            android:textSize="12sp"
+                            app:icon="@android:drawable/ic_menu_add"
+                            android:layout_marginEnd="8dp"/>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnUnifyManual"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Unificar"
+                            android:textSize="12sp"
+                            app:icon="@android:drawable/ic_menu_share"/>
+
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- RecyclerView (Visible when expanded) -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerAllStops"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:visibility="gone"
+                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+                <!-- Espaçador dinâmico para desviar da barra de navegação/propaganda -->
+                <View
+                    android:id="@+id/viewBottomSpacer"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp" />
+
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Botão Slim para Expandir/Esconder Menus (Apenas Modo Completo) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardToggleSystemUI"
+        android:layout_width="100dp"
+        android:layout_height="16dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="0dp"
+        android:layout_marginBottom="0dp"
+        app:cardCornerRadius="4dp"
+        app:cardElevation="2dp"
+        app:cardBackgroundColor="#CCFFFFFF"
+        app:strokeWidth="0dp"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackground">
+
+        <ImageView
+            android:id="@+id/imageToggleArrow"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_arrow_down"
+            app:tint="?attr/colorPrimary" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <nl.dionsegijn.konfetti.xml.KonfettiView
+        android:id="@+id/konfettiView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:elevation="999dp" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

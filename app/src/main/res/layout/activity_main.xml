@@ -1,0 +1,412 @@
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="false"
+    tools:context=".MainActivity">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/main"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <com.google.android.material.appbar.AppBarLayout
+            android:id="@+id/appBarLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/topAppBar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                app:title="DriveLog"
+                app:menu="@menu/top_app_bar" />
+
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/viewPager"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintTop_toBottomOf="@id/appBarLayout"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <FrameLayout
+            android:id="@+id/settings_container"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="?android:attr/windowBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/appBarLayout"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottomNavigation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintBottom_toTopOf="@id/adViewContainer"
+            app:menu="@menu/bottom_nav_menu"
+            app:labelVisibilityMode="labeled" />
+
+        <FrameLayout
+            android:id="@+id/adViewContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+        <!-- Overlay de Carregamento Inicial (Apenas Primeiro Login) -->
+        <LinearLayout
+            android:id="@+id/layoutMainSplash"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#00BCD4"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:elevation="100dp"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:src="@mipmap/ic_launcher_round"
+                android:layout_marginBottom="24dp" />
+
+            <TextView
+                android:id="@+id/textSplashStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Iniciando DriveLog..."
+                android:textColor="@android:color/white"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progressSplashLinear"
+                android:layout_width="200dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:indeterminate="true"
+                app:trackColor="#4DFFFFFF"
+                app:indicatorColor="@android:color/white"
+                app:trackThickness="4dp"
+                app:trackCornerRadius="2dp"/>
+
+            <TextView
+                android:id="@+id/textSplashPercent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="0%"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/progressSplashCircle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:indeterminate="true"
+                android:visibility="visible"
+                app:indicatorSize="48dp"
+                app:trackThickness="4dp"
+                app:indicatorColor="@android:color/white" />
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Menu Lateral (Drawer) -->
+    <FrameLayout
+        android:id="@+id/nav_view_routes"
+        android:layout_width="280dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@android:color/white"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="16dp"
+        android:paddingTop="0dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <!-- Layout de Rotas (Original) -->
+        <LinearLayout
+            android:id="@+id/layoutDrawerRoutes"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingBottom="16dp"
+            android:clipToPadding="false">
+
+            <!-- Espaçador para desviar da barra de notificações -->
+            <View
+                android:id="@+id/viewDrawerStatusSpacer1"
+                android:layout_width="match_parent"
+                android:layout_height="0dp" />
+
+            <!-- Seção de Acesso Rápido -->
+            <LinearLayout
+                android:id="@+id/layoutDrawerQuickAccess"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/textDrawerQuickAccessTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Acesso Rápido"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary"
+                    android:layout_marginBottom="12dp"/>
+
+                <LinearLayout
+                    android:id="@+id/layoutDrawerQuickAccessButtons"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="16dp">
+
+                    <ImageButton
+                        android:id="@+id/btnLeftMap"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:src="@drawable/ic_map"
+                        android:background="?attr/selectableItemBackground"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Mapa"/>
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1">
+                        <ImageButton
+                            android:id="@+id/btnLeftEarnings"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:src="@drawable/ic_money"
+                            android:background="?attr/selectableItemBackground"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Ganhos"/>
+                        <View
+                            android:id="@+id/badgeLeftEarnings"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:layout_gravity="top|end"
+                            android:layout_marginTop="6dp"
+                            android:layout_marginEnd="10dp"
+                            android:background="@drawable/bg_circle_red"
+                            android:visibility="gone"/>
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1">
+                        <ImageButton
+                            android:id="@+id/btnLeftKm"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:src="@drawable/ic_tire"
+                            android:background="?attr/selectableItemBackground"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="KM"/>
+                        <View
+                            android:id="@+id/badgeLeftKm"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:layout_gravity="top|end"
+                            android:layout_marginTop="6dp"
+                            android:layout_marginEnd="10dp"
+                            android:background="@drawable/bg_circle_red"
+                            android:visibility="gone"/>
+                    </FrameLayout>
+
+                    <ImageButton
+                        android:id="@+id/btnLeftFuel"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:src="@drawable/ic_fuel"
+                        android:background="?attr/selectableItemBackground"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Abastecimento"/>
+
+                    <ImageButton
+                        android:id="@+id/btnLeftMaint"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:src="@drawable/ic_maintenance"
+                        android:background="?attr/selectableItemBackground"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Manutenção"/>
+
+                    <ImageButton
+                        android:id="@+id/btnLeftReports"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:src="@drawable/ic_reports"
+                        android:background="?attr/selectableItemBackground"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Relatórios"/>
+                </LinearLayout>
+
+                <View
+                    android:id="@+id/dividerDrawerQuickAccess"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#EEEEEE"
+                    android:layout_marginBottom="16dp"/>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Rotas Criadas"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorPrimary"
+                android:layout_marginBottom="16dp"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerDrawerRoutes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDrawerSeeAllRoutes"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Ver mais"
+                android:textSize="12sp"
+                app:icon="@android:drawable/ic_menu_sort_by_size"
+                android:visibility="gone"/>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDrawerFriends"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Amigos"
+                    app:icon="@drawable/ic_friends" />
+                <TextView
+                    android:id="@+id/textDrawerFriendsBadge"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="12dp"
+                    android:background="@drawable/bg_circle_red"
+                    android:gravity="center"
+                    android:text="0"
+                    android:textColor="@android:color/white"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDrawerFixados"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Endereços Corrigidos"
+                app:icon="@android:drawable/ic_menu_myplaces"
+                android:layout_marginTop="8dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDrawerNewRoute"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Nova Rota"
+                app:icon="@android:drawable/ic_menu_add"
+                android:layout_marginTop="8dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDrawerSettings"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Ajustes"
+                android:gravity="start|center_vertical"
+                app:icon="@drawable/ic_settings"
+                android:layout_marginTop="16dp"
+                android:visibility="gone"/>
+        </LinearLayout>
+
+        <!-- Layout de Todas as Rotas (Novo) -->
+        <LinearLayout
+            android:id="@+id/layoutDrawerAllRoutes"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Espaçador para desviar da barra de notificações -->
+            <View
+                android:id="@+id/viewDrawerStatusSpacer3"
+                android:layout_width="match_parent"
+                android:layout_height="0dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="16dp">
+
+                <ImageButton
+                    android:id="@+id/btnBackFromAllRoutes"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_back_white"
+                    app:tint="?attr/colorPrimary"
+                    android:contentDescription="Voltar"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Todas as Rotas"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary"
+                    android:layout_marginStart="8dp"/>
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerDrawerAllRoutes"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+    </FrameLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>

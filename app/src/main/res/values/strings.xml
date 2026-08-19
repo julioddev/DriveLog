@@ -1,0 +1,45 @@
+<resources>
+    <string name="app_name">DriveLog</string>
+    <string name="default_web_client_id">97514064566-e5habui5a20vqeoh9tghopi75t8uocbe.apps.googleusercontent.com</string>
+    <string name="accessibility_service_description">O DriveLog utiliza este serviço para detectar automaticamente novas ofertas de rotas no app Envios Extra e emitir alertas sonoros para o motorista.</string>
+
+    <!-- Scanner App Manager -->
+    <string name="scanner_manager_title">Gerenciar Filtros de Apps</string>
+    <string name="tab_detected">Detectados</string>
+    <string name="tab_whitelist">Permitidos (Whitelist)</string>
+    <string name="tab_blacklist">Bloqueados (Blacklist)</string>
+    <string name="app_unknown">Desconhecido</string>
+    <string name="list_updated">Lista atualizada</string>
+    <string name="btn_remove">Remover</string>
+    <string name="btn_whitelist">Permitir</string>
+    <string name="btn_blacklist">Bloquear</string>
+
+    <!-- Terminal / Dev Route Detection -->
+    <string name="tab_alerts">Alertas</string>
+    <string name="tab_logs">Registros (Terminal)</string>
+    <string name="det_notification">Detecção</string>
+    <string name="det_route_screen">ROTA DETECTADA (TELA)</string>
+    <string name="btn_activate_notif_access">Ativar Acesso Notificação</string>
+    <string name="btn_activate_scanner_access">Ativar Scanner de Tela</string>
+    <string name="msg_samsung_android13_help_title">Dica para Samsung / Android 13+</string>
+    <string name="msg_samsung_android13_help_content">Se o serviço não aparecer em \'Aplicativos Instalados\':\n\n1. Clique no botão abaixo para abrir os Detalhes do App.\n2. Clique nos 3 pontinhos (⋮) no topo direito.\n3. Selecione \'Permitir configurações restritas\'.\n4. Volte na tela de Acessibilidade.</string>
+    <string name="btn_open_details">ABRIR DETALHES</string>
+    <string name="btn_back">VOLTAR</string>
+    <string name="msg_look_for_drivelog">Procure por \'DriveLog Scanner de Rotas\' em Aplicativos Instalados</string>
+    <string name="error_opening_settings">Erro ao abrir configurações</string>
+
+    <!-- Scanner Alerts -->
+    <string name="scanner_alert_title">ROTA DISPONÍVEL!</string>
+    <string name="scanner_alert_content">Uma nova oferta foi detectada no Envios Extra.</string>
+    <string name="scanner_alert_message">ROTA DISPONÍVEL NO ENVIOS EXTRA!</string>
+    <string name="scanner_active_title">Scanner Ativo</string>
+    <string name="scanner_active_monitoring">Monitorando: Ainda não há ofertas.</string>
+    <string name="scanner_channel_name">Scanner Alertas</string>
+
+    <string name="pref_auto_click_next_day">Auto-clicar aba do dia seguinte</string>
+    <string name="pref_auto_click_next_day_summary">Se não houver rotas hoje, o scanner tentará clicar na aba \'Amanhã\'.</string>
+
+    <string name="pref_scanner_loop">Reiniciar verificação automaticamente (Loop)</string>
+    <string name="pref_scanner_loop_summary">Após verificar todos os dias, volta ao início e reinicia após o tempo definido.</string>
+    <string name="pref_scanner_wait_time">Tempo de espera entre ciclos (segundos)</string>
+</resources>

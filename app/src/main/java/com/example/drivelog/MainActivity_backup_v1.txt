@@ -1,0 +1,150 @@
+package com.example.entregas;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.os.Bundle;
+
+import androidx.activity.EdgeToEdge;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.viewpager2.widget.ViewPager2;
+
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.tabs.TabLayoutMediator;
+
+import java.util.Calendar;
+
+public class MainActivity extends AppCompatActivity {
+
+    private ViewPager2 viewPager;
+    private boolean hasEarningsToday = false;
+    private boolean hasKmToday = false;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        SharedPreferences sharedPreferences = getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
+
+        // Apply saved theme before setContentView
+        int theme = sharedPreferences.getInt("app_theme", 0);
+        if (theme == 1) {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+        } else {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        }
+
+        EdgeToEdge.enable(this);
+        setContentView(R.layout.activity_main);
+
+        TabLayout tabLayout = findViewById(R.id.tabLayout);
+        viewPager = findViewById(R.id.viewPager);
+
+        ViewPagerAdapter adapter = new ViewPagerAdapter(this);
+        viewPager.setAdapter(adapter);
+
+        new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
+            switch (position) {
+                case 0: tab.setIcon(R.drawable.ic_money); tab.setText("Ganhos"); break;
+                case 1: tab.setIcon(R.drawable.ic_tire); tab.setText("KM Diário"); break;
+                case 2: tab.setIcon(R.drawable.ic_fuel); tab.setText("Abastecimentos"); break;
+                case 3: tab.setIcon(R.drawable.ic_maintenance); tab.setText("Manutenção"); break;
+                case 4: tab.setIcon(R.drawable.ic_reports); tab.setText("Relatórios"); break;
+                case 5: tab.setIcon(R.drawable.ic_settings); tab.setText("Ajustes"); break;
+            }
+        }).attach();
+
+        tabLayout.setInlineLabel(true); // Nome ao lado do ícone
+
+        setupDynamicTabIcons(tabLayout);
+
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                updateIconColors(tabLayout);
+                updateTabLabels(tabLayout, tab);
+            }
+
+            @Override public void onTabUnselected(TabLayout.Tab tab) {}
+            @Override public void onTabReselected(TabLayout.Tab tab) {}
+        });
+
+        // Aplicar estado inicial
+        tabLayout.post(() -> updateTabLabels(tabLayout, tabLayout.getTabAt(tabLayout.getSelectedTabPosition())));
+
+        if (savedInstanceState == null) {
+            int defaultTab = sharedPreferences.getInt("default_tab", 0);
+            viewPager.setCurrentItem(defaultTab, false);
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            return insets;
+        });
+    }
+
+    private void updateTabLabels(TabLayout tabLayout, TabLayout.Tab selectedTab) {
+        for (int i = 0; i < tabLayout.getTabCount(); i++) {
+            TabLayout.Tab t = tabLayout.getTabAt(i);
+            if (t != null) {
+                if (t == selectedTab) {
+                    switch (i) {
+                        case 0: t.setText("Ganhos"); break;
+                        case 1: t.setText("KM Diário"); break;
+                        case 2: t.setText("Abastecimentos"); break;
+                        case 3: t.setText("Manutenção"); break;
+                        case 4: t.setText("Relatórios"); break;
+                        case 5: t.setText("Ajustes"); break;
+                    }
+                } else {
+                    t.setText(null);
+                }
+            }
+        }
+    }
+
+    private void setupDynamicTabIcons(TabLayout tabLayout) {
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        long start = cal.getTimeInMillis();
+
+        cal.set(Calendar.HOUR_OF_DAY, 23);
+        cal.set(Calendar.MINUTE, 59);
+        cal.set(Calendar.SECOND, 59);
+        long end = cal.getTimeInMillis();
+
+        AppDao dao = AppDatabase.getInstance(this).appDao();
+
+        dao.getEarningsCountToday(start, end).observe(this, count -> {
+            hasEarningsToday = (count != null && count > 0);
+            updateIconColors(tabLayout);
+        });
+
+        dao.getKmCountToday(start, end).observe(this, count -> {
+            hasKmToday = (count != null && count > 0);
+            updateIconColors(tabLayout);
+        });
+    }
+
+    private void updateIconColors(TabLayout tabLayout) {
+        int blue = getResources().getColor(android.R.color.holo_blue_dark);
+        int green = getResources().getColor(android.R.color.holo_green_dark);
+
+        TabLayout.Tab earningsTab = tabLayout.getTabAt(0);
+        if (earningsTab != null && earningsTab.getIcon() != null) {
+            earningsTab.getIcon().setTint(hasEarningsToday ? green : blue);
+        }
+
+        TabLayout.Tab kmTab = tabLayout.getTabAt(1);
+        if (kmTab != null && kmTab.getIcon() != null) {
+            kmTab.getIcon().setTint(hasKmToday ? green : blue);
+        }
+    }
+}

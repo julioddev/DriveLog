@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="@android:color/white">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:id="@+id/textStopNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Parada #1"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorPrimary"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/textStopAddress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Endereço Completo"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#333333"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/textStopNeighborhood"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Bairro"
+                android:textSize="14sp"
+                android:textColor="#666666"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/textCorrectionStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Correção disponível"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                android:layout_marginBottom="12dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#EEEEEE"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/textPackageCount"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="1 Pacote"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#444444" />
+
+                <TextView
+                    android:id="@+id/textBuyerCount"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="1 Comprador"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#444444" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/textSequences"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Sequências: 15"
+                android:textSize="12sp"
+                android:textColor="#888888"
+                android:layout_marginBottom="12dp" />
+
+            <!-- Seção de Comentários / Notas -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnShowAddNote"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ADICIONAR OBSERVAÇÃO"
+                android:textSize="12sp"
+                app:icon="@android:drawable/ic_menu_edit"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutNoteInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:background="#F5F5F5"
+                android:padding="12dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Destinatário da nota:"
+                    android:textStyle="bold"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorPrimary"
+                    android:layout_marginBottom="4dp" />
+
+                <Spinner
+                    android:id="@+id/spinnerNoteTarget"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="40dp"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Sua dica ou comentário..."
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editStopNotes"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minLines="2"
+                        android:gravity="top"
+                        android:textSize="13sp"
+                        android:inputType="textMultiLine|textCapSentences" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchNotePublic"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Compartilhar com a comunidade"
+                    android:layout_marginTop="4dp"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Lista de Destinatários:"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#999999"
+                android:textAllCaps="true"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/textBuyerList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Nome do Comprador"
+                android:textSize="13sp"
+                android:textColor="#555555"
+                android:background="#F9F9F9"
+                android:padding="8dp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Seção de Correção da Comunidade -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardGlobalDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="#FBC02D"
+                app:cardBackgroundColor="#08FBC02D"
+                android:layout_marginBottom="24dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@android:drawable/btn_star_big_on"
+                            app:tint="#FBC02D"/>
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Correção da Comunidade"
+                            android:textStyle="bold"
+                            android:textSize="12sp"
+                            android:textColor="#B08900"
+                            android:layout_marginStart="8dp"/>
+                        <TextView
+                            android:id="@+id/textGlobalLikes"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="5 👍 | 0 👎"
+                            android:textSize="12sp"
+                            android:textColor="#B08900"
+                            android:textStyle="bold"/>
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/textGlobalNoteDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Obs: Portão azul..."
+                        android:textSize="12sp"
+                        android:textColor="#444444"
+                        android:layout_marginTop="4dp"
+                        android:textStyle="italic"
+                        android:visibility="gone"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDownloadGlobalFix"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="BAIXAR ESTA CORREÇÃO"
+                        android:textSize="11sp"
+                        app:icon="@android:drawable/stat_sys_download"
+                        android:layout_marginTop="8dp"
+                        android:textColor="#B08900"
+                        app:iconTint="#B08900"/>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnShareLocalFix"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ENVIAR PARA A COMUNIDADE"
+                android:textSize="12sp"
+                android:visibility="gone"
+                app:icon="@android:drawable/ic_menu_share"
+                app:iconTint="#388E3C"
+                android:textColor="#388E3C"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDeleteLocalFix"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="REMOVER MINHA CORREÇÃO"
+                android:textSize="12sp"
+                android:visibility="gone"
+                app:icon="@android:drawable/ic_delete"
+                app:iconTint="#D32F2F"
+                android:textColor="#D32F2F"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDeleteDownloadedFix"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="EXCLUIR CORREÇÃO BAIXADA"
+                android:textSize="12sp"
+                android:visibility="gone"
+                app:icon="@android:drawable/ic_delete"
+                app:iconTint="#D32F2F"
+                android:textColor="#D32F2F"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDevForceApplyFix"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="DEV: FORÇAR POSIÇÃO DA CORREÇÃO"
+                android:textSize="12sp"
+                android:visibility="gone"
+                app:icon="@android:drawable/ic_menu_mylocation"
+                app:iconTint="#9C27B0"
+                android:textColor="#9C27B0"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSeparatePurchases"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="SEPARAR COMPRAS"
+                android:textSize="12sp"
+                android:visibility="gone"
+                app:icon="@android:drawable/ic_menu_crop"
+                app:iconTint="#FF5722"
+                android:textColor="#FF5722"
+                android:layout_marginBottom="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCloseDetails"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="FECHAR"
+                app:cornerRadius="12dp" />
+
+        </LinearLayout>
+    </ScrollView>
+</com.google.android.material.card.MaterialCardView>

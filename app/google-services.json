@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "761540690629",
+    "firebase_url": "https://entregas-819fdf99-default-rtdb.firebaseio.com",
+    "project_id": "entregas-819fdf99",
+    "storage_bucket": "entregas-819fdf99.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:761540690629:android:5eec668d7373a1a74666ac",
+        "android_client_info": {
+          "package_name": "com.example.drivelog"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "761540690629-g6d4qrmoqpknlqvn7vmpnbbi5r7eq63j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBX4gnG3Z0-QgswKU9m_5Hv8bKIN0C4b9o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "761540690629-g6d4qrmoqpknlqvn7vmpnbbi5r7eq63j.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

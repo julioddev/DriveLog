@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Registrar Ganhos Diários"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Data do Ganho"
+            android:layout_marginBottom="4dp"/>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editEarningsDate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="none"
+                android:focusable="false"
+                android:clickable="true" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Plataforma"
+            android:layout_marginBottom="8dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgPlatforms"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <RadioButton
+                android:id="@+id/rbAmazon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Amazon" />
+            <RadioButton
+                android:id="@+id/rbMercadoLivre"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Mercado Livre" />
+            <RadioButton
+                android:id="@+id/rbShopee"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Shopee" />
+            <RadioButton
+                android:id="@+id/rb99"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="99" />
+            <RadioButton
+                android:id="@+id/rbNoWork"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Folga / Não Trabalhei" />
+        </RadioGroup>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/layoutExtra"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Valor Extra (R$)"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editExtraValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="numberDecimal"
+                android:digits="0123456789,." />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Total a Receber (R$)"
+            android:layout_marginTop="16dp">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editEarningsTotal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="numberDecimal"
+                android:digits="0123456789,." />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <Button
+            android:id="@+id/btnSaveEarnings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Salvar Ganhos"
+            android:layout_marginTop="24dp" />
+
+        <Button
+            android:id="@+id/btnFinalizeDay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Finalizar Dia (Concluir registros)"
+            android:layout_marginTop="8dp"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btnCancelEdit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Cancelar Edição"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</ScrollView>

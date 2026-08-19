@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+
+    <!-- Tema Azul Oceano -->
+    <color name="ocean_primary">#0077B6</color>
+    <color name="ocean_secondary">#48CAE4</color>
+    <color name="ocean_background">#F0F8FF</color>
+
+    <!-- Tema Verde Floresta -->
+    <color name="forest_primary">#2D6A4F</color>
+    <color name="forest_secondary">#74C69D</color>
+    <color name="forest_background">#F7FFF7</color>
+
+    <!-- Tema Roxo Moderno -->
+    <color name="purple_primary">#6200EE</color>
+    <color name="purple_secondary">#BB86FC</color>
+    <color name="purple_background">#FDFCFE</color>
+
+    <!-- Tema Laranja Energia -->
+    <color name="orange_primary">#E85D04</color>
+    <color name="orange_secondary">#FAA307</color>
+    <color name="orange_background">#FFF8F0</color>
+
+    <!-- Tema Escuro Profundo (Amoled) -->
+    <color name="dark_primary">#90CAF9</color>
+    <color name="dark_background">#121212</color>
+    <color name="dark_surface">#1E1E1E</color>
+</resources>

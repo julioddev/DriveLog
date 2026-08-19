@@ -1,0 +1,38 @@
+name: Gerar APK e Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Dispara quando você criar uma tag tipo v1.4.3
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Dar permissão ao Gradlew
+        run: chmod +x gradlew
+
+      - name: Gerar APK (Debug)
+        run: ./gradlew assembleDebug
+
+      - name: Criar Release no GitHub
+        uses: softprops/action-gh-release@v1
+        with:
+          files: app/build/outputs/apk/debug/app-debug.apk
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          body: "Nova versão automática do DriveLog gerada via GitHub Actions."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

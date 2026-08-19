@@ -1,0 +1,63 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.Entregas" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your light theme here. -->
+        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="popupMenuStyle">@style/Widget.App.PopupMenu</item>
+    </style>
+
+    <style name="Theme.Entregas" parent="Base.Theme.Entregas" />
+
+    <!-- Temas Específicos -->
+    <style name="Theme.Entregas.Ocean" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/ocean_primary</item>
+        <item name="colorSecondary">@color/ocean_secondary</item>
+        <item name="android:windowBackground">@color/ocean_background</item>
+        <item name="popupMenuStyle">@style/Widget.App.PopupMenu</item>
+    </style>
+
+    <style name="Theme.Entregas.Forest" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/forest_primary</item>
+        <item name="colorSecondary">@color/forest_secondary</item>
+        <item name="android:windowBackground">@color/forest_background</item>
+        <item name="popupMenuStyle">@style/Widget.App.PopupMenu</item>
+    </style>
+
+    <style name="Theme.Entregas.Purple" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/purple_primary</item>
+        <item name="colorSecondary">@color/purple_secondary</item>
+        <item name="android:windowBackground">@color/purple_background</item>
+        <item name="popupMenuStyle">@style/Widget.App.PopupMenu</item>
+    </style>
+
+    <style name="Theme.Entregas.Orange" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/orange_primary</item>
+        <item name="colorSecondary">@color/orange_secondary</item>
+        <item name="android:windowBackground">@color/orange_background</item>
+        <item name="popupMenuStyle">@style/Widget.App.PopupMenu</item>
+    </style>
+
+    <style name="Theme.Entregas.DeepDark" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/dark_primary</item>
+        <item name="android:windowBackground">@color/dark_background</item>
+        <item name="colorSurface">@color/dark_surface</item>
+        <item name="popupMenuStyle">@style/Widget.App.PopupMenu</item>
+    </style>
+
+    <style name="TextAppearance.Entregas.Switch" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.PopupMenu" parent="Widget.Material3.PopupMenu">
+        <item name="android:popupBackground">@drawable/bg_popup_rounded</item>
+    </style>
+
+    <style name="AppBottomSheetDialogTheme" parent="Theme.Material3.Light.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/AppBottomSheetStyle</item>
+    </style>
+
+    <style name="AppBottomSheetStyle" parent="Widget.Material3.BottomSheet.Modal">
+        <item name="backgroundTint">@android:color/transparent</item>
+    </style>
+</resources>

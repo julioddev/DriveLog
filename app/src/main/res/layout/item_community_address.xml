@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="8dp"
+    android:gravity="center_vertical"
+    android:descendantFocusability="blocksDescendants">
+
+    <!-- Informações do Endereço -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="4dp">
+
+        <TextView
+            android:id="@+id/textCommunityAddress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:textColor="#333333"/>
+
+        <TextView
+            android:id="@+id/textCommunityBairro"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="#666666"/>
+    </LinearLayout>
+
+    <!-- Grade de Ações -->
+    <GridLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:columnCount="2"
+        android:rowCount="2">
+
+        <!-- Container Like -->
+        <LinearLayout
+            android:id="@+id/btnCommunityLike"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_thumb_up"
+                app:tint="#4CAF50"/>
+            <TextView
+                android:id="@+id/textCommunityLikes"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#4CAF50"/>
+        </LinearLayout>
+
+        <!-- Container Dislike -->
+        <LinearLayout
+            android:id="@+id/btnCommunityDislike"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_thumb_down"
+                app:tint="#F44336"/>
+            <TextView
+                android:id="@+id/textCommunityDislikes"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#F44336"/>
+        </LinearLayout>
+
+        <!-- Container Comentários -->
+        <LinearLayout
+            android:id="@+id/btnCommunityComments"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@android:drawable/stat_notify_chat"
+                app:tint="#888888"/>
+            <TextView
+                android:id="@+id/textCommunityComments"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#888888"/>
+        </LinearLayout>
+
+        <!-- Botão Download -->
+        <ImageButton
+            android:id="@+id/btnCommunityDownload"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/stat_sys_download"
+            app:tint="#2196F3"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Download"
+            android:scaleType="centerInside"/>
+
+    </GridLayout>
+
+</LinearLayout>

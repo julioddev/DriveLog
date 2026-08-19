@@ -1,0 +1,623 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Avisos de Permissão -->
+        <TextView
+            android:id="@+id/textOverlayWarningSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#F44336"
+            android:padding="12dp"
+            android:text="⚠️ Permissão de SOBREPOSIÇÃO necessária!"
+            android:textColor="@android:color/white"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:id="@+id/textNotificationWarningSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FF9800"
+            android:padding="12dp"
+            android:text="⚠️ Permissão de NOTIFICAÇÃO recomendada!"
+            android:textColor="@android:color/white"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            style="@style/Widget.Material3.CardView.Elevated">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Perfil do Motorista"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp"/>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Nome Completo"
+                    android:layout_marginBottom="12dp">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editProfileName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPersonName|textCapWords" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="E-mail"
+                    android:layout_marginBottom="16dp">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editProfileEmail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textEmailAddress" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Aviso de Expiração (Modo Free) -->
+                <TextView
+                    android:id="@+id/textTrialExpiration"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:padding="12dp"
+                    android:background="#FFF3E0"
+                    android:textColor="#E65100"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:text="Período de teste completo: --"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnUpgradeSubscription"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Trocar de Assinatura"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="12sp"
+                    android:visibility="gone"
+                    app:icon="@android:drawable/ic_menu_send" />
+
+                <Button
+                    android:id="@+id/btnDetectGoogle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Detectar via Google"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:drawableStart="@android:drawable/ic_menu_search"
+                    android:drawablePadding="8dp"
+                    android:layout_marginBottom="8dp"/>
+
+                <Button
+                    android:id="@+id/btnLogoutGoogle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Desconectar Google"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:textColor="@android:color/holo_red_dark"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/btnBackToLogin"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Sair para a Tela Inicial"
+                    style="@style/Widget.Material3.Button.TextButton" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Seção Modo de Assinatura (Apenas para Desenvolvedores Autorizados) -->
+        <LinearLayout
+            android:id="@+id/layoutSubscriptionSimulation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tipo de Assinatura (Simulação)"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"
+                android:textColor="?attr/colorPrimary"/>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="@android:color/white"
+                android:layout_marginBottom="24dp">
+
+                <RadioGroup
+                    android:id="@+id/rgSubscriptionType"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:orientation="vertical">
+                    <RadioButton
+                        android:id="@+id/rbSubFree"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Assinatura Gratuita (7 dias grátis, após Modo Mapa)" />
+                    <RadioButton
+                        android:id="@+id/rbSubPremium"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Assinatura Premium (Tudo Liberado)" />
+                    <RadioButton
+                        android:id="@+id/rbSubDev"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Assinatura Dev (Tudo Liberado p/ Testes)" />
+                </RadioGroup>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+
+        <!-- Seção Modo de App -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Modo de App"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:textColor="?attr/colorPrimary"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="@android:color/white"
+            android:layout_marginBottom="24dp">
+
+            <RadioGroup
+                android:id="@+id/rgAppMode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:orientation="vertical">
+                <RadioButton
+                    android:id="@+id/rbModeFull"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Modo Completo (Todas as abas)" />
+                <RadioButton
+                    android:id="@+id/rbModeMapsOnly"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Modo Mapa (Foco total no Mapa)" />
+            </RadioGroup>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Seção Visualização Comboio (Apenas para DEVs) -->
+        <LinearLayout
+            android:id="@+id/layoutDevComboioVisibility"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Visualização dos Amigos (Comboio)"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:textColor="?attr/colorPrimary"/>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="@android:color/white"
+                android:layout_marginBottom="24dp">
+
+                <RadioGroup
+                    android:id="@+id/rgComboioVisibility"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:orientation="vertical">
+                    <RadioButton
+                        android:id="@+id/rbComboioShowMap"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Apenas na Aba Mapa" />
+                    <RadioButton
+                        android:id="@+id/rbComboioShowTracking"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Apenas na Aba Rastreamento" />
+                    <RadioButton
+                        android:id="@+id/rbComboioShowBoth"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Em Ambos os Mapas"
+                        android:checked="true" />
+                </RadioGroup>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Configurar Valores Padrão"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp"/>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Meta de Ganho Semanal (R$)"
+            android:layout_marginBottom="16dp">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editWeeklyGoal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="numberDecimal"
+                android:digits="0123456789,." />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Valores para Estimativa de Combustível"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:layout_marginBottom="16dp">
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Média (KM/L)"
+                android:layout_marginEnd="8dp">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editDefaultConsumption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="numberDecimal"
+                    android:digits="0123456789,." />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Preço Litro (R$)">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editDefaultFuelPrice"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="numberDecimal"
+                    android:digits="0123456789,." />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Aba Padrão ao Iniciar"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerDefaultTab"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:minHeight="48dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tema do Aplicativo"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"/>
+
+        <Spinner
+            android:id="@+id/spinnerTheme"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:minHeight="48dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            style="@style/Widget.Material3.CardView.Elevated">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Intervalo de Descanso"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Economize bateria pausando a localização durante seu horário de folga."
+                    android:textSize="12sp"
+                    android:textColor="#666666"
+                    android:layout_marginBottom="16dp"/>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchRestEnabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Ativar Intervalo de Descanso"
+                    android:layout_marginBottom="12dp"/>
+
+                <LinearLayout
+                    android:id="@+id/layoutRestTimes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="Início"
+                        android:layout_marginEnd="8dp">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editRestStart"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:clickable="true"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="Fim">
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/editRestEnd"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:clickable="true"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchSubtractFuel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Subtrair combustível dos ganhos no relatório"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"/>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchAutoCopyCpf"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Auto-copiar CPF fictício ao abrir app de entrega"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Fonte dos KM para Relatório"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"/>
+
+        <RadioGroup
+            android:id="@+id/rgKmSource"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+            <RadioButton
+                android:id="@+id/rbKmManual"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Registro Manual"
+                android:checked="true"/>
+            <RadioButton
+                android:id="@+id/rbKmAuto"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="Rastreamento GPS"/>
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/btnSaveSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Salvar Configurações" />
+
+        <Button
+            android:id="@+id/btnCheckUpdates"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Verificar Atualizações"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_marginTop="8dp"
+            app:icon="@android:drawable/stat_notify_sync"
+            android:drawablePadding="8dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Google Drive (Nuvem)"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Backup Automático é controlado internamente pelo login Google -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchAutoBackup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Backup Automático na Nuvem"
+            android:visibility="gone"
+            android:layout_marginBottom="16dp"/>
+
+        <Button
+            android:id="@+id/btnDriveSync"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sincronizar com a Nuvem"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:drawableStart="@android:drawable/stat_notify_sync"
+            android:drawablePadding="8dp"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/btnDriveDownload"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Baixar do Drive"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_marginBottom="8dp"/>
+
+        <!-- Seção Ferramentas de Desenvolvedor (Apenas para DEVs) -->
+        <LinearLayout
+            android:id="@+id/layoutDevTools"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ferramentas de Desenvolvedor"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginTop="32dp"
+                android:layout_marginBottom="16dp"
+                android:textColor="?attr/colorPrimary"/>
+
+            <Button
+                android:id="@+id/btnImportLocalDb"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Importar Arquivo .db Local"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:drawableStart="@android:drawable/ic_menu_upload"
+                android:drawablePadding="8dp"
+                android:layout_marginBottom="8dp"/>
+
+            <Button
+                android:id="@+id/btnExportLocalDb"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Exportar Arquivo .db Local"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:drawableStart="@android:drawable/ic_menu_share"
+                android:drawablePadding="8dp"
+                android:layout_marginBottom="32dp"/>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnResetData"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="APAGAR TODOS OS DADOS"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:textColor="@android:color/holo_red_dark" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="24dp"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="#F5F5F5">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Log de Sincronização (Tempo Real)"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="#666666"
+                    android:layout_marginBottom="4dp"/>
+                <TextView
+                    android:id="@+id/textSyncLog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Aguardando atividade..."
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:textColor="#444444"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</ScrollView>

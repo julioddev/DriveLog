@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_maps"
+        android:icon="@drawable/ic_map"
+        android:title="Mapa" />
+    <item
+        android:id="@+id/nav_earnings"
+        android:icon="@drawable/ic_money"
+        android:title="Ganhos" />
+    <item
+        android:id="@+id/nav_km"
+        android:icon="@drawable/ic_tire"
+        android:title="KM" />
+    <item
+        android:id="@+id/nav_fuel"
+        android:icon="@drawable/ic_fuel"
+        android:title="Abastecer" />
+    <item
+        android:id="@+id/nav_maintenance"
+        android:icon="@drawable/ic_maintenance"
+        android:title="Manutenção" />
+
+    <item
+        android:id="@+id/nav_none"
+        android:title=""
+        android:icon="@android:color/transparent"
+        android:enabled="false"
+        android:visible="false" />
+</menu>
