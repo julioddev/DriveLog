@@ -37,6 +37,7 @@ public class LoginActivity extends AppCompatActivity {
     private View layoutLoading, btnLoginGoogle;
     private TextView textLoadingStatus, textLoadingPercent;
     private com.google.android.material.progressindicator.CircularProgressIndicator progressLoading;
+    private android.content.SharedPreferences prefs;
 
     private final ActivityResultLauncher<String[]> locationPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.RequestMultiplePermissions(),
@@ -98,8 +99,6 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void completeGoogleLogin(GoogleSignInAccount account) {
-        android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
-        
         FirebaseHelper.syncUserMetadata(account.getEmail(), System.currentTimeMillis(), 0, new FirebaseHelper.UserMetadataCallback() {
             @Override
             public void onSuccess(long cloudDate, int cloudSub) {
@@ -114,9 +113,6 @@ public class LoginActivity extends AppCompatActivity {
                         .putInt("sub_type", cloudSub)
                         .commit();
                 
-                // 🔥 Marcar que o primeiro login/setup foi feito para não repetir backup toda vez
-                prefs.edit().putBoolean("first_setup_splash_done", true).apply();
-                
                 checkNextPermission();
             }
 
@@ -129,7 +125,6 @@ public class LoginActivity extends AppCompatActivity {
                         .putString("profile_email", account.getEmail())
                         .putBoolean("auto_backup_cloud", true)
                         .putBoolean("auto_copy_fake_cpf", true)
-                        .putBoolean("first_setup_splash_done", true) // 🔥 Marcar aqui também
                         .commit();
                 
                 checkNextPermission();
@@ -158,6 +153,7 @@ public class LoginActivity extends AppCompatActivity {
                     public void onError(String error) {
                         runOnUiThread(() -> {
                             updateVisualProgress(100, "Iniciando DriveLog...");
+                            prefs.edit().putBoolean("first_setup_splash_done", true).apply();
                             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> navigateToMain(), 500);
                         });
                     }
@@ -172,7 +168,6 @@ public class LoginActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 AppDatabase.forceCloseInstance();
-                android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
                 String userId = prefs.getString("current_user_id", "");
                 String dbName = "entregas_db_" + userId.replaceAll("[^a-zA-Z0-9]", "_");
                 File dbFile = getDatabasePath(dbName);
@@ -186,6 +181,9 @@ public class LoginActivity extends AppCompatActivity {
                 }
 
                 SettingsSyncHelper.loadPrefsFromDb(this);
+                
+                // Limpeza do arquivo temporário
+                if (tempDb.exists()) tempDb.delete();
 
                 runOnUiThread(() -> {
                     updateVisualProgress(100, "Tudo recuperado com sucesso!");
@@ -212,6 +210,8 @@ public class LoginActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
+
+        prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
 
         btnLoginGoogle = findViewById(R.id.btnLoginGoogle);
         layoutLoading = findViewById(R.id.layoutLoading);
@@ -314,7 +314,6 @@ public class LoginActivity extends AppCompatActivity {
         }
 
         // TUDO OK -> Recuperação do Backup (Apenas se for o primeiro setup após login ou reinstalação)
-        android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
         boolean firstSetupDone = prefs.getBoolean("first_setup_splash_done", false);
 
         if (!firstSetupDone) {
