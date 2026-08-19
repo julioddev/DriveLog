@@ -27,6 +27,8 @@ public class UpdateHelper {
 
     // Substitua pelo link real do seu arquivo JSON de versão no GitHub ou Servidor
     private static final String VERSION_JSON_URL = "https://julioddev.github.io/DriveLog/update.json";
+    private static final String PREF_NAME = "AppConfig";
+    private static final String KEY_LAST_UPDATE_DISMISS_DATE = "last_update_dismiss_date";
 
     public interface UpdateCallback {
         void onNoUpdate();
@@ -51,6 +53,18 @@ public class UpdateHelper {
     }
 
     public static void checkForUpdates(Activity activity, boolean showToastIfLatest, UpdateCallback callback) {
+        // Se for verificação automática (showToastIfLatest = false), verificamos se já foi mostrado hoje
+        if (!showToastIfLatest) {
+            android.content.SharedPreferences prefs = activity.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            String lastDismissDate = prefs.getString(KEY_LAST_UPDATE_DISMISS_DATE, "");
+            String currentDate = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(new java.util.Date());
+            
+            if (currentDate.equals(lastDismissDate)) {
+                if (callback != null) callback.onNoUpdate();
+                return;
+            }
+        }
+
         new Thread(() -> {
             try {
                 // Adicionamos um parâmetro aleatório para evitar cache do arquivo no GitHub
@@ -109,7 +123,13 @@ public class UpdateHelper {
                         startDownload(activity, url);
                     }
                 })
-                .setNegativeButton("MAIS TARDE", (d, w) -> d.dismiss())
+                .setNegativeButton("MAIS TARDE", (d, w) -> {
+                    // Salva a data atual para não incomodar mais hoje na verificação automática
+                    android.content.SharedPreferences prefs = activity.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+                    String currentDate = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(new java.util.Date());
+                    prefs.edit().putString(KEY_LAST_UPDATE_DISMISS_DATE, currentDate).apply();
+                    d.dismiss();
+                })
                 .create();
         
         if (!activity.isFinishing()) {
