@@ -593,6 +593,9 @@ public class MainActivity extends AppCompatActivity {
                     if (viewPager != null && viewPager.getAdapter() != null) {
                         updateKeepScreenOn(viewPager.getCurrentItem());
                     }
+                    
+                    // 🔥 Verificação Automática de Atualização (Silenciosa se não houver)
+                    UpdateHelper.checkForUpdates(this, false, null);
                 }).start();
             }
         }, delay);

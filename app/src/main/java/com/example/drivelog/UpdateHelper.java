@@ -33,10 +33,28 @@ public class UpdateHelper {
         void onError(String error);
     }
 
+    public static void handleUpdateProcess(Activity activity, boolean showToastIfLatest, UpdateCallback callback) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !activity.getPackageManager().canRequestPackageInstalls()) {
+            new AlertDialog.Builder(activity)
+                    .setTitle("Permissão Necessária")
+                    .setMessage("Para instalar atualizações automaticamente, o DriveLog precisa de permissão para 'Instalar apps desconhecidos'.\n\nPor favor, ative a chave para o DriveLog na próxima tela.")
+                    .setPositiveButton("CONFIGURAR", (d, w) -> {
+                        Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.getPackageName()));
+                        activity.startActivity(intent);
+                    })
+                    .setNegativeButton("CANCELAR", null)
+                    .show();
+            return;
+        }
+
+        checkForUpdates(activity, showToastIfLatest, callback);
+    }
+
     public static void checkForUpdates(Activity activity, boolean showToastIfLatest, UpdateCallback callback) {
         new Thread(() -> {
             try {
-                HttpURLConnection conn = (HttpURLConnection) new URL(VERSION_JSON_URL).openConnection();
+                // Adicionamos um parâmetro aleatório para evitar cache do arquivo no GitHub
+                HttpURLConnection conn = (HttpURLConnection) new URL(VERSION_JSON_URL + "?t=" + System.currentTimeMillis()).openConnection();
                 conn.setConnectTimeout(5000);
                 BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                 StringBuilder sb = new StringBuilder();
@@ -72,8 +90,23 @@ public class UpdateHelper {
     private static void showUpdateDialog(Activity activity, String name, String url, String notes) {
         new AlertDialog.Builder(activity)
                 .setTitle("Nova Versão Disponível (" + name + ")")
-                .setMessage("Deseja baixar a atualização agora?\n\nO que há de novo:\n" + notes)
-                .setPositiveButton("BAIXAR E INSTALAR", (d, w) -> startDownload(activity, url))
+                .setMessage("Uma nova atualização do DriveLog foi encontrada no GitHub.\n\nDeseja baixar agora?\n\nO que há de novo:\n" + notes)
+                .setPositiveButton("BAIXAR E INSTALAR", (d, w) -> {
+                    // Aqui verificamos a permissão apenas no momento que ele decide baixar
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !activity.getPackageManager().canRequestPackageInstalls()) {
+                        new AlertDialog.Builder(activity)
+                                .setTitle("Permissão Necessária")
+                                .setMessage("Para instalar a atualização, você precisa permitir que o DriveLog instale apps desconhecidos.")
+                                .setPositiveButton("CONFIGURAR", (d2, w2) -> {
+                                    Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.getPackageName()));
+                                    activity.startActivity(intent);
+                                })
+                                .setNegativeButton("CANCELAR", null)
+                                .show();
+                    } else {
+                        startDownload(activity, url);
+                    }
+                })
                 .setNegativeButton("MAIS TARDE", null)
                 .show();
     }

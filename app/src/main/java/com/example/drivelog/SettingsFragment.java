@@ -176,8 +176,7 @@ public class SettingsFragment extends Fragment {
         
         if (btnCheckUpdates != null) {
             btnCheckUpdates.setOnClickListener(v -> {
-                Toast.makeText(getContext(), "Buscando atualizações...", Toast.LENGTH_SHORT).show();
-                UpdateHelper.checkForUpdates(requireActivity(), true, new UpdateHelper.UpdateCallback() {
+                UpdateHelper.handleUpdateProcess(requireActivity(), true, new UpdateHelper.UpdateCallback() {
                     @Override public void onNoUpdate() {}
                     @Override public void onError(String error) {
                         Toast.makeText(getContext(), "Erro ao verificar: " + error, Toast.LENGTH_SHORT).show();
