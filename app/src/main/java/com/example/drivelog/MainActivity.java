@@ -302,6 +302,11 @@ public class MainActivity extends AppCompatActivity {
         setupDrawerRoutes();
         refreshTabs();
 
+        // 🔥 Verificação Automática de Atualização (Silenciosa se não houver)
+        if (sharedPreferences.getBoolean("auto_check_updates", true)) {
+            UpdateHelper.checkForUpdates(this, false, null);
+        }
+
         getSupportFragmentManager().addOnBackStackChangedListener(() -> {
             refreshTabs();
             if (getSupportFragmentManager().getBackStackEntryCount() == 0) {

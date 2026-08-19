@@ -213,6 +213,11 @@ public class LoginActivity extends AppCompatActivity {
 
         prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
 
+        // 🔥 Verificação Automática de Atualização
+        if (prefs.getBoolean("auto_check_updates", true)) {
+            UpdateHelper.checkForUpdates(this, false, null);
+        }
+
         btnLoginGoogle = findViewById(R.id.btnLoginGoogle);
         layoutLoading = findViewById(R.id.layoutLoading);
         textLoadingStatus = findViewById(R.id.textLoadingStatus);
