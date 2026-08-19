@@ -26,7 +26,7 @@ import java.net.URL;
 public class UpdateHelper {
 
     // Substitua pelo link real do seu arquivo JSON de versão no GitHub ou Servidor
-    private static final String VERSION_JSON_URL = "https://seu-usuario.github.io/drivelog/update.json";
+    private static final String VERSION_JSON_URL = "https://julioddev.github.io/DriveLog/update.json";
 
     public interface UpdateCallback {
         void onNoUpdate();
