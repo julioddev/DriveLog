@@ -2,5 +2,7 @@
 <paths>
     <cache-path name="export_cache" path="." />
     <files-path name="export_files" path="." />
-    <external-files-path name="my_downloads" path="Download" />
+    <external-path name="external_storage" path="." />
+    <external-files-path name="external_files" path="." />
+    <external-cache-path name="external_cache" path="." />
 </paths>
