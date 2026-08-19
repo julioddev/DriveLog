@@ -45,7 +45,7 @@ public class SettingsFragment extends Fragment {
     private Button btnDetectGoogle, btnLogoutGoogle, btnBackToLogin, btnCheckUpdates;
     private TextView textSyncLog, textOverlayWarning, textNotificationWarning;
     private TextInputEditText editWeeklyGoal, editConsumption, editFuelPrice, editRestStart, editRestEnd;
-    private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf;
+    private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf, switchAutoCheckUpdates;
     private RadioGroup rgKmSource, rgAppMode, rgSubscription, rgComboioVisibility;
     private View layoutSubscriptionSimulation, layoutDevTools, layoutDevComboioVisibility;
     private Spinner spinnerTab, spinnerTheme;
@@ -109,6 +109,7 @@ public class SettingsFragment extends Fragment {
         switchAutoCopyCpf = view.findViewById(R.id.switchAutoCopyCpf);
         switchAutoBackup = view.findViewById(R.id.switchAutoBackup);
         switchRestEnabled = view.findViewById(R.id.switchRestEnabled);
+        switchAutoCheckUpdates = view.findViewById(R.id.switchAutoCheckUpdates);
         editRestStart = view.findViewById(R.id.editRestStart);
         editRestEnd = view.findViewById(R.id.editRestEnd);
         rgKmSource = view.findViewById(R.id.rgKmSource);
@@ -593,6 +594,7 @@ public class SettingsFragment extends Fragment {
         editFuelPrice.setText(formatDecimal(sharedPreferences.getFloat("default_fuel_price", 5.50f)));
         switchSubtract.setChecked(sharedPreferences.getBoolean("subtract_fuel", false));
         switchAutoCopyCpf.setChecked(sharedPreferences.getBoolean("auto_copy_fake_cpf", true));
+        switchAutoCheckUpdates.setChecked(sharedPreferences.getBoolean("auto_check_updates", true));
         
         boolean restEnabled = sharedPreferences.getBoolean("rest_interval_enabled", false);
         switchRestEnabled.setChecked(restEnabled);
@@ -660,6 +662,7 @@ public class SettingsFragment extends Fragment {
                     .putFloat("default_fuel_price", parseDecimal(editFuelPrice))
                     .putBoolean("subtract_fuel", switchSubtract.isChecked())
                     .putBoolean("auto_copy_fake_cpf", switchAutoCopyCpf.isChecked())
+                    .putBoolean("auto_check_updates", switchAutoCheckUpdates.isChecked())
                     .putBoolean("rest_interval_enabled", switchRestEnabled.isChecked())
                     .putString("rest_start_time", editRestStart.getText().toString())
                     .putString("rest_end_time", editRestEnd.getText().toString())

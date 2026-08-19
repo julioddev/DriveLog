@@ -595,7 +595,9 @@ public class MainActivity extends AppCompatActivity {
                     }
                     
                     // 🔥 Verificação Automática de Atualização (Silenciosa se não houver)
-                    UpdateHelper.checkForUpdates(this, false, null);
+                    if (sharedPreferences.getBoolean("auto_check_updates", true)) {
+                        UpdateHelper.checkForUpdates(this, false, null);
+                    }
                 }).start();
             }
         }, delay);

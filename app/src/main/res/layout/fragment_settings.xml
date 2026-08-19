@@ -494,6 +494,13 @@
             android:layout_height="wrap_content"
             android:text="Salvar Configurações" />
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchAutoCheckUpdates"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Verificar atualizações ao abrir o app"
+            android:layout_marginTop="16dp"/>
+
         <Button
             android:id="@+id/btnCheckUpdates"
             android:layout_width="match_parent"
