@@ -511,6 +511,16 @@
             app:icon="@android:drawable/stat_notify_sync"
             android:drawablePadding="8dp"/>
 
+        <Button
+            android:id="@+id/btnAboutApp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sobre o DriveLog"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_marginTop="4dp"
+            app:icon="@android:drawable/ic_menu_info_details"
+            android:drawablePadding="8dp"/>
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

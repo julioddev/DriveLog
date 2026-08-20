@@ -42,7 +42,7 @@ public class SettingsFragment extends Fragment {
     private TextInputEditText editProfileName, editProfileEmail;
     private TextView textTrialExpiration;
     private Button btnUpgradeSubscription;
-    private Button btnDetectGoogle, btnLogoutGoogle, btnBackToLogin, btnCheckUpdates;
+    private Button btnDetectGoogle, btnLogoutGoogle, btnBackToLogin, btnCheckUpdates, btnAboutApp;
     private TextView textSyncLog, textOverlayWarning, textNotificationWarning;
     private TextInputEditText editWeeklyGoal, editConsumption, editFuelPrice, editRestStart, editRestEnd;
     private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf, switchAutoCheckUpdates;
@@ -122,6 +122,7 @@ public class SettingsFragment extends Fragment {
         View layoutRestTimes = view.findViewById(R.id.layoutRestTimes);
         Button btnSave = view.findViewById(R.id.btnSaveSettings);
         btnCheckUpdates = view.findViewById(R.id.btnCheckUpdates);
+        btnAboutApp = view.findViewById(R.id.btnAboutApp);
         Button btnReset = view.findViewById(R.id.btnResetData);
         Button btnDriveSync = view.findViewById(R.id.btnDriveSync);
         Button btnDriveDownload = view.findViewById(R.id.btnDriveDownload);
@@ -184,6 +185,10 @@ public class SettingsFragment extends Fragment {
                     }
                 });
             });
+        }
+
+        if (btnAboutApp != null) {
+            btnAboutApp.setOnClickListener(v -> showAboutDialog());
         }
         
         btnReset.setOnClickListener(v -> showResetConfirmation());
@@ -693,6 +698,22 @@ public class SettingsFragment extends Fragment {
         } catch (Exception e) {
             Toast.makeText(getContext(), "Erro ao salvar.", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void showAboutDialog() {
+        String versionName = BuildConfig.VERSION_NAME;
+        int versionCode = BuildConfig.VERSION_CODE;
+        String buildType = BuildConfig.BUILD_TYPE;
+
+        new AlertDialog.Builder(getContext())
+                .setTitle("Sobre o DriveLog")
+                .setMessage("DriveLog - Gestão para Motoristas\n\n" +
+                        "Versão: " + versionName + "\n" +
+                        "Build: " + versionCode + "\n" +
+                        "Ambiente: " + buildType + "\n\n" +
+                        "Desenvolvido por Julio Dev")
+                .setPositiveButton("FECHAR", null)
+                .show();
     }
 
     private float parseDecimal(TextInputEditText editText) {
