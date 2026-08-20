@@ -124,18 +124,20 @@ public class SettingsParentFragment extends Fragment {
             allTabs.add(new TabInfo("settings_dev", "DEV", 5));
             allTabs.add(new TabInfo("settings_menu", "MENU DEV", 6));
             allTabs.add(new TabInfo("settings_emails", "EMAILS DEV", 7));
+            allTabs.add(new TabInfo("settings_users", "DEV USERS", 8));
             activeTabs.addAll(allTabs); // Padrão
         }
 
         void updateTabs(List<String> allowedIds) {
             activeTabs.clear();
-            if (allowedIds == null || allowedIds.isEmpty()) {
-                activeTabs.addAll(allTabs);
-            } else {
-                for (TabInfo tab : allTabs) {
-                    if (allowedIds.contains(tab.id)) {
-                        activeTabs.add(tab);
-                    }
+            
+            // Garantir que abas básicas sempre apareçam se o allowedIds vier vazio ou incompleto
+            // Abas de 0 a 4 são as básicas (Geral, Mapa, Rastreamento, Plataformas, Recursos)
+            for (TabInfo tab : allTabs) {
+                if (tab.fixedIndex <= 4) {
+                    activeTabs.add(tab);
+                } else if (allowedIds != null && allowedIds.contains(tab.id)) {
+                    if (!activeTabs.contains(tab)) activeTabs.add(tab);
                 }
             }
             notifyDataSetChanged();
@@ -166,6 +168,7 @@ public class SettingsParentFragment extends Fragment {
                 case 5: return new DevDetectionSettingsFragment(); // O que era antes o "DEV" (Scanner/Ajustes)
                 case 6: return new DevMenuControlFragment();     // O novo "DEV MENU"
                 case 7: return new DevEmailControlFragment();    // O novo "DEV EMAIL"
+                case 8: return new DevUserControlFragment();     // O novo "DEV USERS"
                 default: return new SettingsFragment();
             }
         }

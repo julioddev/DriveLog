@@ -40,6 +40,18 @@ public class FeaturesSettingsFragment extends Fragment {
 
         btnSave.setOnClickListener(v -> saveSettings());
 
+        switchFloatingIcon.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(requireContext())) {
+                    Toast.makeText(getContext(), "Permissão de Sobreposição necessária para o Ícone Flutuante", Toast.LENGTH_LONG).show();
+                    android.content.Intent intent = new android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:" + requireContext().getPackageName()));
+                    startActivity(intent);
+                    // Opcional: desmarcar o switch se não permitir? Melhor deixar marcado e tentar de novo.
+                }
+            }
+        });
+
         return view;
     }
 

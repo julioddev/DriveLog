@@ -1243,6 +1243,47 @@ public class FirebaseHelper {
         void onUpdate(List<String> allowedIds);
     }
 
+    public interface UsersListCallback {
+        void onResult(List<Map<String, Object>> users);
+        void onError(String msg);
+    }
+
+    public static void fetchAllUsers(UsersListCallback callback) {
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        db.collection(COL_USERS)
+                .orderBy("lastSeen", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .limit(200)
+                .get()
+                .addOnSuccessListener(querySnapshot -> {
+                    List<Map<String, Object>> list = new ArrayList<>();
+                    for (DocumentSnapshot doc : querySnapshot) {
+                        Map<String, Object> data = doc.getData();
+                        if (data != null) {
+                            data.put("id", doc.getId());
+                            list.add(data);
+                        }
+                    }
+                    callback.onResult(list);
+                })
+                .addOnFailureListener(e -> callback.onError(e.getMessage()));
+    }
+
+    public static void updateUserPermissions(String email, long installDate, int subType, GlobalUploadCallback callback) {
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("installDate", installDate);
+        updates.put("subType", subType);
+
+        db.collection(COL_USERS).document(email.trim().toLowerCase())
+                .update(updates)
+                .addOnSuccessListener(aVoid -> {
+                    if (callback != null) callback.onSuccess();
+                })
+                .addOnFailureListener(e -> {
+                    if (callback != null) callback.onFailure(e.getMessage());
+                });
+    }
+
     /**
      * Escuta a configuração remota de menus/abas
      */

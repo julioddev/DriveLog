@@ -83,9 +83,10 @@ public class UpdateHelper {
                 String notes = json.optString("releaseNotes", "");
 
                 int localVersion = BuildConfig.VERSION_CODE;
+                String localName = BuildConfig.VERSION_NAME;
 
                 if (remoteVersion > localVersion) {
-                    activity.runOnUiThread(() -> showUpdateDialog(activity, remoteName, apkUrl, notes));
+                    activity.runOnUiThread(() -> showUpdateDialog(activity, localName, localVersion, remoteName, remoteVersion, apkUrl, notes));
                 } else {
                     activity.runOnUiThread(() -> {
                         if (showToastIfLatest) Toast.makeText(activity, "Você já está na versão mais recente!", Toast.LENGTH_SHORT).show();
@@ -101,11 +102,13 @@ public class UpdateHelper {
         }).start();
     }
 
-    private static void showUpdateDialog(Activity activity, String name, String url, String notes) {
+    private static void showUpdateDialog(Activity activity, String localName, int localCode, String remoteName, int remoteCode, String url, String notes) {
         AlertDialog dialog = new AlertDialog.Builder(activity)
-                .setTitle("🚀 Nova Versão Disponível (" + name + ")")
+                .setTitle("🚀 Nova Versão Disponível")
                 .setMessage("Uma nova atualização do DriveLog foi encontrada no GitHub.\n\n" +
-                           "O que há de novo:\n" + notes + "\n\n" +
+                           "📍 Versão Instalada: " + localName + " (" + localCode + ")\n" +
+                           "🌟 Versão Disponível: " + remoteName + " (" + remoteCode + ")\n\n" +
+                           "O que há de novo:\n" + (notes.isEmpty() ? "Melhorias gerais e correções de bugs." : notes) + "\n\n" +
                            "Deseja atualizar agora?")
                 .setCancelable(false) // Força o usuário a escolher uma opção
                 .setPositiveButton("ATUALIZAR AGORA", (d, w) -> {

@@ -63,6 +63,7 @@ public class DevMenuControlFragment extends Fragment {
         menuList.add(new MenuItemModel("settings_dev", "Ajustes: DEV (Scanner/Alertas)"));
         menuList.add(new MenuItemModel("settings_menu", "Ajustes: DEV (Menu Remoto)"));
         menuList.add(new MenuItemModel("settings_emails", "Ajustes: DEV (Emails Dev)"));
+        menuList.add(new MenuItemModel("settings_users", "Ajustes: DEV (Usuários Dev)"));
         menuList.add(new MenuItemModel("btn_check_updates", "Ajustes: Botão Verificar Atualizações"));
     }
 
@@ -96,7 +97,7 @@ public class DevMenuControlFragment extends Fragment {
 
             // Regra fixa para abas críticas de desenvolvedor
             for (MenuItemModel item : menuList) {
-                if (item.id.equals("settings_dev") || item.id.equals("settings_menu") || item.id.equals("settings_emails")) {
+                if (item.id.equals("settings_dev") || item.id.equals("settings_menu") || item.id.equals("settings_emails") || item.id.equals("settings_users")) {
                     item.isPublic = false;
                     item.isDevOnly = true;
                 }
@@ -107,13 +108,19 @@ public class DevMenuControlFragment extends Fragment {
 
     private void saveConfig() {
         if (getContext() == null) return;
-        Toast.makeText(getContext(), "Salvando configurações de menu...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getContext(), "Salvando configurações...", Toast.LENGTH_SHORT).show();
         
         for (MenuItemModel item : menuList) {
+            // Regra de segurança: IDs de desenvolvedor nunca são públicos e sempre são devOnly
+            if (item.id.equals("settings_dev") || item.id.equals("settings_menu") || 
+                item.id.equals("settings_emails") || item.id.equals("settings_users")) {
+                item.isPublic = false;
+                item.isDevOnly = true;
+            }
             FirebaseHelper.updateRemoteMenuConfig(item.id, item.isPublic, item.isDevOnly, null);
         }
         
-        Toast.makeText(getContext(), "Configurações de menu salvas!", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getContext(), "Configurações salvas!", Toast.LENGTH_SHORT).show();
     }
 
     private static class MenuItemModel {
@@ -131,7 +138,7 @@ public class DevMenuControlFragment extends Fragment {
             MenuItemModel item = items.get(position);
             holder.textId.setText(item.id); holder.textDesc.setText(item.description);
             
-            boolean isLockedDev = item.id.equals("settings_dev") || item.id.equals("settings_menu") || item.id.equals("settings_emails");
+            boolean isLockedDev = item.id.equals("settings_dev") || item.id.equals("settings_menu") || item.id.equals("settings_emails") || item.id.equals("settings_users");
             
             if (isLockedDev) {
                 item.isPublic = false; item.isDevOnly = true;

@@ -114,7 +114,10 @@ public class MainActivity extends AppCompatActivity {
         } else if (key.startsWith("tab_") || key.equals("maps_enabled")) {
             runOnUiThread(this::refreshTabs);
         } else if ("sub_type".equals(key)) {
-            runOnUiThread(this::setupAds);
+            runOnUiThread(() -> {
+                setupAds();
+                refreshTabs();
+            });
         }
     };
 
@@ -142,12 +145,41 @@ public class MainActivity extends AppCompatActivity {
     private List<String> currentRemoteMenus = null;
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Remove o ícone flutuante se ele estiver ativo ao voltar para o app
+        stopService(new Intent(this, FloatingIconService.class));
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        // 🔥 Quando o app é minimizado (Home/Recents)
+        if (sharedPreferences != null && sharedPreferences.getBoolean("floating_icon_enabled", true)) {
+            // Só iniciamos se tivermos a permissão de sobreposição
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (android.provider.Settings.canDrawOverlays(this)) {
+                    Intent serviceIntent = new Intent(this, FloatingIconService.class);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(serviceIntent);
+                    } else {
+                        startService(serviceIntent);
+                    }
+                }
+            } else {
+                startService(new Intent(this, FloatingIconService.class));
+            }
+        }
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         sharedPreferences = getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
         applyAppTheme(sharedPreferences.getInt("app_theme", 0));
         
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
+
 
         if (!isUserAuthenticated()) {
             startActivity(new Intent(this, LoginActivity.class));
@@ -440,6 +472,27 @@ public class MainActivity extends AppCompatActivity {
     private void startRemoteMenuListener() {
         com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
         if (user == null || user.getEmail() == null) return;
+
+        // 🔥 Sincroniza permissões e data de instalação do Firebase para o local
+        long localInstallDate = sharedPreferences.getLong("install_date", System.currentTimeMillis());
+        int localSub = sharedPreferences.getInt("sub_type", 0);
+        FirebaseHelper.syncUserMetadata(user.getEmail(), localInstallDate, localSub, new FirebaseHelper.UserMetadataCallback() {
+            @Override
+            public void onSuccess(long cloudDate, int cloudSub) {
+                if (localInstallDate != cloudDate || localSub != cloudSub) {
+                    sharedPreferences.edit()
+                            .putLong("install_date", cloudDate)
+                            .putInt("sub_type", cloudSub)
+                            .apply();
+                    
+                    if (localSub == 0 && cloudSub == 1) {
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Sua conta foi atualizada para PREMIUM! Aproveite.", Toast.LENGTH_LONG).show());
+                    }
+                }
+            }
+            @Override public void onError(String msg) {}
+        });
+
         FirebaseHelper.checkDeveloperAccess(user.getEmail(), isDev -> {
             remoteMenuListener = FirebaseHelper.listenRemoteMenus(isDev, allowedIds -> {
                 this.currentRemoteMenus = allowedIds;
