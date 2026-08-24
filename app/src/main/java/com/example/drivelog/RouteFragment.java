@@ -112,58 +112,48 @@ public class RouteFragment extends Fragment {
     private FloatingActionButton fabAddStop, fabNewRoute, fabCenterMap, fabDeliveryApp, fabMapOrientation, fabReportHazard, fabKmTracking;
     private boolean isMapFollowingHeading = false;
     private android.hardware.SensorManager sensorManager;
-    private android.hardware.Sensor accelSensor, magnetSensor;
-    private final float[] gravity = new float[3];
-    private final float[] geomagnetic = new float[3];
+    private android.hardware.Sensor rotationVectorSensor;
     private float currentAzimuth = 0;
     private final android.hardware.SensorEventListener compassListener = new android.hardware.SensorEventListener() {
         @Override
         public void onSensorChanged(android.hardware.SensorEvent event) {
-            if (event.sensor.getType() == android.hardware.Sensor.TYPE_ACCELEROMETER) {
-                System.arraycopy(event.values, 0, gravity, 0, event.values.length);
-            } else if (event.sensor.getType() == android.hardware.Sensor.TYPE_MAGNETIC_FIELD) {
-                System.arraycopy(event.values, 0, geomagnetic, 0, event.values.length);
-            }
-
-            if (isMapFollowingHeading && isMapFocusedOnUser && map != null) {
-                float[] R = new float[9];
+            if (event.sensor.getType() == android.hardware.Sensor.TYPE_ROTATION_VECTOR) {
+                float[] rotationMatrix = new float[9];
                 float[] outR = new float[9];
-                float[] I = new float[9];
-                boolean success = android.hardware.SensorManager.getRotationMatrix(R, I, gravity, geomagnetic);
-                if (success) {
-                    // 🔥 Remapeia o sistema de coordenadas para compensar a inclinação do dispositivo (celular de pé)
-                    android.hardware.SensorManager.remapCoordinateSystem(R, 
-                            android.hardware.SensorManager.AXIS_X, 
-                            android.hardware.SensorManager.AXIS_Z, 
-                            outR);
+                android.hardware.SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
+                
+                // 🔥 Remapeia o sistema de coordenadas para compensar a inclinação do dispositivo (celular de pé no suporte)
+                android.hardware.SensorManager.remapCoordinateSystem(rotationMatrix, 
+                        android.hardware.SensorManager.AXIS_X, 
+                        android.hardware.SensorManager.AXIS_Z, 
+                        outR);
 
-                    float[] orientation = new float[3];
-                    android.hardware.SensorManager.getOrientation(outR, orientation);
-                    float azimuthRadians = orientation[0];
-                    float azimuthDegrees = (float) Math.toDegrees(azimuthRadians);
-                    
-                    // Normaliza para 0-360
-                    if (azimuthDegrees < 0) azimuthDegrees += 360;
+                float[] orientation = new float[3];
+                android.hardware.SensorManager.getOrientation(outR, orientation);
+                float azimuthDegrees = (float) Math.toDegrees(orientation[0]);
+                if (azimuthDegrees < 0) azimuthDegrees += 360;
 
-                    // Suavização (filtro passa-baixa) mais forte para evitar flicagem (tremidinha)
-                    // Diminuí de 0.15 para 0.08 para ficar mais "pesado" e estável
-                    float alpha = 0.08f;
-                    
-                    // Lógica para suavizar a transição 359 -> 0
-                    float diff = azimuthDegrees - currentAzimuth;
-                    if (diff > 180) diff -= 360;
-                    else if (diff < -180) diff += 360;
-                    
-                    currentAzimuth = currentAzimuth + alpha * diff;
-                    if (currentAzimuth < 0) currentAzimuth += 360;
-                    if (currentAzimuth >= 360) currentAzimuth -= 360;
+                // Suavização (filtro passa-baixa) mais robusta para eliminar tremidinha
+                float alpha = 0.05f;
+                float diff = azimuthDegrees - currentAzimuth;
+                if (diff > 180) diff -= 360;
+                else if (diff < -180) diff += 360;
+                
+                // 🔥 Filtro de Limiar: Ignora variações minúsculas (ruído)
+                if (Math.abs(diff) < 1.2f && isMapFollowingHeading) {
+                     // Se a mudança for pequena e estiver seguindo o rumo, não gira o mapa para evitar flicagem
+                     return;
+                }
 
-                    // Inverte o ângulo para que a sua frente aponte para o topo da tela
+                currentAzimuth = currentAzimuth + alpha * diff;
+                if (currentAzimuth < 0) currentAzimuth += 360;
+                if (currentAzimuth >= 360) currentAzimuth -= 360;
+
+                if (isMapFollowingHeading && isMapFocusedOnUser && map != null) {
                     map.setMapOrientation(-currentAzimuth);
-                    
-                    if (userDirectionMarker != null) {
-                        userDirectionMarker.setRotation(isMapFollowingHeading ? 0 : currentAzimuth);
-                    }
+                    if (userDirectionMarker != null) userDirectionMarker.setRotation(0); 
+                } else if (userDirectionMarker != null) {
+                    userDirectionMarker.setRotation(currentAzimuth);
                 }
             }
         }
@@ -684,8 +674,7 @@ public class RouteFragment extends Fragment {
         sharedPreferences = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
         sensorManager = (android.hardware.SensorManager) requireContext().getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
-            accelSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER);
-            magnetSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_MAGNETIC_FIELD);
+            rotationVectorSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR);
         }
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
         
@@ -3849,9 +3838,8 @@ public class RouteFragment extends Fragment {
             ContextCompat.registerReceiver(requireContext(), newRouteReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         }
 
-        if (sensorManager != null) {
-            if (accelSensor != null) sensorManager.registerListener(compassListener, accelSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
-            if (magnetSensor != null) sensorManager.registerListener(compassListener, magnetSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
+        if (sensorManager != null && rotationVectorSensor != null) {
+            sensorManager.registerListener(compassListener, rotationVectorSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
         }
         if (map != null) { 
             map.onResume(); 

@@ -105,9 +105,9 @@ public class UpdateHelper {
     private static void showUpdateDialog(Activity activity, String localName, int localCode, String remoteName, int remoteCode, String url, String notes) {
         AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("🚀 Nova Versão Disponível")
-                .setMessage("Uma nova atualização do DriveLog foi encontrada no GitHub.\n\n" +
-                           "📍 Versão Instalada: " + localName + " (" + localCode + ")\n" +
-                           "🌟 Versão Disponível: " + remoteName + " (" + remoteCode + ")\n\n" +
+                .setMessage("Uma nova atualização do DriveLog foi encontrada.\n\n" +
+                           "📍 Versão Instalada: " + localName + " (Build " + localCode + ")\n" +
+                           "🌟 Versão Disponível: " + remoteName + " (Build " + remoteCode + ")\n\n" +
                            "O que há de novo:\n" + (notes.isEmpty() ? "Melhorias gerais e correções de bugs." : notes) + "\n\n" +
                            "Deseja atualizar agora?")
                 .setCancelable(false) // Força o usuário a escolher uma opção
