@@ -127,19 +127,27 @@ public class RouteFragment extends Fragment {
 
             if (isMapFollowingHeading && isMapFocusedOnUser && map != null) {
                 float[] R = new float[9];
+                float[] outR = new float[9];
                 float[] I = new float[9];
                 boolean success = android.hardware.SensorManager.getRotationMatrix(R, I, gravity, geomagnetic);
                 if (success) {
+                    // 🔥 Remapeia o sistema de coordenadas para compensar a inclinação do dispositivo (celular de pé)
+                    android.hardware.SensorManager.remapCoordinateSystem(R, 
+                            android.hardware.SensorManager.AXIS_X, 
+                            android.hardware.SensorManager.AXIS_Z, 
+                            outR);
+
                     float[] orientation = new float[3];
-                    android.hardware.SensorManager.getOrientation(R, orientation);
+                    android.hardware.SensorManager.getOrientation(outR, orientation);
                     float azimuthRadians = orientation[0];
                     float azimuthDegrees = (float) Math.toDegrees(azimuthRadians);
                     
                     // Normaliza para 0-360
                     if (azimuthDegrees < 0) azimuthDegrees += 360;
 
-                    // Suavização (filtro passa-baixa) para evitar trepidação
-                    float alpha = 0.15f;
+                    // Suavização (filtro passa-baixa) mais forte para evitar flicagem (tremidinha)
+                    // Diminuí de 0.15 para 0.08 para ficar mais "pesado" e estável
+                    float alpha = 0.08f;
                     
                     // Lógica para suavizar a transição 359 -> 0
                     float diff = azimuthDegrees - currentAzimuth;
