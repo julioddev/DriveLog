@@ -83,8 +83,6 @@ public class MainActivity extends AppCompatActivity {
     private InterstitialAd mInterstitialAd;
     private boolean hasEarningsToday = false;
     private boolean isSystemUIVisible = true;
-    private int kmStateToday = 0; 
-    private int earningsStateToday = 0; 
     private boolean isInternalSelection = false;
     private SharedPreferences sharedPreferences;
     private Menu topMenu;
@@ -141,7 +139,6 @@ public class MainActivity extends AppCompatActivity {
     private Toolbar topAppBar;
     private ListenerRegistration friendBadgeListener, devAlertListener, remoteMenuListener;
     private TextView textDrawerFriendsBadge;
-    private View badgeLeftKm, badgeLeftEarnings;
     private List<String> currentRemoteMenus = null;
 
     @Override
@@ -149,6 +146,9 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         // Remove o ícone flutuante se ele estiver ativo ao voltar para o app
         stopService(new Intent(this, FloatingIconService.class));
+        
+        // Garante que o monitoramento automático esteja ativo se configurado
+        TrackingHelper.updateAutoTracking(this);
     }
 
     @Override
@@ -216,8 +216,6 @@ public class MainActivity extends AppCompatActivity {
         progressSplashCircle = findViewById(R.id.progressSplashCircle);
 
         textDrawerFriendsBadge = findViewById(R.id.textDrawerFriendsBadge);
-        badgeLeftKm = findViewById(R.id.badgeLeftKm);
-        badgeLeftEarnings = findViewById(R.id.badgeLeftEarnings);
 
         viewPager = findViewById(R.id.viewPager);
         viewPager.setOffscreenPageLimit(4);
@@ -230,6 +228,15 @@ public class MainActivity extends AppCompatActivity {
 
         // Setamos o adapter uma única vez no início
         viewPager.setAdapter(new ViewPagerAdapter(this));
+        viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                updateToolbarTitle(position);
+                syncBottomNav(position);
+                updateKeepScreenOn(position);
+            }
+        });
 
         ViewCompat.setOnApplyWindowInsetsListener(mainRoot, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -615,30 +622,11 @@ public class MainActivity extends AppCompatActivity {
         if (backStackCount > 0) {
             topAppBar.setNavigationIcon(R.drawable.ic_back_white);
         } else {
-            boolean useRemote = currentRemoteMenus != null;
-            boolean earningsVisible = getBoolSafe("tab_earnings_enabled", true) && (!useRemote || currentRemoteMenus.contains("earnings"));
-            boolean kmVisible = getBoolSafe("tab_km_enabled", true) && (!useRemote || currentRemoteMenus.contains("km"));
-            boolean shouldShowBadge = (kmVisible && kmStateToday < 2) || (earningsVisible && earningsStateToday < 2);
-            if (shouldShowBadge) topAppBar.setNavigationIcon(getBadgedHamburgerIcon(kmVisible, earningsVisible));
-            else topAppBar.setNavigationIcon(R.drawable.ic_menu_white);
+            topAppBar.setNavigationIcon(R.drawable.ic_menu_white);
         }
     }
 
-    private android.graphics.drawable.Drawable getBadgedHamburgerIcon(boolean kmVisible, boolean earningsVisible) {
-        android.graphics.drawable.Drawable base = ContextCompat.getDrawable(this, R.drawable.ic_menu_white);
-        if (base == null) return null;
-        int size = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 24, getResources().getDisplayMetrics());
-        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
-        base.setBounds(0, 0, size, size);
-        base.draw(canvas);
-        android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-        boolean hasNone = (kmVisible && kmStateToday == 0) || (earningsVisible && earningsStateToday == 0);
-        if (hasNone) paint.setColor(Color.RED); else paint.setColor(Color.BLACK);
-        float radius = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 4, getResources().getDisplayMetrics());
-        canvas.drawCircle(size - radius, radius, radius, paint);
-        return new android.graphics.drawable.BitmapDrawable(getResources(), bitmap);
-    }
+
 
     private void finalizeSplash(long delay) {
         if (isSplashFinalizing) return;
@@ -750,7 +738,13 @@ public class MainActivity extends AppCompatActivity {
     private void notifyFragmentsRemoteMenuChanged(FragmentManager fm) {
         if (fm == null) return;
         for (Fragment f : fm.getFragments()) {
-            if (f instanceof RouteFragment) ((RouteFragment) f).refreshBadges();
+            if (f instanceof RouteFragment) {
+                ((RouteFragment) f).refreshBadges();
+                ((RouteFragment) f).refreshRemoteVisibility();
+            }
+            if (f instanceof MapsFragment) {
+                ((MapsFragment) f).refreshRemoteVisibility();
+            }
             if (f instanceof SettingsFragment) ((SettingsFragment) f).refreshVisibility();
             if (f != null && f.getChildFragmentManager() != null) notifyFragmentsRemoteMenuChanged(f.getChildFragmentManager());
         }
@@ -877,15 +871,7 @@ public class MainActivity extends AppCompatActivity {
         refreshTabs();
     }
 
-    public void setKmStateToday(int state) {
-        this.kmStateToday = state;
-        runOnUiThread(this::updateNavigationIcon);
-    }
 
-    public void setEarningsStateToday(int state) {
-        this.earningsStateToday = state;
-        runOnUiThread(this::updateNavigationIcon);
-    }
 
     public void returnToMainMap() {
         if (getSupportFragmentManager().getBackStackEntryCount() > 0) {
@@ -925,7 +911,24 @@ public class MainActivity extends AppCompatActivity {
         this.requestedRouteKmId = routeId;
         if (viewPager != null && viewPager.getAdapter() instanceof ViewPagerAdapter) {
             int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_maps);
-            viewPager.setCurrentItem(pos, true);
+            if (viewPager.getCurrentItem() == pos) {
+                // Notifica os fragmentos diretamente se já estiver na aba de mapas
+                notifyRouteFragmentsOfRecording(getSupportFragmentManager(), routeId);
+            } else {
+                viewPager.setCurrentItem(pos, true);
+            }
+        }
+    }
+
+    private void notifyRouteFragmentsOfRecording(FragmentManager fm, int routeId) {
+        if (fm == null) return;
+        for (Fragment f : fm.getFragments()) {
+            if (f instanceof RouteFragment) {
+                ((RouteFragment) f).handleRequestedRecording(routeId);
+            }
+            if (f != null && f.getChildFragmentManager() != null) {
+                notifyRouteFragmentsOfRecording(f.getChildFragmentManager(), routeId);
+            }
         }
     }
 
@@ -939,6 +942,23 @@ public class MainActivity extends AppCompatActivity {
         if (drawerLayout != null) {
             // 🔥 Usamos explicitamente START para respeitar o layout e evitar erros de gravidade
             drawerLayout.openDrawer(androidx.core.view.GravityCompat.START);
+        }
+    }
+
+    public void openTrackingHistory() {
+        if (viewPager != null && viewPager.getAdapter() instanceof ViewPagerAdapter) {
+            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_km);
+            viewPager.setCurrentItem(pos, true);
+            
+            // Aguarda um pouco para o fragment carregar e muda a aba interna
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                for (Fragment f : getSupportFragmentManager().getFragments()) {
+                    if (f instanceof KmParentFragment) {
+                        ((KmParentFragment) f).switchToHistory();
+                        break;
+                    }
+                }
+            }, 300);
         }
     }
 }

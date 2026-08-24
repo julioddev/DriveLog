@@ -125,11 +125,6 @@ public class TrackHistoryFragment extends Fragment implements KmAdapter.OnKmClic
         if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).showRouteOnMap(dailyKm.id);
         }
-        
-        // Força a mudança imediata para a aba de Rastreamento (onde está o mapa)
-        if (getParentFragment() instanceof KmParentFragment) {
-            ((KmParentFragment) getParentFragment()).switchToTracking();
-        }
     }
 
     @Override

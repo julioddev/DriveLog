@@ -75,4 +75,10 @@ public class KmParentFragment extends Fragment {
             viewPager.setCurrentItem(0, false);
         }
     }
+
+    public void switchToHistory() {
+        if (viewPager != null) {
+            viewPager.setCurrentItem(1, true);
+        }
+    }
 }

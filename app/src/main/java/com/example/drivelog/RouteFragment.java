@@ -23,6 +23,7 @@ import android.speech.tts.TextToSpeech;
 import android.speech.tts.Voice;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -74,6 +75,7 @@ import org.json.JSONObject;
 import org.osmdroid.api.IMapController;
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase;
 import org.osmdroid.tileprovider.tilesource.XYTileSource;
+import org.osmdroid.util.BoundingBox;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.util.MapTileIndex;
 import org.osmdroid.views.MapView;
@@ -92,6 +94,7 @@ import java.net.URLEncoder;
 import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -103,29 +106,56 @@ public class RouteFragment extends Fragment {
     private MapView map = null;
     private IMapController mapController;
     private EditText editSearch, editSearchStops;
-    private View cardSearch, layoutSearchBalloonOuter, layoutSearchBalloonInner;
+    private View cardSearch, layoutSearchBalloonOuter, layoutSearchBalloonInner, layoutSearchContainer;
     private ImageButton btnToggleSearch, btnSearch, btnAddStopManual, btnRouteMenu, btnToggleSearchStops;
-    private View layoutOpenDrawerInside, badgeOpenDrawerKm;
-    private FloatingActionButton fabAddStop, fabNewRoute, fabCenterMap, fabDeliveryApp, fabMapOrientation, fabReportHazard;
+    private View layoutOpenDrawerInside;
+    private FloatingActionButton fabAddStop, fabNewRoute, fabCenterMap, fabDeliveryApp, fabMapOrientation, fabReportHazard, fabKmTracking;
     private boolean isMapFollowingHeading = false;
     private android.hardware.SensorManager sensorManager;
-    private android.hardware.Sensor compassSensor;
+    private android.hardware.Sensor accelSensor, magnetSensor;
+    private final float[] gravity = new float[3];
+    private final float[] geomagnetic = new float[3];
     private float currentAzimuth = 0;
     private final android.hardware.SensorEventListener compassListener = new android.hardware.SensorEventListener() {
         @Override
         public void onSensorChanged(android.hardware.SensorEvent event) {
+            if (event.sensor.getType() == android.hardware.Sensor.TYPE_ACCELEROMETER) {
+                System.arraycopy(event.values, 0, gravity, 0, event.values.length);
+            } else if (event.sensor.getType() == android.hardware.Sensor.TYPE_MAGNETIC_FIELD) {
+                System.arraycopy(event.values, 0, geomagnetic, 0, event.values.length);
+            }
+
             if (isMapFollowingHeading && isMapFocusedOnUser && map != null) {
-                float azimuth = event.values[0];
-                // Suavização simples para evitar trepidação (filtro passa-baixa)
-                currentAzimuth = currentAzimuth + 0.15f * (azimuth - currentAzimuth);
-                // Inverte o ângulo para que a sua frente aponte para o topo da tela
-                map.setMapOrientation(-currentAzimuth);
-                
-                // 🔥 Sincroniza o marcador de direção
-                if (userDirectionMarker != null) {
-                    // Se estiver seguindo o rumo, a seta deve ficar travada pra cima (0 na tela)
-                    // Caso contrário, mostra a rotação real
-                    userDirectionMarker.setRotation(isMapFollowingHeading ? 0 : currentAzimuth);
+                float[] R = new float[9];
+                float[] I = new float[9];
+                boolean success = android.hardware.SensorManager.getRotationMatrix(R, I, gravity, geomagnetic);
+                if (success) {
+                    float[] orientation = new float[3];
+                    android.hardware.SensorManager.getOrientation(R, orientation);
+                    float azimuthRadians = orientation[0];
+                    float azimuthDegrees = (float) Math.toDegrees(azimuthRadians);
+                    
+                    // Normaliza para 0-360
+                    if (azimuthDegrees < 0) azimuthDegrees += 360;
+
+                    // Suavização (filtro passa-baixa) para evitar trepidação
+                    float alpha = 0.15f;
+                    
+                    // Lógica para suavizar a transição 359 -> 0
+                    float diff = azimuthDegrees - currentAzimuth;
+                    if (diff > 180) diff -= 360;
+                    else if (diff < -180) diff += 360;
+                    
+                    currentAzimuth = currentAzimuth + alpha * diff;
+                    if (currentAzimuth < 0) currentAzimuth += 360;
+                    if (currentAzimuth >= 360) currentAzimuth -= 360;
+
+                    // Inverte o ângulo para que a sua frente aponte para o topo da tela
+                    map.setMapOrientation(-currentAzimuth);
+                    
+                    if (userDirectionMarker != null) {
+                        userDirectionMarker.setRotation(isMapFollowingHeading ? 0 : currentAzimuth);
+                    }
                 }
             }
         }
@@ -147,6 +177,9 @@ public class RouteFragment extends Fragment {
     private boolean isStopDeleteDialogShowing = false;
     private final Handler autoHideHandler = new Handler(Looper.getMainLooper());
     private Runnable autoHideRunnable;
+    private List<LoadingPoint> loadingPoints = new ArrayList<>();
+    private final List<Marker> loadingMarkers = new ArrayList<>();
+    private org.osmdroid.views.overlay.MapEventsOverlay loadingSelectionOverlay;
     private String lastCityName = "";
     private GeoPoint lastWeatherLocation = null;
     private long lastWeatherUpdate = 0;
@@ -183,6 +216,7 @@ public class RouteFragment extends Fragment {
     private org.osmdroid.views.overlay.MapEventsOverlay currentFixOverlay, homeSelectionOverlay;
     private LassoOverlay lassoOverlay;
     private View cardFixMode, cardLassoMode, layoutSideFabs;
+    private View layoutSummary, layoutLeftSummary, layoutSwitchContainer;
     private View cardToggleSystemUI;
     private ImageView imageToggleArrow;
     private View cardRestWarning;
@@ -206,6 +240,35 @@ public class RouteFragment extends Fragment {
     private GeoPoint lastSearchedPoint = null;
     private String lastSearchedAddress = "";
     private RouteHeader currentRouteHeader = null;
+    
+    // --- Linha do Tempo / Histórico GPS ---
+    private View cardTimeline;
+    private SeekBar seekBarTimeline;
+    private TextView textTimelineTime;
+    private TextView btnS1, btnS2, btnS4, btnS8;
+    private View btnExitHistory;
+    private ImageView btnTimelinePlayPause;
+    private Marker timelineMarker;
+    private List<RoutePoint> historicalPoints = new ArrayList<>();
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault());
+    private boolean isTimelinePlaying = false;
+    private int timelineSpeedMultiplier = 1;
+    private final Handler playbackHandler = new Handler(Looper.getMainLooper());
+    private final Runnable playbackRunnable = new Runnable() {
+        @Override public void run() {
+            if (isTimelinePlaying && seekBarTimeline != null) {
+                int currentProgress = seekBarTimeline.getProgress();
+                if (currentProgress < seekBarTimeline.getMax()) {
+                    int nextProgress = currentProgress + 1;
+                    seekBarTimeline.setProgress(nextProgress);
+                    updateTimelineMarker(nextProgress);
+                    long delay = 200 / timelineSpeedMultiplier;
+                    playbackHandler.postDelayed(this, delay);
+                } else pauseTimelinePlayback();
+            }
+        }
+    };
+    
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private final Runnable timerRunnable = new Runnable() {
         @Override
@@ -281,7 +344,7 @@ public class RouteFragment extends Fragment {
         if (PREF_LAST_ROUTE.equals(key)) {
             int lastId = prefs.getInt(PREF_LAST_ROUTE, -1);
             if (lastId != -1 && lastId != currentRouteId) loadLastRoute();
-        } else if ("app_mode".equals(key) || "delivery_app_package".equals(key) || "side_fabs_alignment".equals(key) || "show_bottom_sheet_stops".equals(key)) {
+        } else if ("app_mode".equals(key) || "delivery_app_package".equals(key) || "side_fabs_alignment".equals(key) || "show_bottom_sheet_stops".equals(key) || "show_fab_km_tracking".equals(key)) {
             Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::updateAppModeUI);
         } else if ("route_line_opacity".equals(key)) {
             if (currentlySelectedStop != null) updateSelectionTrace(currentlySelectedStop);
@@ -541,29 +604,40 @@ public class RouteFragment extends Fragment {
 
     private void updateFloatingButtonsVisibility() {
         if (getContext() == null) return;
+        
+        // --- Cálculo do estado da rota ---
+        int pendCount = 0;
+        for (RouteStop s : currentStops) if (s.deliveryStatus == 0) pendCount++;
+        boolean hasStops = !currentStops.isEmpty();
+        boolean isRouteFinished = hasStops && pendCount == 0;
+        boolean isRouteActive = hasStops && !isRouteFinished;
+
         boolean showDelivery = sharedPreferences.getBoolean("show_fab_delivery_app", true);
         boolean showReport = sharedPreferences.getBoolean("show_fab_report_hazard", true);
         boolean showCenter = sharedPreferences.getBoolean("show_fab_center_map", true);
         boolean showNorth = sharedPreferences.getBoolean("show_fab_orientation", true);
+        boolean showKm = sharedPreferences.getBoolean("show_fab_km_tracking", true);
         boolean showStopsCard = sharedPreferences.getBoolean("show_bottom_sheet_stops", true);
 
         if (fabDeliveryApp != null) fabDeliveryApp.setVisibility(showDelivery ? View.VISIBLE : View.GONE);
         if (fabReportHazard != null) fabReportHazard.setVisibility(showReport ? View.VISIBLE : View.GONE);
-        if (fabCenterMap != null) fabCenterMap.setVisibility(showCenter ? View.VISIBLE : View.GONE);
+        
+        // 🔥 REGRA: O botão de alternar foco só aparece se a rota estiver ativa (não vazia e não finalizada)
+        if (fabCenterMap != null) fabCenterMap.setVisibility((showCenter && isRouteActive) ? View.VISIBLE : View.GONE);
+        
         if (fabMapOrientation != null) fabMapOrientation.setVisibility(showNorth ? View.VISIBLE : View.GONE);
+
+        if (fabKmTracking != null) {
+            boolean remoteVisible = getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("km");
+            fabKmTracking.setVisibility((remoteVisible && showKm) ? View.VISIBLE : View.GONE);
+        }
         
         if (fabNewRoute != null) {
-            // Regra: Mostra se não houver rota ativa OU se a rota atual estiver 100% concluída
-            boolean isRouteFinished = false;
-            int pendCount = 0;
-            for (RouteStop s : currentStops) if (s.deliveryStatus == 0) pendCount++;
-            if (!currentStops.isEmpty() && pendCount == 0) isRouteFinished = true;
-            
-            fabNewRoute.setVisibility((currentStops.isEmpty() || isRouteFinished) ? View.VISIBLE : View.GONE);
+            fabNewRoute.setVisibility((!hasStops || isRouteFinished) ? View.VISIBLE : View.GONE);
         }
 
         if (bottomSheet != null) {
-            bottomSheet.setVisibility((currentStops.isEmpty() || !showStopsCard) ? View.GONE : View.VISIBLE);
+            bottomSheet.setVisibility((!hasStops || !showStopsCard) ? View.GONE : View.VISIBLE);
         }
     }
 
@@ -589,36 +663,8 @@ public class RouteFragment extends Fragment {
         @Override public void onReceive(Context context, Intent intent) { if ("com.example.entregas.ACTION_NEW_ROUTE".equals(intent.getAction())) promptNewRoute(); }
     };
 
-    private int kmStateToday = 0;
-    private int earningsStateToday = 0;
-
     public void refreshBadges() {
-        updateMapDrawerBadge();
-    }
-
-    private void updateMapDrawerBadge() {
-        if (badgeOpenDrawerKm == null) return;
-        
-        boolean kmVisible = true;
-        boolean earningsVisible = true;
-        
-        if (getActivity() instanceof MainActivity) {
-            MainActivity activity = (MainActivity) getActivity();
-            kmVisible = activity.isMenuVisible("km");
-            earningsVisible = activity.isMenuVisible("earnings");
-        }
-
-        boolean showKmBadge = kmVisible && (kmStateToday < 2);
-        boolean showEarningsBadge = earningsVisible && (earningsStateToday < 2);
-
-        if (showKmBadge || showEarningsBadge) {
-            badgeOpenDrawerKm.setVisibility(View.VISIBLE);
-            
-            boolean isRed = (kmVisible && kmStateToday == 0) || (earningsVisible && earningsStateToday == 0);
-            badgeOpenDrawerKm.setBackgroundResource(isRed ? R.drawable.bg_circle_red : R.drawable.bg_circle_black);
-        } else {
-            badgeOpenDrawerKm.setVisibility(View.GONE);
-        }
+        // Marcadores de pendência desativados
     }
 
     @Nullable
@@ -629,7 +675,10 @@ public class RouteFragment extends Fragment {
         // view.setBackgroundColor(Color.RED); // TESTE RADICAL: SE O FUNDO FICAR VERMELHO, O CÓDIGO NOVO ESTÁ RODANDO
         sharedPreferences = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
         sensorManager = (android.hardware.SensorManager) requireContext().getSystemService(Context.SENSOR_SERVICE);
-        if (sensorManager != null) compassSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ORIENTATION);
+        if (sensorManager != null) {
+            accelSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER);
+            magnetSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_MAGNETIC_FIELD);
+        }
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
         
         // Removido Configuration.load() para não sobrescrever o User-Agent global da MainActivity
@@ -683,6 +732,10 @@ public class RouteFragment extends Fragment {
         });
 
         cardSearch = view.findViewById(R.id.cardSearch);
+        layoutSearchContainer = view.findViewById(R.id.layoutSearchContainer);
+        layoutSummary = view.findViewById(R.id.layoutSummary);
+        layoutLeftSummary = view.findViewById(R.id.layoutLeftSummary);
+        layoutSwitchContainer = view.findViewById(R.id.layoutSwitchContainer);
         layoutSearchBalloonOuter = view.findViewById(R.id.layoutSearchBalloonOuter);
         layoutSearchBalloonInner = view.findViewById(R.id.layoutSearchBalloonInner);
         btnToggleSearch = view.findViewById(R.id.btnToggleSearch);
@@ -721,7 +774,6 @@ public class RouteFragment extends Fragment {
         btnAddStopManual = view.findViewById(R.id.btnAddStopManual); 
         btnOpenDrawer = view.findViewById(R.id.btnOpenRoutesDrawerInside);
         layoutOpenDrawerInside = view.findViewById(R.id.layoutOpenDrawerInside);
-        badgeOpenDrawerKm = view.findViewById(R.id.badgeOpenDrawerKm);
 
         btnRouteMenu = view.findViewById(R.id.btnRouteMenu); layoutSideFabs = view.findViewById(R.id.layoutSideFabs);
         updateAppModeUI(view);
@@ -739,6 +791,7 @@ public class RouteFragment extends Fragment {
         fabNewRoute = view.findViewById(R.id.fabNewRoute); fabAddStop = view.findViewById(R.id.fabAddStop);
         fabCenterMap = view.findViewById(R.id.fabCenterMap); fabDeliveryApp = view.findViewById(R.id.fabDeliveryApp);
         fabReportHazard = view.findViewById(R.id.fabReportHazard);
+        fabKmTracking = view.findViewById(R.id.fabKmTracking);
 
         if (fabNewRoute != null) { fabNewRoute.setOnClickListener(v -> promptNewRoute()); if (sharedPreferences.getInt("app_mode", 0) == 1) fabNewRoute.setVisibility(View.GONE); }
         if (fabAddStop != null) fabAddStop.setOnClickListener(v -> confirmAddStop());
@@ -747,6 +800,30 @@ public class RouteFragment extends Fragment {
         if (fabMapOrientation != null) fabMapOrientation.setOnClickListener(v -> toggleMapOrientation());
         if (fabDeliveryApp != null) fabDeliveryApp.setOnClickListener(v -> launchDeliveryApp());
         if (fabReportHazard != null) fabReportHazard.setOnClickListener(v -> promptReportHazard());
+        if (fabKmTracking != null) {
+            fabKmTracking.setOnClickListener(v -> showKmTrackingPopup());
+            observeTrackingStatus();
+        }
+
+        // --- Inicialização da Linha do Tempo ---
+        cardTimeline = view.findViewById(R.id.cardTimelineRoute);
+        seekBarTimeline = view.findViewById(R.id.seekBarTimelineRoute);
+        textTimelineTime = view.findViewById(R.id.textTimelineTimeRoute);
+        btnExitHistory = view.findViewById(R.id.btnExitHistoryRoute);
+        btnTimelinePlayPause = view.findViewById(R.id.btnTimelinePlayPauseRoute);
+        btnS1 = view.findViewById(R.id.btnSpeed1xRoute);
+        btnS2 = view.findViewById(R.id.btnSpeed2xRoute);
+        btnS4 = view.findViewById(R.id.btnSpeed4xRoute);
+        btnS8 = view.findViewById(R.id.btnSpeed8xRoute);
+
+        if (btnExitHistory != null) btnExitHistory.setOnClickListener(v -> exitHistoryMode());
+        if (btnTimelinePlayPause != null) btnTimelinePlayPause.setOnClickListener(v -> toggleTimelinePlayback());
+        if (btnS1 != null) btnS1.setOnClickListener(v -> setTimelineSpeed(1));
+        if (btnS2 != null) btnS2.setOnClickListener(v -> setTimelineSpeed(2));
+        if (btnS4 != null) btnS4.setOnClickListener(v -> setTimelineSpeed(4));
+        if (btnS8 != null) btnS8.setOnClickListener(v -> setTimelineSpeed(8));
+        setupTimelineListener();
+
         if (btnSearch != null) btnSearch.setOnClickListener(v -> searchAddress(editSearch.getText().toString()));
         if (btnAddStopManual != null) btnAddStopManual.setOnClickListener(v -> promptManualStop());
         if (btnRouteMenu != null) {
@@ -795,7 +872,7 @@ public class RouteFragment extends Fragment {
                     p.getMenu().add("Definir Endereço de Casa");
                 }
                 
-                if (currentRouteHeader != null && currentRouteHeader.endTime > 0) {
+                if (currentRouteHeader != null && currentRouteHeader.startTime > 0) {
                     p.getMenu().add("Estatísticas da Rota");
                 }
 
@@ -1060,49 +1137,6 @@ public class RouteFragment extends Fragment {
         setupNetworkListener();
         animationHandler.post(markerAnimationRunnable);
         
-        // 🔥 Observe o registro de KM e Ganhos para o balãozinho no mapa
-        java.util.Calendar cal = java.util.Calendar.getInstance();
-        cal.set(java.util.Calendar.HOUR_OF_DAY, 0); 
-        cal.set(java.util.Calendar.MINUTE, 0); 
-        cal.set(java.util.Calendar.SECOND, 0);
-        cal.set(java.util.Calendar.MILLISECOND, 0);
-        long dayStart = cal.getTimeInMillis();
-        long dayEnd = dayStart + (24 * 60 * 60 * 1000);
-        
-        AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
-        
-        dao.getTodayKmEntriesLive(dayStart, dayEnd).observe(getViewLifecycleOwner(), entries -> {
-            if (entries == null || entries.isEmpty()) {
-                kmStateToday = 0;
-            } else {
-                boolean hasPending = false;
-                for (DailyKm km : entries) {
-                    if (!km.isCompleted) {
-                        hasPending = true;
-                        break;
-                    }
-                }
-                kmStateToday = hasPending ? 1 : 2;
-            }
-            updateMapDrawerBadge();
-        });
-
-        dao.getTodayEarningsEntriesLive(dayStart, dayEnd).observe(getViewLifecycleOwner(), entries -> {
-            if (entries == null || entries.isEmpty()) {
-                earningsStateToday = 0;
-            } else {
-                boolean hasPending = false;
-                for (Earnings e : entries) {
-                    if (!e.isCompleted) {
-                        hasPending = true;
-                        break;
-                    }
-                }
-                earningsStateToday = hasPending ? 1 : 2;
-            }
-            updateMapDrawerBadge();
-        });
-
         loadLastRoute(); checkRestInterval(); return view;
     }
 
@@ -1538,7 +1572,21 @@ public class RouteFragment extends Fragment {
 
     private void setupDragAndDrop() {
         itemTouchHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) {
-            @Override public boolean onMove(@NonNull RecyclerView rv, @NonNull RecyclerView.ViewHolder vh, @NonNull RecyclerView.ViewHolder t) { java.util.Collections.swap(currentStops, vh.getBindingAdapterPosition(), t.getBindingAdapterPosition()); stopsListAdapter.notifyItemMoved(vh.getBindingAdapterPosition(), t.getBindingAdapterPosition()); stopsCardAdapter.setStops(currentStops); return true; }
+            @Override 
+            public boolean onMove(@NonNull RecyclerView rv, @NonNull RecyclerView.ViewHolder vh, @NonNull RecyclerView.ViewHolder t) { 
+                int from = vh.getBindingAdapterPosition();
+                int to = t.getBindingAdapterPosition();
+                
+                // Swap no cache local do fragment
+                java.util.Collections.swap(currentStops, from, to); 
+                
+                // Swap interno no adapter (para manter integridade visual e de dados)
+                stopsListAdapter.swap(from, to); 
+                
+                // Atualiza o ViewPager se estiver ativo
+                if (stopsCardAdapter != null) stopsCardAdapter.setStops(currentStops); 
+                return true; 
+            }
             @Override public void onSwiped(@NonNull RecyclerView.ViewHolder vh, int d) {}
         });
     }
@@ -1559,10 +1607,31 @@ public class RouteFragment extends Fragment {
 
     private void showSharedDeveloperRoutes() { FirebaseHelper.fetchSharedDeveloperRoutes(new FirebaseHelper.SharedRoutesCallback() { @Override public void onResult(List<Map<String, Object>> rs) { Activity activity = getActivity(); if (activity == null) return; activity.runOnUiThread(() -> { String[] ns = new String[rs.size()]; for(int i=0; i<rs.size(); i++) ns[i] = (String) rs.get(i).get("name"); new AlertDialog.Builder(requireContext()).setTitle("Dev").setItems(ns, (d, w) -> importSharedDevRoute(rs.get(w))).show(); }); } @Override public void onError(String m) {} }); }
 
-    private void importSharedDevRoute(Map<String, Object> d) { new Thread(() -> { try { String n = (String) d.get("name"); List<Map<String, Object>> sd = (List<Map<String, Object>>) d.get("stops"); AppDao dao = AppDatabase.getInstance(requireContext()).appDao(); long nid = dao.insertRouteHeader(new RouteHeader("DEV: "+n)); List<RouteStop> ns = new ArrayList<>(); for(Map<String, Object> s : sd) { RouteStop st = new RouteStop((String)s.get("address"), (Double)s.get("lat"), (Double)s.get("lon")); st.routeId = (int)nid; ns.add(st); } dao.insertRouteStops(ns); Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(() -> { 
-        sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
-        switchRoute((int)nid, "DEV: "+n); 
-    }); } catch(Exception ignored){} }).start(); }
+    private void importSharedDevRoute(Map<String, Object> d) { 
+        new Thread(() -> { 
+            try { 
+                String n = (String) d.get("name"); 
+                List<Map<String, Object>> sd = (List<Map<String, Object>>) d.get("stops"); 
+                AppDao dao = AppDatabase.getInstance(requireContext()).appDao(); 
+                long nid = dao.insertRouteHeader(new RouteHeader("DEV: " + n)); 
+                List<RouteStop> ns = new ArrayList<>(); 
+                for (int i = 0; i < sd.size(); i++) { 
+                    Map<String, Object> s = sd.get(i);
+                    RouteStop st = new RouteStop((String)s.get("address"), (Double)s.get("lat"), (Double)s.get("lon")); 
+                    st.routeId = (int)nid; 
+                    st.sortOrder = i; // Nova rota sempre começa do 0
+                    st.stopNumber = i + 1;
+                    ns.add(st); 
+                } 
+                dao.insertRouteStops(ns); 
+                Activity activity = getActivity(); 
+                if (activity != null) activity.runOnUiThread(() -> { 
+                    sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
+                    switchRoute((int)nid, "DEV: " + n); 
+                }); 
+            } catch(Exception ignored){} 
+        }).start(); 
+    }
 
     private void showStatsPopup(int type) {
         if (getContext() == null) return;
@@ -1648,12 +1717,24 @@ public class RouteFragment extends Fragment {
         float lon = sharedPreferences.getFloat("home_lon", 0);
 
         if (lat != 0 && lon != 0) {
-            new AlertDialog.Builder(getContext())
+            AlertDialog dialog = new AlertDialog.Builder(getContext())
                     .setTitle("Casa já definida")
-                    .setMessage("O local da sua casa já está salvo. Deseja alterar para um novo local?")
-                    .setPositiveButton("Alterar", (dialog, which) -> enterHomeSelectionMode())
-                    .setNegativeButton("Manter", null)
-                    .show();
+                    .setMessage("O local da sua casa já está salvo. Deseja alterar ou remover o endereço atual?")
+                    .setPositiveButton("Alterar Novo Local", (d, which) -> enterHomeSelectionMode())
+                    .setNeutralButton("Excluir Endereço", (d, which) -> {
+                        sharedPreferences.edit().remove("home_lat").remove("home_lon").apply();
+                        if (homeMarker != null) map.getOverlays().remove(homeMarker);
+                        if (homeRadiusOverlay != null) map.getOverlays().remove(homeRadiusOverlay);
+                        homeMarker = null; homeRadiusOverlay = null;
+                        map.invalidate();
+                        Toast.makeText(getContext(), "Endereço de casa removido", Toast.LENGTH_SHORT).show();
+                        CloudSyncHelper.syncNow(requireContext());
+                        TrackingHelper.updateAutoTracking(requireContext());
+                    })
+                    .setNegativeButton("Manter Atual", null)
+                    .create();
+            if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+            dialog.show();
         } else {
             enterHomeSelectionMode();
         }
@@ -1684,7 +1765,7 @@ public class RouteFragment extends Fragment {
     private void confirmHomeLocation(GeoPoint p) {
         new AlertDialog.Builder(getContext())
                 .setTitle("Definir Casa")
-                .setMessage("Deseja definir este local como sua casa para o sistema de pausa automática do tempo?")
+                .setMessage("Deseja definir este local como sua casa para o início automático do rastreamento?")
                 .setPositiveButton("Sim", (dialog, which) -> {
                     saveHomeLocation(p);
                     cancelHomeSelection();
@@ -1697,11 +1778,13 @@ public class RouteFragment extends Fragment {
         sharedPreferences.edit()
                 .putFloat("home_lat", (float) p.getLatitude())
                 .putFloat("home_lon", (float) p.getLongitude())
+                .putBoolean("home_tracking_enabled", true)
                 .apply();
         
         showHomeMarker();
-        Toast.makeText(getContext(), "Casa definida! O tempo será pausado automaticamente quando você chegar aqui.", Toast.LENGTH_LONG).show();
+        Toast.makeText(getContext(), "Casa definida! Rastreamento iniciará ao sair daqui.", Toast.LENGTH_LONG).show();
         CloudSyncHelper.syncNow(requireContext());
+        TrackingHelper.updateAutoTracking(requireContext());
     }
 
     private void showHomeMarker() {
@@ -1740,6 +1823,233 @@ public class RouteFragment extends Fragment {
             map.getOverlays().add(0, homeRadiusOverlay);
             map.invalidate();
         }
+    }
+
+    private void loadLoadingPoints() {
+        loadingPoints = AppDatabase.getInstance(requireContext()).appDao().getAllLoadingPoints();
+    }
+
+    private void showLoadingMarkers() {
+        if (map == null || getContext() == null) return;
+        
+        // 🔥 REGRA REMOTA: Verifica se os controles de carregamento/rastreamento estão visíveis
+        if (getActivity() instanceof MainActivity && !((MainActivity) getActivity()).isMenuVisible("km")) {
+            for (Marker m : loadingMarkers) map.getOverlays().remove(m);
+            loadingMarkers.clear();
+            map.getOverlays().removeIf(overlay -> overlay instanceof org.osmdroid.views.overlay.Polygon && ((org.osmdroid.views.overlay.Polygon)overlay).getTitle() != null && ((org.osmdroid.views.overlay.Polygon)overlay).getTitle().startsWith("LoadingRadius:"));
+            map.invalidate();
+            return;
+        }
+
+        loadLoadingPoints();
+        
+        for (Marker m : loadingMarkers) {
+            map.getOverlays().remove(m);
+        }
+        loadingMarkers.clear();
+
+        map.getOverlays().removeIf(overlay -> {
+            if (overlay instanceof org.osmdroid.views.overlay.Polygon) {
+                org.osmdroid.views.overlay.Polygon p = (org.osmdroid.views.overlay.Polygon) overlay;
+                return p.getTitle() != null && p.getTitle().startsWith("LoadingRadius:");
+            }
+            return false;
+        });
+
+        int loadingRadius = sharedPreferences.getInt("loading_base_radius", 100);
+
+        for (LoadingPoint lp : loadingPoints) {
+            GeoPoint point = new GeoPoint(lp.latitude, lp.longitude);
+            
+            org.osmdroid.views.overlay.Polygon circle = new org.osmdroid.views.overlay.Polygon(map);
+            circle.setPoints(org.osmdroid.views.overlay.Polygon.pointsAsCircle(point, loadingRadius));
+            circle.getFillPaint().setColor(Color.parseColor("#33FF9800")); // Laranja semi-transparente
+            circle.getOutlinePaint().setColor(Color.parseColor("#FF9800"));
+            circle.getOutlinePaint().setStrokeWidth(2f);
+            circle.setTitle("LoadingRadius:" + lp.id);
+            map.getOverlays().add(0, circle);
+
+            Marker m = new Marker(map);
+            m.setPosition(point);
+            m.setTitle(lp.name + (lp.platformName != null ? " (" + lp.platformName + ")" : ""));
+            m.setIcon(ContextCompat.getDrawable(requireContext(), R.drawable.ic_money));
+            if (m.getIcon() != null) m.getIcon().setTint(Color.parseColor("#FF9800"));
+            m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+            map.getOverlays().add(m);
+            loadingMarkers.add(m);
+        }
+        map.invalidate();
+    }
+
+    private void showLoadingPointsDialog() {
+        if (loadingSelectionOverlay != null) {
+            cancelLoadingSelection();
+            return;
+        }
+        loadLoadingPoints();
+        String[] names = new String[loadingPoints.size() + (loadingPoints.size() < 5 ? 1 : 0)];
+        for (int i = 0; i < loadingPoints.size(); i++) {
+            names[i] = loadingPoints.get(i).name;
+        }
+        if (loadingPoints.size() < 5) {
+            names[loadingPoints.size()] = "+ Adicionar novo ponto";
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
+                .setTitle("Pontos de Carregamento")
+                .setItems(names, (d, which) -> {
+                    if (which == loadingPoints.size()) {
+                        enterLoadingSelectionMode(-1);
+                    } else {
+                        showEditLoadingPointDialog(which);
+                    }
+                })
+                .setNegativeButton("Fechar", null)
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
+    }
+
+    private void showEditLoadingPointDialog(int index) {
+        LoadingPoint lp = loadingPoints.get(index);
+        String[] options = {"Editar Nome", "Editar Localização", "Excluir"};
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
+                .setTitle(lp.name)
+                .setItems(options, (d, which) -> {
+                    if (which == 0) {
+                        promptForLoadingPointName(lp.latitude, lp.longitude, index);
+                    } else if (which == 1) {
+                        enterLoadingSelectionMode(index);
+                    } else if (which == 2) {
+                        new Thread(() -> {
+                            AppDatabase.getInstance(requireContext()).appDao().deleteLoadingPoint(lp);
+                            if (getActivity() != null) {
+                                getActivity().runOnUiThread(() -> {
+                                    showLoadingMarkers();
+                                    Toast.makeText(getContext(), "Ponto removido", Toast.LENGTH_SHORT).show();
+                                    CloudSyncHelper.syncNow(requireContext());
+                                });
+                            }
+                        }).start();
+                    }
+                })
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
+    }
+
+    private void enterLoadingSelectionMode(int index) {
+        if (loadingSelectionOverlay != null) {
+            cancelLoadingSelection();
+        }
+        Toast.makeText(getContext(), "Toque no mapa para definir o ponto de CARREGAMENTO", Toast.LENGTH_LONG).show();
+        
+        if (cardFixMode != null) {
+            cardFixMode.setVisibility(View.VISIBLE);
+        }
+
+        loadingSelectionOverlay = new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
+            @Override
+            public boolean singleTapConfirmedHelper(GeoPoint p) {
+                confirmLoadingLocation(p, index);
+                return true;
+            }
+            @Override public boolean longPressHelper(GeoPoint p) { return false; }
+        });
+        map.getOverlays().add(loadingSelectionOverlay);
+    }
+
+    private void cancelLoadingSelection() {
+        if (loadingSelectionOverlay != null) {
+            map.getOverlays().remove(loadingSelectionOverlay);
+            loadingSelectionOverlay = null;
+        }
+        if (cardFixMode != null) cardFixMode.setVisibility(View.GONE);
+        map.invalidate();
+    }
+
+    private void confirmLoadingLocation(GeoPoint p, int index) {
+        cancelLoadingSelection();
+        
+        if (index == -1) {
+            promptForLoadingPointName(p.getLatitude(), p.getLongitude(), -1);
+        } else {
+            LoadingPoint lp = loadingPoints.get(index);
+            lp.latitude = p.getLatitude();
+            lp.longitude = p.getLongitude();
+            new Thread(() -> {
+                AppDatabase.getInstance(requireContext()).appDao().updateLoadingPoint(lp);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        showLoadingMarkers();
+                        Toast.makeText(getContext(), "Localização atualizada", Toast.LENGTH_SHORT).show();
+                        CloudSyncHelper.syncNow(requireContext());
+                    });
+                }
+            }).start();
+        }
+    }
+
+    private void promptForLoadingPointName(double lat, double lon, int index) {
+        android.widget.EditText input = new android.widget.EditText(getContext());
+        if (index != -1) input.setText(loadingPoints.get(index).name);
+        else input.setHint("Nome da Empresa");
+
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
+                .setTitle(index == -1 ? "Nome do Ponto" : "Editar Nome")
+                .setView(input)
+                .setPositiveButton("Próximo", (d, which) -> {
+                    String name = input.getText().toString().trim();
+                    if (name.isEmpty()) name = "Carregamento " + (loadingPoints.size() + 1);
+                    promptForPlatformSelection(lat, lon, index, name);
+                })
+                .setNegativeButton("Cancelar", null)
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
+    }
+
+    private void promptForPlatformSelection(double lat, double lon, int index, String name) {
+        AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+        List<Platform> platforms = dao.getAllPlatforms();
+        if (platforms.isEmpty()) {
+            Toast.makeText(getContext(), "Nenhuma plataforma cadastrada. Configure em Ajustes primeiro.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        String[] platformNames = new String[platforms.size()];
+        for (int i = 0; i < platforms.size(); i++) {
+            platformNames[i] = platforms.get(i).name;
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
+                .setTitle("Selecione a Plataforma")
+                .setItems(platformNames, (d, which) -> {
+                    String platformName = platforms.get(which).name;
+                    new Thread(() -> {
+                        if (index == -1) {
+                            LoadingPoint lp = new LoadingPoint(name, lat, lon, platformName);
+                            dao.insertLoadingPoint(lp);
+                        } else {
+                            LoadingPoint lp = loadingPoints.get(index);
+                            lp.name = name;
+                            lp.platformName = platformName;
+                            dao.updateLoadingPoint(lp);
+                        }
+                        
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> {
+                                showLoadingMarkers();
+                                Toast.makeText(getContext(), "Ponto salvo com sucesso!", Toast.LENGTH_SHORT).show();
+                                CloudSyncHelper.syncNow(requireContext());
+                            });
+                        }
+                    }).start();
+                })
+                .setNegativeButton("Cancelar", null)
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
     }
 
     private void centerOnHome() {
@@ -2253,7 +2563,12 @@ public class RouteFragment extends Fragment {
         subVis.add(3, 302, 1, "Botão Reportar").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_report_hazard", true));
         subVis.add(3, 303, 2, "Botão Localização").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_center_map", true));
         subVis.add(3, 304, 3, "Botão Norte").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_orientation", true));
-        subVis.add(3, 305, 4, "Card de Paradas").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_bottom_sheet_stops", true));
+        
+        if (getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("km")) {
+            subVis.add(3, 306, 4, "Botão Rastreio KM").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_km_tracking", true));
+        }
+        
+        subVis.add(3, 305, 5, "Card de Paradas").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_bottom_sheet_stops", true));
 
         // Opção "Ocultar Entregas" movida para baixo do alinhamento de botões
         boolean hideDelivered = sharedPreferences.getBoolean("hide_delivered_stops", false);
@@ -2346,6 +2661,11 @@ public class RouteFragment extends Fragment {
                 boolean n = !item.isChecked();
                 item.setChecked(n);
                 sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", n).apply();
+                updateFloatingButtonsVisibility();
+            } else if (item.getItemId() == 306) {
+                boolean n = !item.isChecked();
+                item.setChecked(n);
+                sharedPreferences.edit().putBoolean("show_fab_km_tracking", n).apply();
                 updateFloatingButtonsVisibility();
             } else if ("Otimizar Rota".equals(item.getTitle())) {
                 optimizeRoute();
@@ -3521,12 +3841,15 @@ public class RouteFragment extends Fragment {
             ContextCompat.registerReceiver(requireContext(), newRouteReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         }
 
-        if (sensorManager != null && compassSensor != null) {
-            sensorManager.registerListener(compassListener, compassSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
+        if (sensorManager != null) {
+            if (accelSensor != null) sensorManager.registerListener(compassListener, accelSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
+            if (magnetSensor != null) sensorManager.registerListener(compassListener, magnetSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
         }
         if (map != null) { 
             map.onResume(); 
             showHomeMarker();
+            showLoadingMarkers();
+            refreshRemoteVisibility();
             if (locationOverlay != null) {
                 // Previne crash caso o provider tenha sido perdido por algum motivo interno do osmdroid
                 if (locationOverlay.getMyLocationProvider() == null) {
@@ -3565,6 +3888,25 @@ public class RouteFragment extends Fragment {
                 } catch (Exception ignored) {}
             }
         }
+
+        // Verifica se há uma gravação GPS solicitada para exibição (vinda da aba Gravações)
+        if (getActivity() instanceof MainActivity) {
+            int recordingId = ((MainActivity) getActivity()).consumeRequestedRouteKmId();
+            if (recordingId != -1) {
+                loadSavedRoute(recordingId);
+            }
+        }
+    }
+
+    public void handleRequestedRecording(int kmId) {
+        if (isAdded()) {
+            loadSavedRoute(kmId);
+        }
+    }
+
+    public void refreshRemoteVisibility() {
+        updateFloatingButtonsVisibility();
+        showLoadingMarkers(); // Re-avalia se deve mostrar marcadores
     }
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
@@ -3796,7 +4138,10 @@ public class RouteFragment extends Fragment {
                 long g3Id = dao.insertRouteGroup(new RouteGroup("Grupo 3", ms.getString("color_group_3", "#FBC02D"), targetRouteId));
                 long g4Id = dao.insertRouteGroup(new RouteGroup("Grupo 4", ms.getString("color_group_4", "#795548"), targetRouteId));
 
-                int currentSortOrder = 0;
+                // 🔥 Correção de Integridade: Começa do fim da lista atual se já houver paradas
+                List<RouteStop> existingStops = dao.getStopsForRoute(targetRouteId);
+                int currentSortOrder = existingStops.size();
+                
                 for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                     Row row = sheet.getRow(i); if (row == null) continue;
                     try {
@@ -3861,7 +4206,26 @@ public class RouteFragment extends Fragment {
                 }
                 if (!stopsMap.isEmpty()) {
                     List<RouteStop> finalStops = new ArrayList<>(stopsMap.values());
+                    
+                    // 🔥 Ordenação e Renumeração: Garante que os números das paradas sejam únicos e sequenciais
+                    // respeitando a ordem de aparição no Excel (sortOrder)
+                    Collections.sort(finalStops, (a, b) -> Integer.compare(a.sortOrder, b.sortOrder));
+                    for (int i = 0; i < finalStops.size(); i++) {
+                        finalStops.get(i).sortOrder = i;
+                        finalStops.get(i).stopNumber = i + 1;
+                    }
+                    
                     dao.insertRouteStops(finalStops);
+                    
+                    // 🔥 Sincroniza TUDO após a inserção para garantir que não haja números duplicados
+                    // se o usuário importou em uma rota que já tinha paradas
+                    List<RouteStop> all = dao.getStopsForRoute(targetRouteId);
+                    for (int i = 0; i < all.size(); i++) {
+                        all.get(i).sortOrder = i;
+                        all.get(i).stopNumber = i + 1;
+                    }
+                    dao.updateRouteStops(all);
+
                     if (getActivity() != null) getActivity().runOnUiThread(() -> { 
                         importDialog.dismiss();
                         
@@ -3914,6 +4278,168 @@ public class RouteFragment extends Fragment {
             return 0.0; 
         } 
     }
+    private void observeTrackingStatus() {
+        if (getViewLifecycleOwner() == null) return;
+        TrackingService.isTracking.observe(getViewLifecycleOwner(), tracking -> updateKmTrackingUI());
+        TrackingService.isPaused.observe(getViewLifecycleOwner(), paused -> updateKmTrackingUI());
+    }
+
+    private void updateKmTrackingUI() {
+        if (fabKmTracking == null) return;
+        boolean tracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+        boolean paused = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
+
+        fabKmTracking.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+
+        if (!tracking) {
+            fabKmTracking.setImageTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#2196F3"))); // Azul (Inativo)
+        } else {
+            if (paused) {
+                fabKmTracking.setImageTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#FFC107"))); // Amarelo (Pausado)
+            } else {
+                fabKmTracking.setImageTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#F44336"))); // Vermelho (Ativo)
+            }
+        }
+    }
+
+    private void showKmTrackingPopup() {
+        boolean tracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+        boolean paused = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        View customView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_km_tracking_mini, null);
+        builder.setView(customView);
+
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        TextView textKm = customView.findViewById(R.id.textKmValue);
+        TextView textStatus = customView.findViewById(R.id.textTrackingStatus);
+        MaterialButton btnPlayPause = customView.findViewById(R.id.btnPlayPauseTracking);
+        MaterialButton btnStop = customView.findViewById(R.id.btnStopTracking);
+        com.google.android.material.materialswitch.MaterialSwitch switchAuto = customView.findViewById(R.id.switchAutoTracking);
+        MaterialButton btnManageHome = customView.findViewById(R.id.btnManageHome);
+        MaterialButton btnLoadingPoints = customView.findViewById(R.id.btnManageLoadingPoints);
+        MaterialButton btnTrackingHistory = customView.findViewById(R.id.btnTrackingHistory);
+
+        boolean homeDefined = sharedPreferences.getFloat("home_lat", 0) != 0;
+        if (btnManageHome != null) {
+            btnManageHome.setText(homeDefined ? "Editar Endereço da Residência" : "Definir Endereço de Casa");
+            btnManageHome.setOnClickListener(v -> {
+                dialog.dismiss();
+                startHomeSelection();
+            });
+        }
+
+        if (btnLoadingPoints != null) {
+            btnLoadingPoints.setOnClickListener(v -> {
+                dialog.dismiss();
+                showLoadingPointsDialog();
+            });
+        }
+
+        if (btnTrackingHistory != null) {
+            btnTrackingHistory.setOnClickListener(v -> {
+                dialog.dismiss();
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).openTrackingHistory();
+                }
+            });
+        }
+
+        // Configuração do Switch de Rastreamento Automático
+        int currentMode = sharedPreferences.getInt("tracking_mode_v2", 0);
+        int lastAuto = sharedPreferences.getInt("last_auto_mode_v2", 2); // Default to Mode 2 (Distance) if never set
+        
+        if (switchAuto != null) {
+            switchAuto.setChecked(currentMode != 0);
+            switchAuto.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                int newMode = isChecked ? lastAuto : 0;
+                sharedPreferences.edit()
+                        .putInt("tracking_mode_v2", newMode)
+                        .putBoolean("tracking_auto", newMode == 1)
+                        .putBoolean("home_tracking_enabled", newMode == 2)
+                        .apply();
+                
+                // Notifica o TrackingHelper se necessário
+                TrackingHelper.updateAutoTracking(requireContext());
+                
+                Toast.makeText(getContext(), isChecked ? "Modo Automático Ativado" : "Modo Manual Ativado", Toast.LENGTH_SHORT).show();
+                
+                // Atualiza a visibilidade do botão de play/pause no próprio diálogo
+                if (!tracking) {
+                    btnPlayPause.setVisibility(isChecked ? View.GONE : View.VISIBLE);
+                }
+                
+                updateKmTrackingUI(); 
+            });
+        }
+
+        // Atualiza km em tempo real no popup
+        TrackingService.currentDistance.observe(getViewLifecycleOwner(), dist -> {
+            if (textKm != null) textKm.setText(String.format(Locale.getDefault(), "%.2f KM", dist != null ? dist : 0.0));
+        });
+
+        if (!tracking) {
+            textStatus.setText("Rastreamento Inativo");
+            btnPlayPause.setText("Iniciar");
+            btnPlayPause.setIconResource(R.drawable.ic_play);
+            btnStop.setVisibility(View.GONE);
+        } else {
+            textStatus.setText(paused ? "Pausado" : "Rastreando...");
+            btnPlayPause.setText(paused ? "Retomar" : "Pausar");
+            btnPlayPause.setIconResource(paused ? R.drawable.ic_play : R.drawable.ic_pause);
+            btnStop.setVisibility(View.VISIBLE);
+        }
+
+        // Oculta botão de play/pause se o modo for automático e não estiver rastreando ainda
+        // (No modo automático o início é por gatilho de tempo ou localização)
+        if (!tracking && currentMode != 0) {
+            btnPlayPause.setVisibility(View.GONE);
+        } else {
+            btnPlayPause.setVisibility(View.VISIBLE);
+        }
+
+        btnPlayPause.setOnClickListener(v -> {
+            Intent intent = new Intent(getContext(), TrackingService.class);
+            if (!tracking) {
+                intent.setAction("START");
+            } else if (!paused) {
+                intent.setAction("PAUSE");
+            } else {
+                intent.setAction("START");
+            }
+            startTrackingService(intent);
+            dialog.dismiss();
+        });
+
+        btnStop.setOnClickListener(v -> {
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Finalizar Rastreamento")
+                    .setMessage("Deseja parar e salvar este trajeto?")
+                    .setPositiveButton("Parar e Salvar", (d, which) -> {
+                        Intent intent = new Intent(getContext(), TrackingService.class);
+                        intent.setAction("STOP");
+                        requireContext().startService(intent);
+                        dialog.dismiss();
+                    })
+                    .setNegativeButton("Cancelar", null)
+                    .show();
+        });
+
+        dialog.show();
+    }
+
+    private void startTrackingService(Intent intent) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            requireContext().startForegroundService(intent);
+        } else {
+            requireContext().startService(intent);
+        }
+    }
+
     private void onStopAction(RouteStop stop, int action) {
         if (action == 1) { 
             stop.deliveryStatus = 1; 
@@ -4104,25 +4630,81 @@ public class RouteFragment extends Fragment {
         boolean autoNearest = sharedPreferences.getBoolean("advance_to_nearest", false);
         
         if (autoNearest && currentLocation != null) {
-            // Lógica para encontrar a parada pendente mais próxima
-            int nearestIdx = -1;
-            double minDist = Double.MAX_VALUE;
-            
-            for (int i = 0; i < currentStops.size(); i++) {
-                RouteStop s = currentStops.get(i);
-                if (s.deliveryStatus == 0) { // Somente pendentes
-                    double d = currentLocation.distanceToAsDouble(new GeoPoint(s.latitude, s.longitude));
-                    if (d < minDist) {
-                        minDist = d;
-                        nearestIdx = i;
+            // Lógica para encontrar a parada pendente mais próxima via RUA (OSRM)
+            new Thread(() -> {
+                try {
+                    List<RouteStop> pending = new ArrayList<>();
+                    for (RouteStop s : currentStops) {
+                        if (s.deliveryStatus == 0) pending.add(s);
+                    }
+                    
+                    if (pending.isEmpty()) return;
+
+                    // Se houver apenas uma parada pendente, pula lógica OSRM
+                    if (pending.size() == 1) {
+                        int finalIdx = currentStops.indexOf(pending.get(0));
+                        Activity activity = getActivity();
+                        if (activity != null) activity.runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
+                        return;
+                    }
+
+                    // Limita a 50 coordenadas para o servidor OSRM público
+                    List<RouteStop> targetStops = pending.size() > 50 ? pending.subList(0, 50) : pending;
+
+                    StringBuilder coords = new StringBuilder();
+                    coords.append(String.format(Locale.US, "%.6f,%.6f", currentLocation.getLongitude(), currentLocation.getLatitude()));
+                    for (RouteStop s : targetStops) {
+                        coords.append(String.format(Locale.US, ";%.6f,%.6f", s.longitude, s.latitude));
+                    }
+
+                    String url = "https://router.project-osrm.org/table/v1/driving/" + coords.toString() + "?sources=0&annotations=distance";
+                    HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+                    String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                    conn.setRequestProperty("User-Agent", "DriveLogApp_v142_" + uniqueId);
+                    
+                    if (conn.getResponseCode() == 200) {
+                        BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                        StringBuilder res = new StringBuilder(); String line;
+                        while ((line = r.readLine()) != null) res.append(line);
+                        JSONObject json = new JSONObject(res.toString());
+                        JSONArray distances = json.getJSONArray("distances").getJSONArray(0);
+                        
+                        int bestIdxInTargets = -1;
+                        double minDist = Double.MAX_VALUE;
+                        for (int i = 1; i < distances.length(); i++) {
+                            double d = distances.getDouble(i);
+                            if (d < minDist) { minDist = d; bestIdxInTargets = i - 1; }
+                        }
+                        
+                        if (bestIdxInTargets != -1) {
+                            RouteStop nearest = targetStops.get(bestIdxInTargets);
+                            int finalIdx = currentStops.indexOf(nearest);
+                            Activity activity = getActivity();
+                            if (activity != null) activity.runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
+                            return;
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                // Fallback para distância linear se der erro ou sem internet
+                int nearestIdx = -1;
+                double minDist = Double.MAX_VALUE;
+                for (int i = 0; i < currentStops.size(); i++) {
+                    RouteStop s = currentStops.get(i);
+                    if (s.deliveryStatus == 0) {
+                        double d = currentLocation.distanceToAsDouble(new GeoPoint(s.latitude, s.longitude));
+                        if (d < minDist) { minDist = d; nearestIdx = i; }
                     }
                 }
-            }
-            
-            if (nearestIdx != -1) {
-                viewPagerStops.setCurrentItem(nearestIdx, true);
-                return;
-            }
+                if (nearestIdx != -1) {
+                    final int finalIdx = nearestIdx;
+                    Activity activity = getActivity();
+                    if (activity != null) activity.runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
+                }
+            }).start();
+            return;
         }
 
         // Comportamento Padrão: Próxima na ordem numérica
@@ -4974,11 +5556,21 @@ public class RouteFragment extends Fragment {
         TextView textTitle = v.findViewById(R.id.textStatsTitle);
         TextView textTotal = v.findViewById(R.id.textStatsTotalDuration);
         TextView textAvg = v.findViewById(R.id.textStatsAvgPerHour);
+        TextView textAvgStops = v.findViewById(R.id.textStatsAvgStopsPerHour);
         RecyclerView rv = v.findViewById(R.id.recyclerStopStats);
         
         textTitle.setText("Estatísticas: " + currentRouteHeader.name);
         
-        long totalElapsed = currentRouteHeader.endTime - currentRouteHeader.startTime - currentRouteHeader.totalPausedMs;
+        long totalElapsed;
+        if (currentRouteHeader.endTime > 0) {
+            totalElapsed = currentRouteHeader.endTime - currentRouteHeader.startTime - currentRouteHeader.totalPausedMs;
+        } else {
+            long now = System.currentTimeMillis();
+            long currentPausedMs = currentRouteHeader.totalPausedMs + 
+                (currentRouteHeader.lastPauseStartTime > 0 ? (now - currentRouteHeader.lastPauseStartTime) : 0);
+            totalElapsed = now - currentRouteHeader.startTime - currentPausedMs;
+        }
+        
         long s = totalElapsed / 1000;
         long m = s / 60;
         long h = m / 60;
@@ -4995,14 +5587,22 @@ public class RouteFragment extends Fragment {
         }
         delivered.sort((a, b) -> Long.compare(a.deliveryTimestamp, b.deliveryTimestamp));
 
-        // Calcular Média por Hora
-        if (totalElapsed > 0 && totalPackages > 0) {
+        // Calcular Médias por Hora
+        if (totalElapsed > 0 && !delivered.isEmpty()) {
             double hours = totalElapsed / (1000.0 * 60 * 60);
-            double avg = totalPackages / hours;
-            textAvg.setText(String.format(Locale.getDefault(), "Média: %.1f pacotes/hora", avg));
+            
+            // Média de Pacotes
+            double avgPkgs = totalPackages / hours;
+            textAvg.setText(String.format(Locale.getDefault(), "Média: %.1f pacotes/hora", avgPkgs));
             textAvg.setVisibility(View.VISIBLE);
+            
+            // Média de Paradas
+            double avgStops = delivered.size() / hours;
+            textAvgStops.setText(String.format(Locale.getDefault(), "Média: %.1f paradas/hora", avgStops));
+            textAvgStops.setVisibility(View.VISIBLE);
         } else {
             textAvg.setVisibility(View.GONE);
+            textAvgStops.setVisibility(View.GONE);
         }
 
         List<String> statsList = new ArrayList<>();
@@ -5571,6 +6171,13 @@ public class RouteFragment extends Fragment {
             notifyDataSetChanged(); 
         }
 
+        void swap(int from, int to) {
+            if (from < filteredList.size() && to < filteredList.size()) {
+                java.util.Collections.swap(filteredList, from, to);
+                notifyItemMoved(from, to);
+            }
+        }
+
         void filter(String query) {
             filteredList.clear();
             if (query.isEmpty()) {
@@ -5718,5 +6325,241 @@ public class RouteFragment extends Fragment {
                 textGlobalStats = v.findViewById(R.id.textListGlobalStats);
             } 
         }
+    }
+
+    private void loadSavedRoute(int kmId) {
+        new Thread(() -> {
+            if (getContext() == null) return;
+            List<RoutePoint> savedPoints = AppDatabase.getInstance(requireContext()).appDao().getRoutePointsForKm(kmId);
+            DailyKm km = AppDatabase.getInstance(requireContext()).appDao().getAllDailyKm().stream().filter(k -> k.id == kmId).findFirst().orElse(null);
+
+            if (savedPoints != null && !savedPoints.isEmpty()) {
+                historicalPoints = savedPoints;
+                List<GeoPoint> geoPoints = new ArrayList<>();
+                for (RoutePoint rp : savedPoints) geoPoints.add(new GeoPoint(rp.latitude, rp.longitude));
+                
+                Activity activity = getActivity();
+                if (activity != null) activity.runOnUiThread(() -> {
+                    // Oculta UI normal de rotas para foco total no trajeto
+                    if (layoutSideFabs != null) layoutSideFabs.setVisibility(View.GONE);
+                    if (bottomSheet != null) {
+                        bottomSheet.setVisibility(View.GONE);
+                        if (bottomSheetBehavior != null) bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                    }
+                    if (layoutSearchContainer != null) layoutSearchContainer.setVisibility(View.GONE);
+                    if (layoutSummary != null) layoutSummary.setVisibility(View.GONE);
+                    if (layoutLeftSummary != null) layoutLeftSummary.setVisibility(View.GONE);
+                    if (layoutSwitchContainer != null) layoutSwitchContainer.setVisibility(View.GONE);
+                    if (cardRouteTotalTime != null) cardRouteTotalTime.setVisibility(View.GONE);
+                    if (cardWeatherSummary != null) cardWeatherSummary.setVisibility(View.GONE);
+                    if (cardToggleSystemUI != null) cardToggleSystemUI.setVisibility(View.GONE);
+                    
+                    // Limpa mapa e desenha trajeto
+                    map.getOverlays().removeIf(o -> o instanceof Marker || o instanceof Polyline);
+                    showHomeMarker();
+                    showLoadingMarkers();
+
+                    Polyline historyPoly = new Polyline(map);
+                    historyPoly.setPoints(geoPoints);
+                    historyPoly.getOutlinePaint().setColor(Color.parseColor("#2196F3"));
+                    historyPoly.getOutlinePaint().setStrokeWidth(12f);
+                    map.getOverlays().add(historyPoly);
+
+                    detectAndMarkHistoricalStops(geoPoints);
+
+                    // Marcadores de Início e Fim
+                    Marker startMarker = new Marker(map);
+                    startMarker.setPosition(geoPoints.get(0));
+                    startMarker.setTitle("Início do Trajeto");
+                    startMarker.setIcon(ContextCompat.getDrawable(requireContext(), android.R.drawable.ic_menu_mylocation));
+                    if (startMarker.getIcon() != null) startMarker.getIcon().setTint(Color.GREEN);
+                    map.getOverlays().add(startMarker);
+
+                    Marker endMarker = new Marker(map);
+                    endMarker.setPosition(geoPoints.get(geoPoints.size() - 1));
+                    endMarker.setTitle("Fim do Trajeto");
+                    endMarker.setIcon(ContextCompat.getDrawable(requireContext(), android.R.drawable.ic_menu_recent_history));
+                    if (endMarker.getIcon() != null) endMarker.getIcon().setTint(Color.RED);
+                    map.getOverlays().add(endMarker);
+                    
+                    timelineMarker = new Marker(map);
+                    timelineMarker.setTitle("Posição no Horário");
+                    timelineMarker.setIcon(ContextCompat.getDrawable(requireContext(), R.drawable.ic_car_marker));
+                    if (timelineMarker.getIcon() != null) timelineMarker.getIcon().setTint(Color.parseColor("#FF9800"));
+                    timelineMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
+                    map.getOverlays().add(timelineMarker);
+
+                    // Ativa Linha do Tempo e garante visibilidade
+                    if (cardTimeline != null) {
+                        cardTimeline.setVisibility(View.VISIBLE);
+                        cardTimeline.setAlpha(1.0f);
+                        cardTimeline.bringToFront();
+                    }
+                    
+                    if (seekBarTimeline != null) {
+                        seekBarTimeline.setMax(geoPoints.size() - 1);
+                        seekBarTimeline.setProgress(0);
+                    }
+                    updateTimelineMarker(0);
+                    
+                    pauseTimelinePlayback(); 
+                    setTimelineSpeed(1);
+
+                    map.invalidate();
+                    
+                    // Ajusta Zoom com margem de segurança generosa
+                    if (geoPoints.size() > 1) {
+                        try {
+                            BoundingBox bbox = BoundingBox.fromGeoPoints(geoPoints);
+                            map.zoomToBoundingBox(bbox, true, 250);
+                            
+                            // Garante que o zoom não seja EXCESSIVO (muito perto) após a animação
+                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                if (isAdded() && map != null && map.getZoomLevelDouble() > 17.5) {
+                                    map.getController().setZoom(16.5);
+                                }
+                            }, 1000);
+                        } catch (Exception e) {
+                            map.getController().setZoom(15.0);
+                            map.getController().animateTo(geoPoints.get(0));
+                        }
+                    } else {
+                        map.getController().setZoom(16.0);
+                        map.getController().animateTo(geoPoints.get(0));
+                    }
+                    
+                    Toast.makeText(getContext(), "Gravação Histórica Carregada", Toast.LENGTH_SHORT).show();
+                });
+            } else {
+                Activity activity = getActivity();
+                if (activity != null) activity.runOnUiThread(() -> Toast.makeText(getContext(), "Nenhum ponto de GPS nesta gravação.", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    private void detectAndMarkHistoricalStops(List<GeoPoint> points) {
+        if (points.size() < 2 || historicalPoints.isEmpty()) return;
+        SharedPreferences prefs = sharedPreferences;
+        int shortTimeMaxMs = prefs.getInt("tracking_short_stop_time", 60) * 1000;
+        int shortRadius = prefs.getInt("tracking_short_stop_radius", 20);
+        int mediumTimeMaxMs = prefs.getInt("tracking_medium_stop_time", 240) * 1000;
+        int mediumRadius = prefs.getInt("tracking_medium_stop_radius", 40);
+        int longRadius = prefs.getInt("tracking_long_stop_radius", 80);
+        String colorShort = prefs.getString("tracking_color_short", "#4CAF50");
+        String colorMedium = prefs.getString("tracking_color_medium", "#FBC02D");
+        String colorLong = prefs.getString("tracking_color_long", "#F44336");
+
+        int i = 0;
+        while (i < points.size()) {
+            int j = i + 1;
+            long startTime = historicalPoints.get(i).timestamp;
+            int currentRadius = shortRadius; 
+            while (j < points.size()) {
+                double dist = points.get(i).distanceToAsDouble(points.get(j));
+                long durationSoFar = historicalPoints.get(j).timestamp - startTime;
+                if (durationSoFar >= mediumTimeMaxMs) currentRadius = longRadius;
+                else if (durationSoFar >= shortTimeMaxMs) currentRadius = mediumRadius;
+                else currentRadius = shortRadius;
+                if (dist > currentRadius) break; 
+                j++;
+            }
+            long durationMs = historicalPoints.get(Math.min(j - 1, points.size() - 1)).timestamp - startTime;
+            if (durationMs >= prefs.getInt("min_stop_duration_seconds", 15) * 1000) {
+                int color;
+                if (durationMs >= mediumTimeMaxMs) color = Color.parseColor(colorLong);
+                else if (durationMs >= shortTimeMaxMs) color = Color.parseColor(colorMedium);
+                else color = Color.parseColor(colorShort);
+                addHistoricalStopMarker(points.get(i), "Parada: " + formatDuration(durationMs), color);
+                i = j;
+            } else i++;
+        }
+    }
+
+    private void addHistoricalStopMarker(GeoPoint point, String title, int color) {
+        Marker m = new Marker(map); m.setPosition(point); m.setTitle(title); m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
+        android.graphics.drawable.ShapeDrawable dot = new android.graphics.drawable.ShapeDrawable(new android.graphics.drawable.shapes.OvalShape());
+        dot.setIntrinsicWidth(20); dot.setIntrinsicHeight(20); dot.getPaint().setColor(color); dot.getPaint().setStyle(Paint.Style.FILL_AND_STROKE);
+        m.setIcon(dot); map.getOverlays().add(m);
+    }
+
+    private String formatDuration(long ms) {
+        long s = ms / 1000; long m = s / 60; s %= 60;
+        return m > 0 ? m + "m " + s + "s" : s + "s";
+    }
+
+    private void exitHistoryMode() {
+        pauseTimelinePlayback();
+        if (cardTimeline != null) cardTimeline.setVisibility(View.GONE);
+        historicalPoints.clear();
+        timelineMarker = null;
+        
+        // Limpa visualização da gravação do mapa
+        if (map != null) {
+            map.getOverlays().removeIf(o -> o instanceof Marker || o instanceof Polyline);
+        }
+
+        // Restaura UI normal
+        if (layoutSideFabs != null) layoutSideFabs.setVisibility(View.VISIBLE);
+        if (layoutSearchContainer != null) layoutSearchContainer.setVisibility(View.VISIBLE);
+        if (layoutSummary != null) layoutSummary.setVisibility(View.VISIBLE);
+        if (layoutLeftSummary != null) layoutLeftSummary.setVisibility(View.VISIBLE);
+        if (layoutSwitchContainer != null) layoutSwitchContainer.setVisibility(View.VISIBLE);
+        if (cardToggleSystemUI != null && sharedPreferences.getInt("app_mode", 0) != 1) {
+            cardToggleSystemUI.setVisibility(View.VISIBLE);
+        }
+        
+        updateAppModeUI();
+        updateFloatingButtonsVisibility();
+        
+        // Recarrega paradas da rota atual e elementos do mapa
+        showHomeMarker();
+        showLoadingMarkers();
+        if (currentRouteId != -1) loadLastRoute();
+        else refreshMarkers();
+        
+        centerOnCurrentLocation();
+    }
+
+    private void setupTimelineListener() {
+        if (seekBarTimeline == null) return;
+        seekBarTimeline.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) { if (fromUser) updateTimelineMarker(progress); }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { pauseTimelinePlayback(); }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+    }
+
+    private void toggleTimelinePlayback() { if (isTimelinePlaying) pauseTimelinePlayback(); else startTimelinePlayback(); }
+    private void startTimelinePlayback() {
+        if (seekBarTimeline.getProgress() >= seekBarTimeline.getMax()) seekBarTimeline.setProgress(0);
+        isTimelinePlaying = true;
+        if (btnTimelinePlayPause != null) btnTimelinePlayPause.setImageResource(R.drawable.ic_pause);
+        playbackHandler.post(playbackRunnable);
+    }
+    private void pauseTimelinePlayback() {
+        isTimelinePlaying = false;
+        if (btnTimelinePlayPause != null) btnTimelinePlayPause.setImageResource(R.drawable.ic_play);
+        playbackHandler.removeCallbacks(playbackRunnable);
+    }
+    private void setTimelineSpeed(int multiplier) {
+        timelineSpeedMultiplier = multiplier;
+        if (getContext() == null) return;
+        TypedValue tv = new TypedValue();
+        requireContext().getTheme().resolveAttribute(androidx.appcompat.R.attr.colorPrimary, tv, true);
+        int cp = tv.data; int cg = Color.GRAY;
+        if (btnS1 != null) btnS1.setTextColor(multiplier == 1 ? cp : cg);
+        if (btnS2 != null) btnS2.setTextColor(multiplier == 2 ? cp : cg);
+        if (btnS4 != null) btnS4.setTextColor(multiplier == 4 ? cp : cg);
+        if (btnS8 != null) btnS8.setTextColor(multiplier == 8 ? cp : cg);
+    }
+
+    private void updateTimelineMarker(int index) {
+        if (historicalPoints == null || index >= historicalPoints.size() || timelineMarker == null) return;
+        RoutePoint p = historicalPoints.get(index);
+        GeoPoint gp = new GeoPoint(p.latitude, p.longitude);
+        timelineMarker.setPosition(gp);
+        if (textTimelineTime != null) textTimelineTime.setText(timeFormat.format(new java.util.Date(p.timestamp)));
+        mapController.animateTo(gp);
+        map.invalidate();
     }
 }

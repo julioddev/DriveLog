@@ -189,51 +189,25 @@
                         app:tint="?attr/colorPrimary"
                         android:contentDescription="Mapa"/>
 
-                    <FrameLayout
+                    <ImageButton
+                        android:id="@+id/btnLeftEarnings"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1">
-                        <ImageButton
-                            android:id="@+id/btnLeftEarnings"
-                            android:layout_width="match_parent"
-                            android:layout_height="48dp"
-                            android:src="@drawable/ic_money"
-                            android:background="?attr/selectableItemBackground"
-                            app:tint="?attr/colorPrimary"
-                            android:contentDescription="Ganhos"/>
-                        <View
-                            android:id="@+id/badgeLeftEarnings"
-                            android:layout_width="10dp"
-                            android:layout_height="10dp"
-                            android:layout_gravity="top|end"
-                            android:layout_marginTop="6dp"
-                            android:layout_marginEnd="10dp"
-                            android:background="@drawable/bg_circle_red"
-                            android:visibility="gone"/>
-                    </FrameLayout>
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:src="@drawable/ic_money"
+                        android:background="?attr/selectableItemBackground"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Ganhos"/>
 
-                    <FrameLayout
+                    <ImageButton
+                        android:id="@+id/btnLeftKm"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1">
-                        <ImageButton
-                            android:id="@+id/btnLeftKm"
-                            android:layout_width="match_parent"
-                            android:layout_height="48dp"
-                            android:src="@drawable/ic_tire"
-                            android:background="?attr/selectableItemBackground"
-                            app:tint="?attr/colorPrimary"
-                            android:contentDescription="KM"/>
-                        <View
-                            android:id="@+id/badgeLeftKm"
-                            android:layout_width="10dp"
-                            android:layout_height="10dp"
-                            android:layout_gravity="top|end"
-                            android:layout_marginTop="6dp"
-                            android:layout_marginEnd="10dp"
-                            android:background="@drawable/bg_circle_red"
-                            android:visibility="gone"/>
-                    </FrameLayout>
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:src="@drawable/ic_tire"
+                        android:background="?attr/selectableItemBackground"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="KM"/>
 
                     <ImageButton
                         android:id="@+id/btnLeftFuel"

@@ -48,7 +48,7 @@ public class DevMenuControlFragment extends Fragment {
         menuList.clear();
         menuList.add(new MenuItemModel("maps", "Aba Principal: Mapa"));
         menuList.add(new MenuItemModel("earnings", "Aba Principal: Ganhos"));
-        menuList.add(new MenuItemModel("km", "Aba Principal: Rastreamento (KM)"));
+        menuList.add(new MenuItemModel("km", "Geral: Rastreamento (KM) e Controles no Mapa"));
         menuList.add(new MenuItemModel("fuel", "Aba Principal: Abastecimento"));
         menuList.add(new MenuItemModel("maintenance", "Aba Principal: Manutenção"));
         menuList.add(new MenuItemModel("reports", "Aba Principal: Relatórios"));

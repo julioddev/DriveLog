@@ -168,8 +168,13 @@ public class TrackingService extends Service {
             return;
         }
 
-        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 30000)
-                .setMinUpdateIntervalMillis(15000)
+        // Carrega pontos de carregamento para detecção mesmo em monitoramento
+        executor.execute(() -> {
+            activeLoadingPoints = AppDatabase.getInstance(this).appDao().getAllLoadingPoints();
+        });
+
+        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
+                .setMinUpdateIntervalMillis(5000)
                 .build();
 
         if (locationCallback != null) fusedLocationClient.removeLocationUpdates(locationCallback);
@@ -179,6 +184,13 @@ public class TrackingService extends Service {
             public void onLocationResult(@NonNull LocationResult locationResult) {
                 Location lastLoc = locationResult.getLastLocation();
                 if (lastLoc == null) return;
+
+                // Checa se entrou em um ponto de carregamento antes mesmo de sair de casa
+                checkAutoEarningsAtLoadingPoint(lastLoc);
+                if (Boolean.TRUE.equals(isTracking.getValue())) {
+                    fusedLocationClient.removeLocationUpdates(this);
+                    return;
+                }
 
                 float[] results = new float[1];
                 Location.distanceBetween(lastLoc.getLatitude(), lastLoc.getLongitude(), homeLat, homeLon, results);
@@ -594,6 +606,11 @@ public class TrackingService extends Service {
                 "Ganhos de R$ %.2f registrados para %s em %s", 
                 baseValue, lp.platformName, lp.name);
             updateNotification("Ganhos Automáticos", msg);
+
+            // 🔥 Se não estava rastreando, inicia agora pois o carregamento foi detectado
+            if (!Boolean.TRUE.equals(isTracking.getValue())) {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(this::startTracking);
+            }
         });
     }
 

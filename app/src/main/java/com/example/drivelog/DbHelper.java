@@ -149,6 +149,11 @@ public class DbHelper {
                     s.packageCount = cStops.getInt(cStops.getColumnIndexOrThrow("packageCount"));
                     try {
                         s.buyerCount = cStops.getInt(cStops.getColumnIndexOrThrow("buyerCount"));
+                        s.sequence = cStops.getInt(cStops.getColumnIndexOrThrow("sequence"));
+                        s.allSequences = cStops.getString(cStops.getColumnIndexOrThrow("allSequences"));
+                        s.stopNumber = cStops.getInt(cStops.getColumnIndexOrThrow("stopNumber"));
+                        s.neighborhood = cStops.getString(cStops.getColumnIndexOrThrow("neighborhood"));
+                        s.spxTn = cStops.getString(cStops.getColumnIndexOrThrow("spxTn"));
                     } catch (Exception ignored) {}
                     dao.insertRouteStop(s);
                 }

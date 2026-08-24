@@ -43,6 +43,7 @@ import java.util.Map;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import org.osmdroid.api.IMapController;
@@ -134,6 +135,8 @@ public class MapsFragment extends Fragment {
                 setupLocationOverlay();
             } else if ("map_tile_style".equals(key)) {
                 applyMapStyle();
+            } else if ("show_fab_km_tracking".equals(key)) {
+                refreshRemoteVisibility();
             }
         });
     };
@@ -284,7 +287,7 @@ public class MapsFragment extends Fragment {
             }
         });
 
-        fabTracking.setOnClickListener(v -> handlePlayPause());
+        fabTracking.setOnClickListener(v -> showKmTrackingPopup());
         fabStop.setOnClickListener(v -> handleStop());
         fabDownload.setOnClickListener(v -> promptDownloadArea());
         fabCenter.setOnClickListener(v -> centerOnCurrentLocation());
@@ -384,6 +387,21 @@ public class MapsFragment extends Fragment {
         return b;
     }
 
+    public void refreshRemoteVisibility() {
+        if (getActivity() instanceof MainActivity && fabTracking != null) {
+            boolean visible = ((MainActivity) getActivity()).isMenuVisible("km");
+            boolean prefVisible = sharedPreferences.getBoolean("show_fab_km_tracking", true);
+            
+            fabTracking.setVisibility((visible && prefVisible) ? View.VISIBLE : View.GONE);
+            if (fabStop != null) {
+                boolean isTracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+                fabStop.setVisibility((visible && prefVisible && isTracking) ? View.VISIBLE : View.GONE);
+            }
+            if (fabLoadingPoints != null) fabLoadingPoints.setVisibility(visible ? View.VISIBLE : View.GONE);
+            showLoadingMarkers(); // Re-avalia se deve mostrar marcadores
+        }
+    }
+
     private void centerOnCurrentLocation() {
         isFollowingUser = true;
         if (locationOverlay != null && locationOverlay.getMyLocation() != null) {
@@ -400,28 +418,136 @@ public class MapsFragment extends Fragment {
     }
 
 
-    private void handlePlayPause() {
+    private void showKmTrackingPopup() {
         boolean tracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
         boolean paused = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
-        
-        Intent intent = new Intent(getContext(), TrackingService.class);
-        
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        View customView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_km_tracking_mini, null);
+        builder.setView(customView);
+
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        TextView textKm = customView.findViewById(R.id.textKmValue);
+        TextView textStatus = customView.findViewById(R.id.textTrackingStatus);
+        MaterialButton btnPlayPause = customView.findViewById(R.id.btnPlayPauseTracking);
+        MaterialButton btnStop = customView.findViewById(R.id.btnStopTracking);
+        com.google.android.material.materialswitch.MaterialSwitch switchAuto = customView.findViewById(R.id.switchAutoTracking);
+        MaterialButton btnManageHome = customView.findViewById(R.id.btnManageHome);
+        MaterialButton btnLoadingPoints = customView.findViewById(R.id.btnManageLoadingPoints);
+        MaterialButton btnTrackingHistory = customView.findViewById(R.id.btnTrackingHistory);
+
+        boolean homeDefined = sharedPreferences.getFloat("home_lat", 0) != 0;
+        if (btnManageHome != null) {
+            btnManageHome.setText(homeDefined ? "Editar Endereço da Residência" : "Definir Endereço de Casa");
+            btnManageHome.setOnClickListener(v -> {
+                dialog.dismiss();
+                startHomeSelection();
+            });
+        }
+
+        if (btnLoadingPoints != null) {
+            btnLoadingPoints.setOnClickListener(v -> {
+                dialog.dismiss();
+                showLoadingPointsDialog();
+            });
+        }
+
+        if (btnTrackingHistory != null) {
+            btnTrackingHistory.setOnClickListener(v -> {
+                dialog.dismiss();
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).openTrackingHistory();
+                }
+            });
+        }
+
+        // Configuração do Switch de Rastreamento Automático
+        int currentMode = sharedPreferences.getInt("tracking_mode_v2", 0);
+        int lastAuto = sharedPreferences.getInt("last_auto_mode_v2", 2); // Default to Mode 2 (Distance) if never set
+
+        if (switchAuto != null) {
+            switchAuto.setChecked(currentMode != 0);
+            switchAuto.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                int newMode = isChecked ? lastAuto : 0;
+                sharedPreferences.edit()
+                        .putInt("tracking_mode_v2", newMode)
+                        .putBoolean("tracking_auto", newMode == 1)
+                        .putBoolean("home_tracking_enabled", newMode == 2)
+                        .apply();
+                
+                TrackingHelper.updateAutoTracking(requireContext());
+                Toast.makeText(getContext(), isChecked ? "Modo Automático Ativado" : "Modo Manual Ativado", Toast.LENGTH_SHORT).show();
+                
+                if (!tracking) {
+                    btnPlayPause.setVisibility(isChecked ? View.GONE : View.VISIBLE);
+                }
+                updateTrackingUI(); 
+            });
+        }
+
+        // Atualiza km em tempo real no popup
+        TrackingService.currentDistance.observe(getViewLifecycleOwner(), dist -> {
+            if (textKm != null) textKm.setText(String.format(Locale.getDefault(), "%.2f KM", dist != null ? dist : 0.0));
+        });
+
         if (!tracking) {
-            if (checkPermissions()) {
-                exitHistoryMode();
-                isFollowingUser = true;
-                intent.setAction("START");
+            textStatus.setText("Rastreamento Inativo");
+            btnPlayPause.setText("Iniciar");
+            btnPlayPause.setIconResource(R.drawable.ic_play);
+            btnStop.setVisibility(View.GONE);
+        } else {
+            textStatus.setText(paused ? "Pausado" : "Rastreando...");
+            btnPlayPause.setText(paused ? "Retomar" : "Pausar");
+            btnPlayPause.setIconResource(paused ? R.drawable.ic_play : R.drawable.ic_pause);
+            btnStop.setVisibility(View.VISIBLE);
+        }
+
+        if (!tracking && currentMode != 0) {
+            btnPlayPause.setVisibility(View.GONE);
+        } else {
+            btnPlayPause.setVisibility(View.VISIBLE);
+        }
+
+        btnPlayPause.setOnClickListener(v -> {
+            Intent intent = new Intent(getContext(), TrackingService.class);
+            if (!tracking) {
+                if (checkPermissions()) {
+                    exitHistoryMode();
+                    isFollowingUser = true;
+                    intent.setAction("START");
+                    startService(intent);
+                } else {
+                    requestPermissionLauncher.launch(new String[]{Manifest.permission.ACCESS_FINE_LOCATION});
+                }
+            } else if (!paused) {
+                intent.setAction("PAUSE");
                 startService(intent);
             } else {
-                requestPermissionLauncher.launch(new String[]{Manifest.permission.ACCESS_FINE_LOCATION});
+                intent.setAction("START");
+                startService(intent);
             }
-        } else if (!paused) {
-            intent.setAction("PAUSE");
-            startService(intent);
-        } else {
-            intent.setAction("START");
-            startService(intent);
-        }
+            dialog.dismiss();
+        });
+
+        btnStop.setOnClickListener(v -> {
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Finalizar Rastreamento")
+                    .setMessage("Deseja parar e salvar este trajeto?")
+                    .setPositiveButton("Parar e Salvar", (d, which) -> {
+                        Intent intent = new Intent(getContext(), TrackingService.class);
+                        intent.setAction("STOP");
+                        startService(intent);
+                        dialog.dismiss();
+                    })
+                    .setNegativeButton("Cancelar", null)
+                    .show();
+        });
+
+        dialog.show();
     }
 
     private void handleStop() {
@@ -745,6 +871,16 @@ public class MapsFragment extends Fragment {
                         timelineMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
                         map.getOverlays().add(timelineMarker);
 
+                        // Oculta UI normal
+                        if (fabTracking != null) fabTracking.setVisibility(View.GONE);
+                        if (fabStop != null) fabStop.setVisibility(View.GONE);
+                        if (fabDownload != null) fabDownload.setVisibility(View.GONE);
+                        if (fabCenter != null) fabCenter.setVisibility(View.GONE);
+                        if (fabHome != null) fabHome.setVisibility(View.GONE);
+                        if (fabLoadingPoints != null) fabLoadingPoints.setVisibility(View.GONE);
+                        if (fabDeliveryApp != null) fabDeliveryApp.setVisibility(View.GONE);
+                        if (textStatus != null) textStatus.setVisibility(View.GONE);
+
                         cardTimeline.setVisibility(View.VISIBLE);
                         seekBarTimeline.setMax(geoPoints.size() - 1);
                         seekBarTimeline.setProgress(0);
@@ -876,18 +1012,25 @@ public class MapsFragment extends Fragment {
     private void exitHistoryMode() {
         pauseTimelinePlayback();
         if (cardTimeline != null) cardTimeline.setVisibility(View.GONE);
+        currentHistoricalPoints.clear();
+        timelineMarker = null;
+        
+        // Restaura UI normal
+        refreshRemoteVisibility(); // Cuida dos botões de rastreio
+        if (fabDownload != null) fabDownload.setVisibility(View.VISIBLE);
+        if (fabCenter != null) fabCenter.setVisibility(View.VISIBLE);
+        if (fabHome != null) fabHome.setVisibility(View.VISIBLE);
+        if (fabLoadingPoints != null) fabLoadingPoints.setVisibility(View.VISIBLE);
+        if (textStatus != null) textStatus.setVisibility(View.VISIBLE);
+        updateDeliveryAppFab();
+
         if (map != null) {
-            map.getOverlays().removeIf(overlay -> overlay instanceof Marker);
-            if (polyline != null) {
-                polyline.setPoints(new ArrayList<>());
-            }
+            map.getOverlays().removeIf(overlay -> overlay instanceof Marker || overlay instanceof Polyline);
             showHomeMarker();
             showLoadingMarkers();
             map.invalidate();
             centerOnCurrentLocation();
         }
-        currentHistoricalPoints.clear();
-        timelineMarker = null;
     }
 
     private void setupTimelineListener() {
@@ -957,12 +1100,24 @@ public class MapsFragment extends Fragment {
         float lon = prefs.getFloat("home_lon", 0);
 
         if (lat != 0 && lon != 0) {
-            new AlertDialog.Builder(getContext())
+            AlertDialog dialog = new AlertDialog.Builder(getContext())
                     .setTitle("Casa já definida")
-                    .setMessage("O local da sua casa já está salvo. Deseja alterar para um novo local?")
-                    .setPositiveButton("Alterar", (dialog, which) -> enterHomeSelectionMode())
-                    .setNegativeButton("Manter", null)
-                    .show();
+                    .setMessage("O local da sua casa já está salvo. Deseja alterar ou remover o endereço atual?")
+                    .setPositiveButton("Alterar Novo Local", (d, which) -> enterHomeSelectionMode())
+                    .setNeutralButton("Excluir Endereço", (d, which) -> {
+                        sharedPreferences.edit().remove("home_lat").remove("home_lon").apply();
+                        if (homeMarker != null) map.getOverlays().remove(homeMarker);
+                        if (homeRadiusOverlay != null) map.getOverlays().remove(homeRadiusOverlay);
+                        homeMarker = null; homeRadiusOverlay = null;
+                        map.invalidate();
+                        Toast.makeText(getContext(), "Endereço de casa removido", Toast.LENGTH_SHORT).show();
+                        CloudSyncHelper.syncNow(requireContext());
+                        TrackingHelper.updateAutoTracking(requireContext());
+                    })
+                    .setNegativeButton("Manter Atual", null)
+                    .create();
+            if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+            dialog.show();
         } else {
             enterHomeSelectionMode();
         }
@@ -1019,15 +1174,7 @@ public class MapsFragment extends Fragment {
 
         // Trigger auto cloud sync
         CloudSyncHelper.syncNow(requireContext());
-
-        // Inicia monitoramento imediatamente
-        Intent intent = new Intent(getContext(), TrackingService.class);
-        intent.setAction("MONITOR");
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            requireContext().startForegroundService(intent);
-        } else {
-            requireContext().startService(intent);
-        }
+        TrackingHelper.updateAutoTracking(requireContext());
     }
 
     private void showHomeMarker() {
@@ -1085,10 +1232,21 @@ public class MapsFragment extends Fragment {
     }
 
     private void saveLoadingPoints() {
-        loadLoadingPoints();
+        showLoadingMarkers();
     }
 
     private void showLoadingMarkers() {
+        if (map == null || getContext() == null) return;
+        
+        // 🔥 REGRA REMOTA: Verifica se os controles de carregamento/rastreamento estão visíveis
+        if (getActivity() instanceof MainActivity && !((MainActivity) getActivity()).isMenuVisible("km")) {
+            for (Marker m : loadingMarkers) map.getOverlays().remove(m);
+            loadingMarkers.clear();
+            map.getOverlays().removeIf(overlay -> overlay instanceof Polygon && ((Polygon)overlay).getTitle() != null && ((Polygon)overlay).getTitle().startsWith("LoadingRadius:"));
+            map.invalidate();
+            return;
+        }
+
         loadLoadingPoints();
         for (Marker m : loadingMarkers) {
             map.getOverlays().remove(m);
@@ -1154,9 +1312,9 @@ public class MapsFragment extends Fragment {
             names[loadingPoints.size()] = "+ Adicionar novo ponto";
         }
 
-        new AlertDialog.Builder(getContext())
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
                 .setTitle("Pontos de Carregamento")
-                .setItems(names, (dialog, which) -> {
+                .setItems(names, (d, which) -> {
                     if (which == loadingPoints.size()) {
                         enterLoadingSelectionMode(-1);
                     } else {
@@ -1164,15 +1322,17 @@ public class MapsFragment extends Fragment {
                     }
                 })
                 .setNegativeButton("Fechar", null)
-                .show();
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
     }
 
     private void showEditLoadingPointDialog(int index) {
         LoadingPoint lp = loadingPoints.get(index);
         String[] options = {"Editar Nome", "Editar Localização", "Excluir"};
-        new AlertDialog.Builder(getContext())
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
                 .setTitle(lp.name)
-                .setItems(options, (dialog, which) -> {
+                .setItems(options, (d, which) -> {
                     if (which == 0) {
                         promptForLoadingPointName(lp.latitude, lp.longitude, index);
                     } else if (which == 1) {
@@ -1191,7 +1351,9 @@ public class MapsFragment extends Fragment {
                         }).start();
                     }
                 })
-                .show();
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
     }
 
     private void enterLoadingSelectionMode(int index) {
@@ -1251,16 +1413,18 @@ public class MapsFragment extends Fragment {
         if (index != -1) input.setText(loadingPoints.get(index).name);
         else input.setHint("Nome da Empresa");
 
-        new AlertDialog.Builder(getContext())
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
                 .setTitle(index == -1 ? "Nome do Ponto" : "Editar Nome")
                 .setView(input)
-                .setPositiveButton("Próximo", (dialog, which) -> {
+                .setPositiveButton("Próximo", (d, which) -> {
                     String name = input.getText().toString().trim();
                     if (name.isEmpty()) name = "Carregamento " + (loadingPoints.size() + 1);
                     promptForPlatformSelection(lat, lon, index, name);
                 })
                 .setNegativeButton("Cancelar", null)
-                .show();
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
     }
 
     private void promptForPlatformSelection(double lat, double lon, int index, String name) {
@@ -1275,9 +1439,9 @@ public class MapsFragment extends Fragment {
             platformNames[i] = platforms.get(i).name;
         }
 
-        new AlertDialog.Builder(getContext())
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
                 .setTitle("Selecione a Plataforma")
-                .setItems(platformNames, (dialog, which) -> {
+                .setItems(platformNames, (d, which) -> {
                     String platformName = platforms.get(which).name;
                     new Thread(() -> {
                         if (index == -1) {
@@ -1301,7 +1465,9 @@ public class MapsFragment extends Fragment {
                     }).start();
                 })
                 .setNegativeButton("Cancelar", null)
-                .show();
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
     }
 
     private void updateTimelineMarker(int index) {
@@ -1448,6 +1614,7 @@ public class MapsFragment extends Fragment {
             
             showHomeMarker();
             showLoadingMarkers();
+            refreshRemoteVisibility();
             updateDeliveryAppFab();
             checkRestInterval();
             startComboioListener(); // 🔥 MODO COMBOIO

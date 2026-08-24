@@ -40,6 +40,16 @@
             android:textSize="14sp"
             android:textColor="?attr/colorPrimary"
             android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/textStatsAvgStopsPerHour"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Média: 0 paradas/hora"
+            android:textSize="14sp"
+            android:textColor="?attr/colorPrimary"
+            android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
         <View

@@ -136,6 +136,10 @@ public class TrackingSettingsFragment extends Fragment {
                 .putBoolean("home_tracking_enabled", mode == 2)
                 .apply();
                 
+            if (mode != 0) {
+                sharedPreferences.edit().putInt("last_auto_mode_v2", mode).apply();
+            }
+                
             TrackingHelper.updateAutoTracking(requireContext());
         });
 
