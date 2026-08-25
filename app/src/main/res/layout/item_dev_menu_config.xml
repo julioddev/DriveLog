@@ -37,19 +37,27 @@
             android:orientation="horizontal">
 
             <CheckBox
-                android:id="@+id/checkPublic"
+                android:id="@+id/checkSub0"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Público (Geral)"
+                android:text="Sub 0"
                 android:textSize="12sp"/>
 
             <CheckBox
-                android:id="@+id/checkDevOnly"
+                android:id="@+id/checkSub1"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Apenas DEV"
+                android:text="Sub 1"
+                android:textSize="12sp"/>
+
+            <CheckBox
+                android:id="@+id/checkSub2"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Sub 2"
                 android:textSize="12sp"/>
 
         </LinearLayout>

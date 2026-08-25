@@ -64,42 +64,28 @@ public class DevMenuControlFragment extends Fragment {
         menuList.add(new MenuItemModel("settings_menu", "Ajustes: DEV (Menu Remoto)"));
         menuList.add(new MenuItemModel("settings_emails", "Ajustes: DEV (Emails Dev)"));
         menuList.add(new MenuItemModel("settings_users", "Ajustes: DEV (Usuários Dev)"));
+        menuList.add(new MenuItemModel("premium_features", "Ajustes: Seções Avançadas (Assinatura/Modo App/Amigos)"));
         menuList.add(new MenuItemModel("btn_check_updates", "Ajustes: Botão Verificar Atualizações"));
     }
 
     private void fetchCurrentConfig() {
-        FirebaseHelper.listenRemoteMenuConfigAll((userDocs, devDocs) -> {
+        FirebaseHelper.listenRemoteMenuConfigAll((d0, d1, d2) -> {
             if (!isAdded()) return;
             
-            // Reseta antes de aplicar
             for (MenuItemModel item : menuList) {
-                item.isPublic = false;
-                item.isDevOnly = false;
+                item.isSub0 = false;
+                item.isSub1 = false;
+                item.isSub2 = false;
+
+                for (DocumentSnapshot doc : d0) if (doc.getId().equals(item.id)) { item.isSub0 = true; break; }
+                for (DocumentSnapshot doc : d1) if (doc.getId().equals(item.id)) { item.isSub1 = true; break; }
+                for (DocumentSnapshot doc : d2) if (doc.getId().equals(item.id)) { item.isSub2 = true; break; }
             }
 
-            for (DocumentSnapshot doc : userDocs) {
-                for (MenuItemModel item : menuList) {
-                    if (item.id.equals(doc.getId())) {
-                        item.isPublic = true;
-                        break;
-                    }
-                }
-            }
-
-            for (DocumentSnapshot doc : devDocs) {
-                for (MenuItemModel item : menuList) {
-                    if (item.id.equals(doc.getId())) {
-                        item.isDevOnly = true;
-                        break;
-                    }
-                }
-            }
-
-            // Regra fixa para abas críticas de desenvolvedor
+            // Regra fixa para abas críticas de desenvolvedor (Sempre Sub 2)
             for (MenuItemModel item : menuList) {
                 if (item.id.equals("settings_dev") || item.id.equals("settings_menu") || item.id.equals("settings_emails") || item.id.equals("settings_users")) {
-                    item.isPublic = false;
-                    item.isDevOnly = true;
+                    item.isSub0 = false; item.isSub1 = false; item.isSub2 = true;
                 }
             }
             if (adapter != null) adapter.notifyDataSetChanged();
@@ -111,20 +97,19 @@ public class DevMenuControlFragment extends Fragment {
         Toast.makeText(getContext(), "Salvando configurações...", Toast.LENGTH_SHORT).show();
         
         for (MenuItemModel item : menuList) {
-            // Regra de segurança: IDs de desenvolvedor nunca são públicos e sempre são devOnly
+            // Regra de segurança
             if (item.id.equals("settings_dev") || item.id.equals("settings_menu") || 
                 item.id.equals("settings_emails") || item.id.equals("settings_users")) {
-                item.isPublic = false;
-                item.isDevOnly = true;
+                item.isSub0 = false; item.isSub1 = false; item.isSub2 = true;
             }
-            FirebaseHelper.updateRemoteMenuConfig(item.id, item.isPublic, item.isDevOnly, null);
+            FirebaseHelper.updateRemoteMenuConfig(item.id, item.isSub0, item.isSub1, item.isSub2, null);
         }
         
         Toast.makeText(getContext(), "Configurações salvas!", Toast.LENGTH_SHORT).show();
     }
 
     private static class MenuItemModel {
-        String id, description; boolean isPublic, isDevOnly;
+        String id, description; boolean isSub0, isSub1, isSub2;
         MenuItemModel(String id, String desc) { this.id = id; this.description = desc; }
     }
 
@@ -140,31 +125,38 @@ public class DevMenuControlFragment extends Fragment {
             
             boolean isLockedDev = item.id.equals("settings_dev") || item.id.equals("settings_menu") || item.id.equals("settings_emails") || item.id.equals("settings_users");
             
+            holder.checkSub0.setOnCheckedChangeListener(null);
+            holder.checkSub1.setOnCheckedChangeListener(null);
+            holder.checkSub2.setOnCheckedChangeListener(null);
+
+            holder.checkSub0.setChecked(item.isSub0);
+            holder.checkSub1.setChecked(item.isSub1);
+            holder.checkSub2.setChecked(item.isSub2);
+
             if (isLockedDev) {
-                item.isPublic = false; item.isDevOnly = true;
-                holder.checkPublic.setVisibility(View.GONE); 
-                holder.checkDevOnly.setChecked(true); 
-                holder.checkDevOnly.setEnabled(false);
+                holder.checkSub0.setVisibility(View.GONE);
+                holder.checkSub1.setVisibility(View.GONE);
+                holder.checkSub2.setEnabled(false);
             } else {
-                holder.checkPublic.setVisibility(View.VISIBLE); 
-                holder.checkDevOnly.setEnabled(true);
-                holder.checkPublic.setOnCheckedChangeListener(null); 
-                holder.checkPublic.setChecked(item.isPublic);
-                holder.checkPublic.setOnCheckedChangeListener((v, checked) -> item.isPublic = checked);
-                holder.checkDevOnly.setOnCheckedChangeListener(null); 
-                holder.checkDevOnly.setChecked(item.isDevOnly);
-                holder.checkDevOnly.setOnCheckedChangeListener((v, checked) -> item.isDevOnly = checked);
+                holder.checkSub0.setVisibility(View.VISIBLE);
+                holder.checkSub1.setVisibility(View.VISIBLE);
+                holder.checkSub2.setEnabled(true);
+
+                holder.checkSub0.setOnCheckedChangeListener((v, c) -> item.isSub0 = c);
+                holder.checkSub1.setOnCheckedChangeListener((v, c) -> item.isSub1 = c);
+                holder.checkSub2.setOnCheckedChangeListener((v, c) -> item.isSub2 = c);
             }
         }
         @Override public int getItemCount() { return items.size(); }
         class ViewHolder extends RecyclerView.ViewHolder {
-            TextView textId, textDesc; CheckBox checkPublic, checkDevOnly;
+            TextView textId, textDesc; CheckBox checkSub0, checkSub1, checkSub2;
             ViewHolder(View v) { 
                 super(v); 
                 textId = v.findViewById(R.id.textMenuId); 
                 textDesc = v.findViewById(R.id.textMenuDescription); 
-                checkPublic = v.findViewById(R.id.checkPublic); 
-                checkDevOnly = v.findViewById(R.id.checkDevOnly); 
+                checkSub0 = v.findViewById(R.id.checkSub0); 
+                checkSub1 = v.findViewById(R.id.checkSub1); 
+                checkSub2 = v.findViewById(R.id.checkSub2); 
             }
         }
     }

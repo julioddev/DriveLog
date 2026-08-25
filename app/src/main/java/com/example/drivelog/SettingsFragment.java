@@ -47,7 +47,7 @@ public class SettingsFragment extends Fragment {
     private TextInputEditText editWeeklyGoal, editConsumption, editFuelPrice, editRestStart, editRestEnd, editCpfInterval, editCpfInactivity;
     private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf, switchCpfInterval, switchAutoCheckUpdates;
     private RadioGroup rgKmSource, rgAppMode, rgSubscription, rgComboioVisibility;
-    private View layoutSubscriptionSimulation, layoutDevTools, layoutDevComboioVisibility, layoutCpfInterval;
+    private View layoutDevTools, layoutCpfInterval, layoutAdvancedDevControls;
     private Spinner spinnerTab, spinnerTheme;
     private SharedPreferences sharedPreferences;
     private GoogleDriveHelper driveHelper;
@@ -120,7 +120,6 @@ public class SettingsFragment extends Fragment {
         rgAppMode = view.findViewById(R.id.rgAppMode);
         rgComboioVisibility = view.findViewById(R.id.rgComboioVisibility);
         rgSubscription = view.findViewById(R.id.rgSubscriptionType);
-        layoutSubscriptionSimulation = view.findViewById(R.id.layoutSubscriptionSimulation);
         spinnerTab = view.findViewById(R.id.spinnerDefaultTab);
         spinnerTheme = view.findViewById(R.id.spinnerTheme);
 
@@ -138,7 +137,7 @@ public class SettingsFragment extends Fragment {
         Button btnImportLocalDb = view.findViewById(R.id.btnImportLocalDb);
         Button btnExportLocalDb = view.findViewById(R.id.btnExportLocalDb);
         layoutDevTools = view.findViewById(R.id.layoutDevTools);
-        layoutDevComboioVisibility = view.findViewById(R.id.layoutDevComboioVisibility);
+        layoutAdvancedDevControls = view.findViewById(R.id.layoutAdvancedDevControls);
 
         if (textOverlayWarning != null) {
             textOverlayWarning.setOnClickListener(v -> {
@@ -519,21 +518,24 @@ public class SettingsFragment extends Fragment {
     }
 
     private void checkDeveloperAccess() {
-        if (layoutSubscriptionSimulation == null) return;
-        
+        MainActivity main = (MainActivity) getActivity();
+        if (main == null) return;
+
+        boolean isAdvancedVisible = main.isMenuVisible("premium_features");
+        if (layoutAdvancedDevControls != null) {
+            layoutAdvancedDevControls.setVisibility(isAdvancedVisible ? View.VISIBLE : View.GONE);
+        }
+
         com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
         if (user != null && user.getEmail() != null) {
             FirebaseHelper.checkDeveloperAccess(user.getEmail(), isDeveloper -> {
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
-                        layoutSubscriptionSimulation.setVisibility(isDeveloper ? View.VISIBLE : View.GONE);
                         if (layoutDevTools != null) layoutDevTools.setVisibility(isDeveloper ? View.VISIBLE : View.GONE);
-                        if (layoutDevComboioVisibility != null) layoutDevComboioVisibility.setVisibility(isDeveloper ? View.VISIBLE : View.GONE);
                     });
                 }
             });
         } else {
-            layoutSubscriptionSimulation.setVisibility(View.GONE);
             if (layoutDevTools != null) layoutDevTools.setVisibility(View.GONE);
         }
     }

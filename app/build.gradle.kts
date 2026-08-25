@@ -12,7 +12,7 @@ android {
         }
     }
 
-    val vCode = 16
+    val vCode = 17
 
     defaultConfig {
         applicationId = "com.example.drivelog"

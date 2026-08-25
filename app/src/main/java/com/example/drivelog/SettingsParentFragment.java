@@ -79,25 +79,25 @@ public class SettingsParentFragment extends Fragment {
         // Listener Remoto para Sub-abas de Ajustes
         com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
         if (user != null && user.getEmail() != null) {
-            FirebaseHelper.checkDeveloperAccess(user.getEmail(), isDev -> {
-                if (!isAdded()) return;
-                remoteMenuListener = FirebaseHelper.listenRemoteMenus(isDev, allowedIds -> {
-                    if (isAdded()) {
-                        requireActivity().runOnUiThread(() -> {
-                            adapter.updateTabs(allowedIds);
-                            new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
-                                tab.setText(adapter.getTabTitle(position));
-                            }).attach();
-                            
-                            // Seleção inicial se houver
-                            if (getArguments() != null && getArguments().containsKey("start_tab")) {
-                                int startIdx = getArguments().getInt("start_tab");
-                                int dynamicIdx = adapter.getDynamicIndexForFixed(startIdx);
-                                viewPager.post(() -> viewPager.setCurrentItem(dynamicIdx, false));
-                            }
-                        });
-                    }
-                });
+            android.content.SharedPreferences prefs = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
+            int subType = prefs.getInt("sub_type", 0);
+            
+            remoteMenuListener = FirebaseHelper.listenRemoteMenus(subType, allowedIds -> {
+                if (isAdded()) {
+                    requireActivity().runOnUiThread(() -> {
+                        adapter.updateTabs(allowedIds);
+                        new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
+                            tab.setText(adapter.getTabTitle(position));
+                        }).attach();
+                        
+                        // Seleção inicial se houver
+                        if (getArguments() != null && getArguments().containsKey("start_tab")) {
+                            int startIdx = getArguments().getInt("start_tab");
+                            int dynamicIdx = adapter.getDynamicIndexForFixed(startIdx);
+                            viewPager.post(() -> viewPager.setCurrentItem(dynamicIdx, false));
+                        }
+                    });
+                }
             });
         }
 

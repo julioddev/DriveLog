@@ -141,14 +141,15 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Seção Modo de Assinatura (Apenas para Desenvolvedores Autorizados) -->
+        <!-- Seção de Controles Avançados (Assinatura, Modo de App, Comboio) -->
         <LinearLayout
-            android:id="@+id/layoutSubscriptionSimulation"
+            android:id="@+id/layoutAdvancedDevControls"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone">
 
+            <!-- Seção Modo de Assinatura (Simulação) -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -165,7 +166,7 @@
                 app:cardCornerRadius="12dp"
                 app:cardElevation="2dp"
                 app:cardBackgroundColor="@android:color/white"
-                android:layout_marginBottom="24dp">
+                android:layout_marginBottom="12dp">
 
                 <RadioGroup
                     android:id="@+id/rgSubscriptionType"
@@ -190,61 +191,53 @@
                         android:text="Assinatura Dev (Tudo Liberado p/ Testes)" />
                 </RadioGroup>
             </com.google.android.material.card.MaterialCardView>
-        </LinearLayout>
 
-        <!-- Seção Modo de App -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Modo de App"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="8dp"
-            android:textColor="?attr/colorPrimary"/>
+            <!-- Seção Modo de App -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Modo de App"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="8dp"
+                android:textColor="?attr/colorPrimary"/>
 
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="2dp"
-            app:cardBackgroundColor="@android:color/white"
-            android:layout_marginBottom="24dp">
-
-            <RadioGroup
-                android:id="@+id/rgAppMode"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="8dp"
-                android:orientation="vertical">
-                <RadioButton
-                    android:id="@+id/rbModeFull"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="@android:color/white"
+                android:layout_marginBottom="12dp">
+
+                <RadioGroup
+                    android:id="@+id/rgAppMode"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Modo Completo (Todas as abas)" />
-                <RadioButton
-                    android:id="@+id/rbModeMapsOnly"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Modo Mapa (Foco total no Mapa)" />
-            </RadioGroup>
-        </com.google.android.material.card.MaterialCardView>
+                    android:padding="8dp"
+                    android:orientation="vertical">
+                    <RadioButton
+                        android:id="@+id/rbModeFull"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Modo Completo (Todas as abas)" />
+                    <RadioButton
+                        android:id="@+id/rbModeMapsOnly"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Modo Mapa (Foco total no Mapa)" />
+                </RadioGroup>
+            </com.google.android.material.card.MaterialCardView>
 
-        <!-- Seção Visualização Comboio (Apenas para DEVs) -->
-        <LinearLayout
-            android:id="@+id/layoutDevComboioVisibility"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone">
-
+            <!-- Seção Visualização Comboio -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Visualização dos Amigos (Comboio)"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="16dp"
                 android:layout_marginBottom="8dp"
                 android:textColor="?attr/colorPrimary"/>
 

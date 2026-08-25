@@ -529,20 +529,28 @@ public class MainActivity extends AppCompatActivity {
                         runOnUiThread(() -> Toast.makeText(MainActivity.this, "Sua conta foi atualizada para PREMIUM! Aproveite.", Toast.LENGTH_LONG).show());
                     }
                 }
+                
+                // 🔥 Inicia a escuta dos menus remotos baseada no nível de assinatura ATUALIZADO
+                startMenuListener(cloudSub);
             }
-            @Override public void onError(String msg) {}
+            @Override public void onError(String msg) {
+                // Fallback para o nível local se falhar a sincronização inicial
+                startMenuListener(localSub);
+            }
         });
+    }
 
-        FirebaseHelper.checkDeveloperAccess(user.getEmail(), isDev -> {
-            remoteMenuListener = FirebaseHelper.listenRemoteMenus(isDev, allowedIds -> {
-                this.currentRemoteMenus = allowedIds;
-                runOnUiThread(() -> {
-                    if (viewPager.getAdapter() instanceof ViewPagerAdapter) {
-                        ((ViewPagerAdapter) viewPager.getAdapter()).setRemoteAllowedIds(allowedIds);
-                    }
-                    refreshTabs();
-                    invalidateOptionsMenu();
-                });
+    private void startMenuListener(int subType) {
+        if (remoteMenuListener != null) remoteMenuListener.remove();
+        
+        remoteMenuListener = FirebaseHelper.listenRemoteMenus(subType, allowedIds -> {
+            this.currentRemoteMenus = allowedIds;
+            runOnUiThread(() -> {
+                if (viewPager.getAdapter() instanceof ViewPagerAdapter) {
+                    ((ViewPagerAdapter) viewPager.getAdapter()).setRemoteAllowedIds(allowedIds);
+                }
+                refreshTabs();
+                invalidateOptionsMenu();
             });
         });
     }

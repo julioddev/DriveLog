@@ -1187,53 +1187,54 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onFailure(e.getMessage()));
     }
 
-    public static void updateRemoteMenuConfig(String id, boolean isPublic, boolean isDevOnly, GlobalUploadCallback cb) {
+    public static void updateRemoteMenuConfig(String id, boolean isSub0, boolean isSub1, boolean isSub2, GlobalUploadCallback cb) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         
-        // 1. Gerencia na coleção menu_users
-        DocumentReference userRef = db.collection("menu_users").document(id);
-        if (isPublic) {
-            userRef.set(new HashMap<>()); // Cria documento vazio se for público
-        } else {
-            userRef.delete(); // Remove se não for mais público
-        }
+        // 1. Sub 0 (Público Geral)
+        DocumentReference ref0 = db.collection("menu_sub0").document(id);
+        if (isSub0) ref0.set(new HashMap<>()); else ref0.delete();
 
-        // 2. Gerencia na coleção menu_devs
-        DocumentReference devRef = db.collection("menu_devs").document(id);
-        if (isDevOnly) {
-            devRef.set(new HashMap<>());
-        } else {
-            devRef.delete();
-        }
+        // 2. Sub 1 (Premium)
+        DocumentReference ref1 = db.collection("menu_sub1").document(id);
+        if (isSub1) ref1.set(new HashMap<>()); else ref1.delete();
+
+        // 3. Sub 2 (Developer)
+        DocumentReference ref2 = db.collection("menu_sub2").document(id);
+        if (isSub2) ref2.set(new HashMap<>()); else ref2.delete();
 
         if (cb != null) cb.onSuccess();
     }
 
     public interface RemoteMenuConfigCallback {
-        void onUpdate(List<DocumentSnapshot> userDocs, List<DocumentSnapshot> devDocs);
+        void onUpdate(List<DocumentSnapshot> sub0, List<DocumentSnapshot> sub1, List<DocumentSnapshot> sub2);
     }
 
     public static ListenerRegistration listenRemoteMenuConfigAll(RemoteMenuConfigCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
-        final List<DocumentSnapshot> userDocs = new ArrayList<>();
-        final List<DocumentSnapshot> devDocs = new ArrayList<>();
+        final List<DocumentSnapshot> d0 = new ArrayList<>();
+        final List<DocumentSnapshot> d1 = new ArrayList<>();
+        final List<DocumentSnapshot> d2 = new ArrayList<>();
 
-        ListenerRegistration l1 = db.collection("menu_users").addSnapshotListener((snapshot, e) -> {
+        ListenerRegistration l0 = db.collection("menu_sub0").addSnapshotListener((snapshot, e) -> {
             if (e != null || snapshot == null) return;
-            userDocs.clear();
-            userDocs.addAll(snapshot.getDocuments());
-            callback.onUpdate(userDocs, devDocs);
+            d0.clear(); d0.addAll(snapshot.getDocuments());
+            callback.onUpdate(d0, d1, d2);
         });
 
-        ListenerRegistration l2 = db.collection("menu_devs").addSnapshotListener((snapshot, e) -> {
+        ListenerRegistration l1 = db.collection("menu_sub1").addSnapshotListener((snapshot, e) -> {
             if (e != null || snapshot == null) return;
-            devDocs.clear();
-            devDocs.addAll(snapshot.getDocuments());
-            callback.onUpdate(userDocs, devDocs);
+            d1.clear(); d1.addAll(snapshot.getDocuments());
+            callback.onUpdate(d0, d1, d2);
+        });
+
+        ListenerRegistration l2 = db.collection("menu_sub2").addSnapshotListener((snapshot, e) -> {
+            if (e != null || snapshot == null) return;
+            d2.clear(); d2.addAll(snapshot.getDocuments());
+            callback.onUpdate(d0, d1, d2);
         });
 
         return new ListenerRegistration() {
-            @Override public void remove() { l1.remove(); l2.remove(); }
+            @Override public void remove() { l0.remove(); l1.remove(); l2.remove(); }
         };
     }
 
@@ -1285,48 +1286,64 @@ public class FirebaseHelper {
     }
 
     /**
-     * Escuta a configuração remota de menus/abas
+     * Escuta a configuração remota de menus/abas baseada no nível de assinatura do usuário
      */
-    public static ListenerRegistration listenRemoteMenus(boolean isDev, RemoteMenuCallback callback) {
+    public static ListenerRegistration listenRemoteMenus(int subType, RemoteMenuCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         
-        if (isDev) {
-            // Para DEVS: Monitora ambas as coleções em tempo real
-            final List<String> userMenus = new ArrayList<>();
-            final List<String> devMenus = new ArrayList<>();
+        final List<String> m0 = new ArrayList<>();
+        final List<String> m1 = new ArrayList<>();
+        final List<String> m2 = new ArrayList<>();
 
-            ListenerRegistration l1 = db.collection("menu_users").addSnapshotListener((snapshot, e) -> {
-                if (e != null || snapshot == null) return;
-                userMenus.clear();
-                for (DocumentSnapshot doc : snapshot.getDocuments()) userMenus.add(doc.getId());
-                combineAndNotify(userMenus, devMenus, callback);
-            });
+        // Sempre ouvimos a base (Sub 0)
+        ListenerRegistration l0 = db.collection("menu_sub0").addSnapshotListener((snapshot, e) -> {
+            if (e != null || snapshot == null) return;
+            m0.clear();
+            for (DocumentSnapshot doc : snapshot.getDocuments()) m0.add(doc.getId());
+            combineAndNotify(m0, m1, m2, subType, callback);
+        });
 
-            ListenerRegistration l2 = db.collection("menu_devs").addSnapshotListener((snapshot, e) -> {
+        // Se for Premium (1) ou Dev (2), ouve a Premium
+        ListenerRegistration l1 = null;
+        if (subType >= 1) {
+            l1 = db.collection("menu_sub1").addSnapshotListener((snapshot, e) -> {
                 if (e != null || snapshot == null) return;
-                devMenus.clear();
-                for (DocumentSnapshot doc : snapshot.getDocuments()) devMenus.add(doc.getId());
-                combineAndNotify(userMenus, devMenus, callback);
-            });
-
-            return new ListenerRegistration() {
-                @Override public void remove() { l1.remove(); l2.remove(); }
-            };
-        } else {
-            // Para USUÁRIOS: Monitora apenas menus públicos
-            return db.collection("menu_users").addSnapshotListener((snapshot, e) -> {
-                if (e != null || snapshot == null) return;
-                List<String> list = new ArrayList<>();
-                for (DocumentSnapshot doc : snapshot.getDocuments()) list.add(doc.getId());
-                callback.onUpdate(list);
+                m1.clear();
+                for (DocumentSnapshot doc : snapshot.getDocuments()) m1.add(doc.getId());
+                combineAndNotify(m0, m1, m2, subType, callback);
             });
         }
+
+        // Se for Dev (2), ouve a Dev
+        ListenerRegistration l2 = null;
+        if (subType >= 2) {
+            l2 = db.collection("menu_sub2").addSnapshotListener((snapshot, e) -> {
+                if (e != null || snapshot == null) return;
+                m2.clear();
+                for (DocumentSnapshot doc : snapshot.getDocuments()) m2.add(doc.getId());
+                combineAndNotify(m0, m1, m2, subType, callback);
+            });
+        }
+
+        final ListenerRegistration fl1 = l1;
+        final ListenerRegistration fl2 = l2;
+
+        return new ListenerRegistration() {
+            @Override public void remove() {
+                l0.remove();
+                if (fl1 != null) fl1.remove();
+                if (fl2 != null) fl2.remove();
+            }
+        };
     }
 
-    private static void combineAndNotify(List<String> user, List<String> dev, RemoteMenuCallback cb) {
-        List<String> all = new ArrayList<>(user);
-        for (String id : dev) {
-            if (!all.contains(id)) all.add(id);
+    private static void combineAndNotify(List<String> d0, List<String> d1, List<String> d2, int subType, RemoteMenuCallback cb) {
+        List<String> all = new ArrayList<>(d0);
+        if (subType >= 1) {
+            for (String id : d1) if (!all.contains(id)) all.add(id);
+        }
+        if (subType >= 2) {
+            for (String id : d2) if (!all.contains(id)) all.add(id);
         }
         cb.onUpdate(all);
     }
