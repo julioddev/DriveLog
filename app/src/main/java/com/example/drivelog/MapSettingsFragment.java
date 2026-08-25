@@ -103,7 +103,7 @@ public class MapSettingsFragment extends Fragment {
             switchVoice.setChecked(sharedPreferences.getBoolean(PREF_VOICE_COMMANDS, false));
             switchVoice.setOnCheckedChangeListener((btn, isChecked) -> {
                 sharedPreferences.edit().putBoolean(PREF_VOICE_COMMANDS, isChecked).apply();
-                CloudSyncHelper.syncNow(requireContext());
+                CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
             });
         }
 
@@ -121,7 +121,7 @@ public class MapSettingsFragment extends Fragment {
                     textRouteOpacityPercent.setText(progress + "%");
                     if (fromUser) {
                         sharedPreferences.edit().putInt(PREF_ROUTE_OPACITY, progress).apply();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
                     }
                 }
                 @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -141,7 +141,7 @@ public class MapSettingsFragment extends Fragment {
     private void selectUserIcon(String type) {
         sharedPreferences.edit().putString(PREF_USER_ICON, type).apply();
         updateUserIconSelection(getView());
-        CloudSyncHelper.syncNow(requireContext());
+        CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
     }
 
     private void updateUserIconSelection(View root) {
@@ -187,7 +187,7 @@ public class MapSettingsFragment extends Fragment {
                     updateMapStyleInfo();
                     dialog.dismiss();
                     Toast.makeText(getContext(), "Estilo alterado com sucesso!", Toast.LENGTH_SHORT).show();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
                 })
                 .setNegativeButton("Cancelar", null)
                 .show();
@@ -284,13 +284,13 @@ public class MapSettingsFragment extends Fragment {
                     String pkg = allApps.get(which).packageName;
                     sharedPreferences.edit().putString(PREF_DELIVERY_APP, pkg).commit();
                     updateSelectedAppInfo();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
                 })
                 .setNeutralButton("Digitar Pacote Manualmente", (dialog, which) -> showManualPackageEntry())
                 .setNegativeButton("Remover Atalho", (dialog, which) -> {
                     sharedPreferences.edit().putString(PREF_DELIVERY_APP, "").commit();
                     updateSelectedAppInfo();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
                 })
                 .show();
     }
@@ -308,7 +308,7 @@ public class MapSettingsFragment extends Fragment {
                     if (!pkg.isEmpty()) {
                         sharedPreferences.edit().putString(PREF_DELIVERY_APP, pkg).apply();
                         updateSelectedAppInfo();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
                     }
                 })
                 .setNegativeButton("Cancelar", null)
@@ -427,7 +427,7 @@ public class MapSettingsFragment extends Fragment {
                     String hex = String.format("#%06X", (0xFFFFFF & finalColor));
                     sharedPreferences.edit().putString(key, hex).commit();
                     updatePreviewColors();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
                 })
                 .setNegativeButton("Cancelar", null)
                 .show();

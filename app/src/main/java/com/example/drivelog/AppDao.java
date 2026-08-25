@@ -298,6 +298,9 @@ public interface AppDao {
     @androidx.room.Delete
     void deleteLoadingPoint(LoadingPoint point);
 
+    @Query("DELETE FROM loading_points")
+    void clearLoadingPoints();
+
     @Query("SELECT * FROM loading_points ORDER BY id ASC")
     List<LoadingPoint> getAllLoadingPoints();
 

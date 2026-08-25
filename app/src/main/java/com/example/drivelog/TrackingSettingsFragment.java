@@ -145,7 +145,7 @@ public class TrackingSettingsFragment extends Fragment {
 
         switchBackgroundTracking.setOnCheckedChangeListener((buttonView, isChecked) -> {
             sharedPreferences.edit().putBoolean("background_tracking_enabled", isChecked).apply();
-            CloudSyncHelper.syncNow(requireContext());
+            CloudSyncHelper.syncNow(requireContext(), "Ajuste Rastreamento");
         });
 
         rgComboioMode.setOnCheckedChangeListener((group, checkedId) -> {
@@ -161,7 +161,7 @@ public class TrackingSettingsFragment extends Fragment {
                 FirebaseHelper.updateComboioPreference(user.getEmail(), mode);
             }
 
-            CloudSyncHelper.syncNow(requireContext());
+            CloudSyncHelper.syncNow(requireContext(), "Ajuste Rastreamento");
             updateComboioHint(mode);
         });
 
@@ -211,7 +211,7 @@ public class TrackingSettingsFragment extends Fragment {
 
             editor.commit(); // Usamos commit para persistência imediata antes do sync
             
-            CloudSyncHelper.syncNow(requireContext());
+            CloudSyncHelper.syncNow(requireContext(), "Ajuste Rastreamento");
             TrackingHelper.updateAutoTracking(requireContext());
         } catch (Exception ignored) {}
     }
@@ -231,7 +231,7 @@ public class TrackingSettingsFragment extends Fragment {
             String time = String.format(Locale.getDefault(), "%02d:%02d", hourOfDay, min);
             target.setText(time);
             sharedPreferences.edit().putString(prefKey, time).apply();
-            CloudSyncHelper.syncNow(requireContext());
+            CloudSyncHelper.syncNow(requireContext(), "Ajuste Rastreamento");
             TrackingHelper.updateAutoTracking(requireContext());
         }, hour, minute, true).show();
     }
@@ -411,7 +411,7 @@ public class TrackingSettingsFragment extends Fragment {
                     String hex = String.format("#%06X", (0xFFFFFF & finalColor));
                     sharedPreferences.edit().putString(key, hex).apply();
                     updatePreviewColors();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Ajuste Rastreamento");
                 })
                 .setNegativeButton("Cancelar", null)
                 .show();

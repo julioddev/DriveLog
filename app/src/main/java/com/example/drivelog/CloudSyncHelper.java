@@ -15,22 +15,37 @@ public class CloudSyncHelper {
     private static final long SYNC_COOLDOWN_MS = 5000;
     private static final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
     private static Runnable pendingSync = null;
+    private static String currentReason = "Atividade detectada";
     private static final AtomicBoolean isSyncing = new AtomicBoolean(false);
 
     public static final androidx.lifecycle.MutableLiveData<String> syncLog = new androidx.lifecycle.MutableLiveData<>("Aguardando atividade...");
 
+    /**
+     * Sincronização padrão sem motivo específico
+     */
     public static void syncNow(Context context) {
+        syncNow(context, "Atividade detectada");
+    }
+
+    /**
+     * Aciona a sincronização com a nuvem informando o que mudou
+     */
+    public static void syncNow(Context context, String reason) {
         if (pendingSync != null) {
             handler.removeCallbacks(pendingSync);
         }
 
-        pendingSync = () -> executeSync(context.getApplicationContext());
-        handler.postDelayed(pendingSync, 2000);
+        currentReason = reason;
+        syncLog.postValue("Pendente: " + reason + "...");
+
+        pendingSync = () -> executeSync(context.getApplicationContext(), reason);
+        // 🔥 Reduzido para 500ms para ser "imediato"
+        handler.postDelayed(pendingSync, 500);
     }
 
     private static final java.util.concurrent.ExecutorService syncExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
 
-    private static void executeSync(Context context) {
+    private static void executeSync(Context context, String reason) {
         if (isSyncing.get()) {
             Log.d("CloudSync", "Sincronização em andamento, pulando.");
             return;
@@ -38,7 +53,7 @@ public class CloudSyncHelper {
 
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastSyncTime < SYNC_COOLDOWN_MS) {
-            handler.postDelayed(() -> executeSync(context), SYNC_COOLDOWN_MS - (currentTime - lastSyncTime) + 500);
+            handler.postDelayed(() -> executeSync(context, reason), SYNC_COOLDOWN_MS - (currentTime - lastSyncTime) + 500);
             return;
         }
 
@@ -62,7 +77,7 @@ public class CloudSyncHelper {
 
         isSyncing.set(true);
         lastSyncTime = System.currentTimeMillis();
-        syncLog.postValue("Preparando backup...");
+        syncLog.postValue("☁️ Enviando: " + reason + "...");
 
         syncExecutor.execute(() -> {
             try {
@@ -72,17 +87,11 @@ public class CloudSyncHelper {
                 AppDatabase db = AppDatabase.getInstance(context);
                 File tempFile = new File(context.getCacheDir(), "cloud_upload_tmp.db");
                 
-                // 2. Limpa arquivo temporário anterior se existir
                 if (tempFile.exists()) tempFile.delete();
 
-                // 3. Tenta usar VACUUM INTO, mas captura erro silenciosamente se a versão do SQLite não suportar
                 try {
                     db.getOpenHelper().getWritableDatabase().execSQL("VACUUM INTO '" + tempFile.getPath() + "'");
-                    Log.d("CloudSync", "Backup criado usando VACUUM INTO");
                 } catch (Exception e) {
-                    // Logamos apenas no Logcat, sem estourar exception para o usuário
-                    Log.w("CloudSync", "VACUUM INTO não suportado ou falhou, usando cópia manual");
-
                     String dbName = db.getOpenHelper().getDatabaseName();
                     File dbFile = context.getDatabasePath(dbName);
                     synchronized (AppDatabase.class) {
@@ -96,29 +105,17 @@ public class CloudSyncHelper {
                     }
                 }
 
-                syncLog.postValue("Enviando para o Drive...");
-
-                // 4. TESTE DE INTEGRIDADE LOCAL ANTES DO ENVIO
-                int testCount = 0;
-                try (android.database.sqlite.SQLiteDatabase dbCheck = android.database.sqlite.SQLiteDatabase.openDatabase(tempFile.getPath(), null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY)) {
-                    try (android.database.Cursor c = dbCheck.rawQuery("SELECT COUNT(*) FROM earnings", null)) {
-                        if (c.moveToFirst()) testCount = c.getInt(0);
-                    }
-                } catch (Exception e) {
-                    Log.e("CloudSync", "Erro ao validar arquivo temporário", e);
-                }
-
-                // 5. Upload via GoogleDriveHelper
+                // Upload via GoogleDriveHelper
                 GoogleDriveHelper driveHelper = new GoogleDriveHelper(context, account);
                 driveHelper.syncBackupSync(tempFile);
                 
                 String time = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
-                syncLog.postValue("[" + time + "] Nuvem: Salvo (" + testCount + " registros)");
-                Log.i("CloudSync", "Backup na nuvem concluído com sucesso: " + testCount + " registros.");
+                syncLog.postValue("✅ [" + time + "] Nuvem salva: " + reason);
+                Log.i("CloudSync", "Backup concluído: " + reason);
 
             } catch (Exception e) {
                 Log.e("CloudSync", "Erro na sincronização", e);
-                syncLog.postValue("Erro: " + (e.getMessage() != null ? e.getMessage() : "Erro desconhecido"));
+                syncLog.postValue("❌ Erro: " + (e.getMessage() != null ? e.getMessage() : "Erro desconhecido"));
             } finally {
                 isSyncing.set(false);
             }
@@ -135,6 +132,6 @@ public class CloudSyncHelper {
                 .edit()
                 .putBoolean(PREF_AUTO_BACKUP, enabled)
                 .apply();
-        if (enabled) syncNow(context);
+        if (enabled) syncNow(context, "Backup Ativado");
     }
 }

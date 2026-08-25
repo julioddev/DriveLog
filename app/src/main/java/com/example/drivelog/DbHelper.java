@@ -73,40 +73,29 @@ public class DbHelper {
             c.close();
         }
 
+        // Mapeamento para Points (Vínculo com DailyKm)
+        java.util.Map<Integer, Integer> kmIdMap = new java.util.HashMap<>();
+
         if (tablesToImport.contains("DAILY_KM")) {
             if (!isMerge) dao.clearDailyKm();
-            Cursor c = externalDb.rawQuery("SELECT * FROM daily_km", null);
-            while (c.moveToNext()) {
-                DailyKm d = new DailyKm();
-                d.kmStart = c.getDouble(c.getColumnIndexOrThrow("kmStart"));
-                d.kmEnd = c.getDouble(c.getColumnIndexOrThrow("kmEnd"));
-                d.totalKm = c.getDouble(c.getColumnIndexOrThrow("totalKm"));
-                d.estimatedFuelCost = c.getDouble(c.getColumnIndexOrThrow("estimatedFuelCost"));
-                d.consumptionUsed = c.getDouble(c.getColumnIndexOrThrow("consumptionUsed"));
-                d.date = c.getLong(c.getColumnIndexOrThrow("date"));
-                d.isCompleted = c.getInt(c.getColumnIndexOrThrow("isCompleted")) == 1;
-                d.gpsDistance = c.getDouble(c.getColumnIndexOrThrow("gpsDistance"));
-                d.isAutomatic = c.getInt(c.getColumnIndexOrThrow("isAutomatic")) == 1;
-                dao.insertDailyKm(d);
+            try (Cursor c = externalDb.rawQuery("SELECT * FROM daily_km", null)) {
+                while (c.moveToNext()) {
+                    int oldId = c.getInt(c.getColumnIndexOrThrow("id"));
+                    DailyKm d = new DailyKm();
+                    d.kmStart = c.getDouble(c.getColumnIndexOrThrow("kmStart"));
+                    d.kmEnd = c.getDouble(c.getColumnIndexOrThrow("kmEnd"));
+                    d.totalKm = c.getDouble(c.getColumnIndexOrThrow("totalKm"));
+                    d.estimatedFuelCost = c.getDouble(c.getColumnIndexOrThrow("estimatedFuelCost"));
+                    d.consumptionUsed = c.getDouble(c.getColumnIndexOrThrow("consumptionUsed"));
+                    d.date = c.getLong(c.getColumnIndexOrThrow("date"));
+                    d.isCompleted = c.getInt(c.getColumnIndexOrThrow("isCompleted")) == 1;
+                    d.gpsDistance = c.getDouble(c.getColumnIndexOrThrow("gpsDistance"));
+                    d.isAutomatic = c.getInt(c.getColumnIndexOrThrow("isAutomatic")) == 1;
+                    
+                    long newId = dao.insertDailyKm(d);
+                    kmIdMap.put(oldId, (int) newId);
+                }
             }
-            c.close();
-        }
-        
-        if (tablesToImport.contains("MAINTENANCE")) {
-            if (!isMerge) dao.clearMaintenance();
-            Cursor c = externalDb.rawQuery("SELECT * FROM maintenance", null);
-            while (c.moveToNext()) {
-                Maintenance m = new Maintenance();
-                m.description = c.getString(c.getColumnIndexOrThrow("description"));
-                m.value = c.getDouble(c.getColumnIndexOrThrow("value"));
-                m.date = c.getLong(c.getColumnIndexOrThrow("date"));
-                m.km = c.getInt(c.getColumnIndexOrThrow("km"));
-                m.type = c.getString(c.getColumnIndexOrThrow("type"));
-                m.intervalKm = c.getInt(c.getColumnIndexOrThrow("intervalKm"));
-                m.alertKm = c.getInt(c.getColumnIndexOrThrow("alertKm"));
-                dao.insertMaintenance(m);
-            }
-            c.close();
         }
 
         if (tablesToImport.contains("ROUTE_HEADERS")) {
@@ -116,31 +105,41 @@ public class DbHelper {
                 dao.clearRoutePoints();
             }
             
+            // Mapeamento de IDs Antigos -> Novos para manter as chaves estrangeiras
+            java.util.Map<Integer, Integer> routeIdMap = new java.util.HashMap<>();
+
             // 1. Importar Headers
-            Cursor c = externalDb.rawQuery("SELECT * FROM route_headers", null);
-            while (c.moveToNext()) {
-                RouteHeader h = new RouteHeader();
-                h.id = c.getInt(c.getColumnIndexOrThrow("id")); // Importante manter o ID para os Stops/Points
-                h.name = c.getString(c.getColumnIndexOrThrow("name"));
-                h.date = c.getLong(c.getColumnIndexOrThrow("date"));
-                h.isCompleted = c.getInt(c.getColumnIndexOrThrow("isCompleted")) == 1;
-                h.failedCount = c.getInt(c.getColumnIndexOrThrow("failedCount"));
-                try {
-                    h.isActive = c.getInt(c.getColumnIndexOrThrow("isActive")) == 1;
-                    h.startTime = c.getLong(c.getColumnIndexOrThrow("startTime"));
-                    h.endTime = c.getLong(c.getColumnIndexOrThrow("endTime"));
-                    h.totalPausedMs = c.getLong(c.getColumnIndexOrThrow("totalPausedMs"));
-                    h.lastPauseStartTime = c.getLong(c.getColumnIndexOrThrow("lastPauseStartTime"));
-                } catch (Exception ignored) {}
-                dao.insertRouteHeader(h);
+            try (Cursor c = externalDb.rawQuery("SELECT * FROM route_headers", null)) {
+                while (c.moveToNext()) {
+                    int oldId = c.getInt(c.getColumnIndexOrThrow("id"));
+                    RouteHeader h = new RouteHeader();
+                    h.name = c.getString(c.getColumnIndexOrThrow("name"));
+                    h.date = c.getLong(c.getColumnIndexOrThrow("date"));
+                    h.isCompleted = c.getInt(c.getColumnIndexOrThrow("isCompleted")) == 1;
+                    h.failedCount = c.getInt(c.getColumnIndexOrThrow("failedCount"));
+                    try {
+                        h.isActive = c.getInt(c.getColumnIndexOrThrow("isActive")) == 1;
+                        h.startTime = c.getLong(c.getColumnIndexOrThrow("startTime"));
+                        h.endTime = c.getLong(c.getColumnIndexOrThrow("endTime"));
+                        h.totalPausedMs = c.getLong(c.getColumnIndexOrThrow("totalPausedMs"));
+                        h.lastPauseStartTime = c.getLong(c.getColumnIndexOrThrow("lastPauseStartTime"));
+                    } catch (Exception ignored) {}
+                    
+                    long newId = dao.insertRouteHeader(h);
+                    routeIdMap.put(oldId, (int) newId);
+                }
             }
-            c.close();
 
             // 2. Importar Stops
             try (Cursor cStops = externalDb.rawQuery("SELECT * FROM route_stops", null)) {
                 while (cStops.moveToNext()) {
+                    int oldRouteId = cStops.getInt(cStops.getColumnIndexOrThrow("routeId"));
+                    if (!routeIdMap.containsKey(oldRouteId)) continue; 
+
                     RouteStop s = new RouteStop();
-                    s.routeId = cStops.getInt(cStops.getColumnIndexOrThrow("routeId"));
+                    Integer mappedId = routeIdMap.get(oldRouteId);
+                    if (mappedId == null) continue;
+                    s.routeId = mappedId;
                     s.address = cStops.getString(cStops.getColumnIndexOrThrow("address"));
                     s.latitude = cStops.getDouble(cStops.getColumnIndexOrThrow("latitude"));
                     s.longitude = cStops.getDouble(cStops.getColumnIndexOrThrow("longitude"));
@@ -157,35 +156,43 @@ public class DbHelper {
                     } catch (Exception ignored) {}
                     dao.insertRouteStop(s);
                 }
-            } catch (Exception e) {
-                Log.e("DbHelper", "Error importing route_stops", e);
             }
 
             // 3. Importar Groups
             try (Cursor cGroups = externalDb.rawQuery("SELECT * FROM route_groups", null)) {
                 while (cGroups.moveToNext()) {
+                    int oldRouteId = cGroups.getInt(cGroups.getColumnIndexOrThrow("routeId"));
+                    Integer mappedId = routeIdMap.get(oldRouteId);
+                    if (mappedId == null) continue;
+
                     RouteGroup g = new RouteGroup();
-                    g.routeId = cGroups.getInt(cGroups.getColumnIndexOrThrow("routeId"));
+                    g.routeId = mappedId;
                     g.name = cGroups.getString(cGroups.getColumnIndexOrThrow("name"));
                     g.color = cGroups.getString(cGroups.getColumnIndexOrThrow("color"));
                     dao.insertRouteGroup(g);
                 }
-            } catch (Exception e) {
-                Log.e("DbHelper", "Error importing route_groups", e);
             }
 
-            // 4. Importar Points (Traçado do GPS - No banco de dados antigo isso estava ligado ao DailyKm)
+            // 4. Importar Points
             try (Cursor cPoints = externalDb.rawQuery("SELECT * FROM route_points", null)) {
                 while (cPoints.moveToNext()) {
+                    int oldKmId = cPoints.getInt(cPoints.getColumnIndexOrThrow("dailyKmId"));
                     RoutePoint p = new RoutePoint();
-                    p.dailyKmId = cPoints.getInt(cPoints.getColumnIndexOrThrow("dailyKmId"));
+                    
+                    // Tenta mapear o vínculo com o registro diário novo
+                    if (kmIdMap.containsKey(oldKmId)) {
+                        Integer newKmId = kmIdMap.get(oldKmId);
+                        if (newKmId != null) p.dailyKmId = newKmId;
+                        else p.dailyKmId = oldKmId; // Fallback se falhar
+                    } else {
+                        p.dailyKmId = oldKmId; // Mantém original se for merge ou ID preservado
+                    }
+
                     p.latitude = cPoints.getDouble(cPoints.getColumnIndexOrThrow("latitude"));
                     p.longitude = cPoints.getDouble(cPoints.getColumnIndexOrThrow("longitude"));
                     p.timestamp = cPoints.getLong(cPoints.getColumnIndexOrThrow("timestamp"));
                     dao.insertRoutePoint(p);
                 }
-            } catch (Exception e) {
-                Log.e("DbHelper", "Error importing route_points", e);
             }
         }
 
@@ -208,8 +215,7 @@ public class DbHelper {
 
         if (tablesToImport.contains("SETTINGS")) {
             if (!isMerge) dao.clearSettings();
-            try {
-                Cursor c = externalDb.rawQuery("SELECT * FROM settings", null);
+            try (Cursor c = externalDb.rawQuery("SELECT * FROM settings", null)) {
                 while (c.moveToNext()) {
                     SettingEntry se = new SettingEntry();
                     se.key = c.getString(c.getColumnIndexOrThrow("key"));
@@ -217,8 +223,50 @@ public class DbHelper {
                     se.type = c.getString(c.getColumnIndexOrThrow("type"));
                     dao.insertSetting(se);
                 }
-                c.close();
                 SettingsSyncHelper.loadPrefsFromDb(context);
+            } catch (Exception ignored) {}
+        }
+
+        if (tablesToImport.contains("LOADING_POINTS")) {
+            if (!isMerge) dao.clearLoadingPoints();
+            try (Cursor c = externalDb.rawQuery("SELECT * FROM loading_points", null)) {
+                while (c.moveToNext()) {
+                    LoadingPoint lp = new LoadingPoint();
+                    lp.name = c.getString(c.getColumnIndexOrThrow("name"));
+                    lp.latitude = c.getDouble(c.getColumnIndexOrThrow("latitude"));
+                    lp.longitude = c.getDouble(c.getColumnIndexOrThrow("longitude"));
+                    lp.platformName = c.getString(c.getColumnIndexOrThrow("platformName"));
+                    dao.insertLoadingPoint(lp);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (tablesToImport.contains("PLATFORMS")) {
+            if (!isMerge) dao.clearPlatforms();
+            try (Cursor c = externalDb.rawQuery("SELECT * FROM platforms", null)) {
+                while (c.moveToNext()) {
+                    Platform p = new Platform();
+                    p.name = c.getString(c.getColumnIndexOrThrow("name"));
+                    p.isEnabled = c.getInt(c.getColumnIndexOrThrow("isEnabled")) == 1;
+                    p.defaultValue = c.getDouble(c.getColumnIndexOrThrow("defaultValue"));
+                    p.orderIndex = c.getInt(c.getColumnIndexOrThrow("orderIndex"));
+                    p.isDefault = c.getInt(c.getColumnIndexOrThrow("isDefault")) == 1;
+                    dao.insertPlatform(p);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (tablesToImport.contains("GAS_STATIONS")) {
+            if (!isMerge) dao.clearGasStations();
+            try (Cursor c = externalDb.rawQuery("SELECT * FROM gas_stations", null)) {
+                while (c.moveToNext()) {
+                    GasStation gs = new GasStation();
+                    gs.name = c.getString(c.getColumnIndexOrThrow("name"));
+                    gs.isEnabled = c.getInt(c.getColumnIndexOrThrow("isEnabled")) == 1;
+                    gs.orderIndex = c.getInt(c.getColumnIndexOrThrow("orderIndex"));
+                    gs.isDefault = c.getInt(c.getColumnIndexOrThrow("isDefault")) == 1;
+                    dao.insertGasStation(gs);
+                }
             } catch (Exception ignored) {}
         }
 

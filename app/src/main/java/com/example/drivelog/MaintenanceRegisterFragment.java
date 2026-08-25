@@ -141,7 +141,7 @@ public class MaintenanceRegisterFragment extends Fragment {
             if (editingMaintId != -1) cancelEdit();
             
             // Trigger auto cloud sync if enabled
-            CloudSyncHelper.syncNow(requireContext());
+            CloudSyncHelper.syncNow(requireContext(), editingMaintId == -1 ? "Nova Manutenção" : "Manutenção Editada");
         } else {
             Toast.makeText(getContext(), "Preencha todos os campos", Toast.LENGTH_SHORT).show();
         }

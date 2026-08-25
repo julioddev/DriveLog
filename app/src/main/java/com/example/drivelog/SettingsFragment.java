@@ -44,7 +44,7 @@ public class SettingsFragment extends Fragment {
     private Button btnUpgradeSubscription;
     private Button btnDetectGoogle, btnLogoutGoogle, btnBackToLogin, btnCheckUpdates, btnAboutApp;
     private TextView textSyncLog, textOverlayWarning, textNotificationWarning;
-    private TextInputEditText editWeeklyGoal, editConsumption, editFuelPrice, editRestStart, editRestEnd, editCpfInterval;
+    private TextInputEditText editWeeklyGoal, editConsumption, editFuelPrice, editRestStart, editRestEnd, editCpfInterval, editCpfInactivity;
     private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf, switchCpfInterval, switchAutoCheckUpdates;
     private RadioGroup rgKmSource, rgAppMode, rgSubscription, rgComboioVisibility;
     private View layoutSubscriptionSimulation, layoutDevTools, layoutDevComboioVisibility, layoutCpfInterval;
@@ -110,6 +110,7 @@ public class SettingsFragment extends Fragment {
         switchCpfInterval = view.findViewById(R.id.switchCpfInterval);
         layoutCpfInterval = view.findViewById(R.id.layoutCpfInterval);
         editCpfInterval = view.findViewById(R.id.editCpfInterval);
+        editCpfInactivity = view.findViewById(R.id.editCpfInactivity);
         switchAutoBackup = view.findViewById(R.id.switchAutoBackup);
         switchRestEnabled = view.findViewById(R.id.switchRestEnabled);
         switchAutoCheckUpdates = view.findViewById(R.id.switchAutoCheckUpdates);
@@ -122,6 +123,11 @@ public class SettingsFragment extends Fragment {
         layoutSubscriptionSimulation = view.findViewById(R.id.layoutSubscriptionSimulation);
         spinnerTab = view.findViewById(R.id.spinnerDefaultTab);
         spinnerTheme = view.findViewById(R.id.spinnerTheme);
+
+        CloudSyncHelper.syncLog.observe(getViewLifecycleOwner(), log -> {
+            if (textSyncLog != null) textSyncLog.setText(log);
+        });
+
         View layoutRestTimes = view.findViewById(R.id.layoutRestTimes);
         Button btnSave = view.findViewById(R.id.btnSaveSettings);
         btnCheckUpdates = view.findViewById(R.id.btnCheckUpdates);
@@ -391,7 +397,8 @@ public class SettingsFragment extends Fragment {
     }
 
     private void startDriveSync() {
-        CloudSyncHelper.syncNow(requireContext());
+        Toast.makeText(getContext(), "Iniciando envio para nuvem...", Toast.LENGTH_SHORT).show();
+        CloudSyncHelper.syncNow(requireContext(), "Backup Manual");
     }
 
     private void startDriveDownload() {
@@ -435,6 +442,9 @@ public class SettingsFragment extends Fragment {
                     case "ROUTE_HEADERS": name = "Gravações (Rotas)"; break;
                     case "CORRECTED_ADDRESSES": name = "Endereços Corrigidos"; break;
                     case "SETTINGS": name = "Configurações"; break;
+                    case "LOADING_POINTS": name = "Pontos de Carregamento"; break;
+                    case "PLATFORMS": name = "Plataformas"; break;
+                    case "GAS_STATIONS": name = "Postos"; break;
                     default: name = table; break;
                 }
                 displayNames[i] = name + " (" + count + ")";
@@ -610,6 +620,7 @@ public class SettingsFragment extends Fragment {
         switchCpfInterval.setChecked(sharedPreferences.getBoolean("cpf_interval_enabled", false));
         layoutCpfInterval.setVisibility(switchCpfInterval.isChecked() ? View.VISIBLE : View.GONE);
         editCpfInterval.setText(String.valueOf(sharedPreferences.getInt("cpf_interval_minutes", 2)));
+        editCpfInactivity.setText(String.valueOf(sharedPreferences.getInt("cpf_inactivity_minutes", 5)));
         switchAutoCheckUpdates.setChecked(sharedPreferences.getBoolean("auto_check_updates", true));
         
         boolean restEnabled = sharedPreferences.getBoolean("rest_interval_enabled", false);
@@ -647,7 +658,8 @@ public class SettingsFragment extends Fragment {
         else rgSubscription.check(R.id.rbSubDev);
 
         spinnerTab.setSelection(sharedPreferences.getInt("default_tab", 0));
-        spinnerTheme.setSelection(sharedPreferences.getInt("app_theme", 0));
+        // 🔥 PADRÃO: Azul Oceano (1)
+        spinnerTheme.setSelection(sharedPreferences.getInt("app_theme", 1));
     }
 
     private String formatDecimal(float value) {
@@ -679,7 +691,8 @@ public class SettingsFragment extends Fragment {
                     .putBoolean("subtract_fuel", switchSubtract.isChecked())
                     .putBoolean("auto_copy_fake_cpf", switchAutoCopyCpf.isChecked())
                 .putBoolean("cpf_interval_enabled", switchCpfInterval.isChecked())
-                .putInt("cpf_interval_minutes", parseInterval(editCpfInterval))
+                .putInt("cpf_interval_minutes", parseSafeInt(editCpfInterval, 2))
+                .putInt("cpf_inactivity_minutes", parseSafeInt(editCpfInactivity, 5))
                     .putBoolean("auto_check_updates", switchAutoCheckUpdates.isChecked())
                     .putBoolean("rest_interval_enabled", switchRestEnabled.isChecked())
                     .putString("rest_start_time", editRestStart.getText().toString())
@@ -701,7 +714,7 @@ public class SettingsFragment extends Fragment {
                 FirebaseHelper.syncUserMetadata(userId, installDate, subType, null);
             }
 
-            CloudSyncHelper.syncNow(requireContext());
+            CloudSyncHelper.syncNow(requireContext(), "Ajustes Gerais");
             MainActivity main = (MainActivity) getActivity();
             if (main != null) {
                 main.applyAppTheme(selectedTheme);
@@ -738,12 +751,12 @@ public class SettingsFragment extends Fragment {
         try { return Float.parseFloat(val); } catch (Exception e) { return 0; }
     }
 
-    private int parseInterval(TextInputEditText et) {
-        if (et == null || et.getText() == null) return 2;
+    private int parseSafeInt(TextInputEditText et, int defaultValue) {
+        if (et == null || et.getText() == null) return defaultValue;
         try {
             int val = Integer.parseInt(et.getText().toString());
-            return Math.max(1, val); // Mínimo 1 minuto
-        } catch (Exception e) { return 2; }
+            return Math.max(1, val); 
+        } catch (Exception e) { return defaultValue; }
     }
 
     private void showResetConfirmation() {

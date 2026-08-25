@@ -574,7 +574,7 @@ public class MapsFragment extends Fragment {
                     if (act != null) act.runOnUiThread(() -> {
                         Toast.makeText(getContext(), km.isCompleted ? "KM Finalizado!" : "KM Inicial salvo!", Toast.LENGTH_SHORT).show();
                         dialog.dismiss();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "KM Manual Salvo");
                     });
                 }).start();
             });
@@ -1285,7 +1285,7 @@ public class MapsFragment extends Fragment {
                         homeMarker = null; homeRadiusOverlay = null;
                         map.invalidate();
                         Toast.makeText(getContext(), "Endereço de casa removido", Toast.LENGTH_SHORT).show();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "Atividade no Mapa");
                         TrackingHelper.updateAutoTracking(requireContext());
                     })
                     .setNegativeButton("Manter Atual", null)
@@ -1347,7 +1347,7 @@ public class MapsFragment extends Fragment {
         Toast.makeText(getContext(), "Casa definida! Rastreamento iniciará ao sair daqui.", Toast.LENGTH_LONG).show();
 
         // Trigger auto cloud sync
-        CloudSyncHelper.syncNow(requireContext());
+        CloudSyncHelper.syncNow(requireContext(), "Casa Definida");
         TrackingHelper.updateAutoTracking(requireContext());
     }
 
@@ -1519,7 +1519,7 @@ public class MapsFragment extends Fragment {
                                     saveLoadingPoints();
                                     showLoadingMarkers();
                                     Toast.makeText(getContext(), "Ponto removido", Toast.LENGTH_SHORT).show();
-                                    CloudSyncHelper.syncNow(requireContext());
+                                    CloudSyncHelper.syncNow(requireContext(), "Ponto Removido");
                                 });
                             }
                         }).start();
@@ -1575,7 +1575,7 @@ public class MapsFragment extends Fragment {
                         saveLoadingPoints();
                         showLoadingMarkers();
                         Toast.makeText(getContext(), "Localização atualizada", Toast.LENGTH_SHORT).show();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "Atividade no Mapa");
                     });
                 }
             }).start();
@@ -1633,7 +1633,7 @@ public class MapsFragment extends Fragment {
                                 saveLoadingPoints();
                                 showLoadingMarkers();
                                 Toast.makeText(getContext(), "Ponto salvo com sucesso!", Toast.LENGTH_SHORT).show();
-                                CloudSyncHelper.syncNow(requireContext());
+                                CloudSyncHelper.syncNow(requireContext(), "Ponto Carregamento");
                             });
                         }
                     }).start();

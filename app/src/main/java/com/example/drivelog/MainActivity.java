@@ -117,6 +117,11 @@ public class MainActivity extends AppCompatActivity {
                 refreshTabs();
             });
         }
+        
+        // 🔥 Sincronização Automática com a Nuvem ao alterar qualquer configuração
+        if (key != null && !key.endsWith("_x") && !key.endsWith("_y") && !key.contains("interaction") && !key.contains("last_update")) {
+            CloudSyncHelper.syncNow(this, "Ajuste alterado");
+        }
     };
 
     @Override
@@ -140,10 +145,26 @@ public class MainActivity extends AppCompatActivity {
     private ListenerRegistration friendBadgeListener, devAlertListener, remoteMenuListener;
     private TextView textDrawerFriendsBadge;
     private List<String> currentRemoteMenus = null;
+    private int currentThemeIndex = -1;
+
+    private final Handler interactionHandler = new Handler(Looper.getMainLooper());
+    private final Runnable interactionRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (sharedPreferences != null) {
+                sharedPreferences.edit().putLong("last_drivelog_interaction", System.currentTimeMillis()).apply();
+            }
+            interactionHandler.postDelayed(this, 60000); // Atualiza a cada 1 minuto enquanto aberto
+        }
+    };
 
     @Override
     protected void onResume() {
         super.onResume();
+        // Marca que o usuário está ativo no app
+        sharedPreferences.edit().putLong("last_drivelog_interaction", System.currentTimeMillis()).apply();
+        interactionHandler.post(interactionRunnable);
+
         // Remove o ícone flutuante se ele estiver ativo ao voltar para o app
         stopService(new Intent(this, FloatingIconService.class));
         
@@ -152,8 +173,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        // Atualiza o timestamp ao sair ou pausar o app
+        sharedPreferences.edit().putLong("last_drivelog_interaction", System.currentTimeMillis()).apply();
+        interactionHandler.removeCallbacks(interactionRunnable);
+    }
+
+    @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
+        // Marca o momento da saída para iniciar a contagem de inatividade (suspender CPF automático)
+        sharedPreferences.edit().putLong("last_drivelog_interaction", System.currentTimeMillis()).apply();
+
         // 🔥 Quando o app é minimizado (Home/Recents)
         if (sharedPreferences != null && sharedPreferences.getBoolean("floating_icon_enabled", true)) {
             // Só iniciamos se tivermos a permissão de sobreposição
@@ -175,7 +207,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         sharedPreferences = getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
-        applyAppTheme(sharedPreferences.getInt("app_theme", 0));
+        // 🔥 PADRÃO: Azul Oceano (1) ao instalar pela primeira vez
+        applyAppTheme(sharedPreferences.getInt("app_theme", 1));
         
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
@@ -824,7 +857,7 @@ public class MainActivity extends AppCompatActivity {
         btnCancel.setOnClickListener(v -> dialog.dismiss());
         btnConfirm.setOnClickListener(v -> {
             dialog.dismiss();
-            new Thread(() -> { AppDatabase.getInstance(this).appDao().deleteRouteHeader(header); CloudSyncHelper.syncNow(this); }).start();
+            new Thread(() -> { AppDatabase.getInstance(this).appDao().deleteRouteHeader(header); CloudSyncHelper.syncNow(this, "Rota Excluída"); }).start();
         });
         dialog.show();
     }
@@ -851,6 +884,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void applyAppTheme(int themeIndex) {
+        if (currentThemeIndex == themeIndex) return;
+        
         int themeResId;
         switch (themeIndex) {
             case 1: themeResId = R.style.Theme_Entregas_Ocean; break;
@@ -860,7 +895,15 @@ public class MainActivity extends AppCompatActivity {
             case 5: themeResId = R.style.Theme_Entregas_DeepDark; break;
             default: themeResId = R.style.Theme_Entregas; break;
         }
+        
         setTheme(themeResId);
+        int oldIndex = currentThemeIndex;
+        currentThemeIndex = themeIndex;
+        
+        // Se a atividade já foi criada (oldIndex != -1), recria para aplicar as cores imediatamente
+        if (oldIndex != -1) {
+            recreate();
+        }
     }
 
     public boolean isSystemUIVisible() { return isSystemUIVisible; }

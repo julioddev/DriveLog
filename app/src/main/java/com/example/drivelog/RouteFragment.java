@@ -1490,7 +1490,7 @@ public class RouteFragment extends Fragment {
                 sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
                 
                 if (imp) startXlsxImport(); 
-                CloudSyncHelper.syncNow(requireContext()); 
+                CloudSyncHelper.syncNow(requireContext(), "Nova Rota"); 
             }); 
         }).start(); 
     }
@@ -1586,7 +1586,7 @@ public class RouteFragment extends Fragment {
             if (activity != null) activity.runOnUiThread(() -> {
                     exitUnifyMode();
                     Toast.makeText(getContext(), "Paradas unificadas com sucesso!", Toast.LENGTH_SHORT).show();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
                 });
         }).start();
     }
@@ -1613,13 +1613,13 @@ public class RouteFragment extends Fragment {
         });
     }
 
-    private void saveStopsOrder() { new Thread(() -> { AppDao dao = AppDatabase.getInstance(requireContext()).appDao(); for (int i = 0; i < currentStops.size(); i++) { currentStops.get(i).sortOrder = i; currentStops.get(i).stopNumber = i + 1; } dao.updateRouteStops(currentStops); Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(() -> CloudSyncHelper.syncNow(requireContext())); }).start(); }
+    private void saveStopsOrder() { new Thread(() -> { AppDao dao = AppDatabase.getInstance(requireContext()).appDao(); for (int i = 0; i < currentStops.size(); i++) { currentStops.get(i).sortOrder = i; currentStops.get(i).stopNumber = i + 1; } dao.updateRouteStops(currentStops); Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(() -> CloudSyncHelper.syncNow(requireContext(), "Ordem Paradas")); }).start(); }
 
     private void promptCreateGroup() { EditText i = new EditText(getContext()); i.setHint("Nome"); new AlertDialog.Builder(getContext()).setTitle("Grupo").setView(i).setPositiveButton("Ok", (d, w) -> { String n = i.getText().toString().trim(); if (!n.isEmpty()) showVisualColorPicker(n); }).show(); }
 
     private void showVisualColorPicker(String name) { View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_color_picker, null); SeekBar s = v.findViewById(R.id.seekHue); new AlertDialog.Builder(requireContext()).setTitle("Cor").setView(v).setPositiveButton("Ok", (d, w) -> { saveGroup(name, String.format("#%06X", (0xFFFFFF & Color.HSVToColor(new float[]{s.getProgress(), 1f, 1f})))); }).show(); }
 
-    private void saveGroup(String n, String c) { new Thread(() -> { AppDatabase.getInstance(requireContext()).appDao().insertRouteGroup(new RouteGroup(n, c, currentRouteId)); CloudSyncHelper.syncNow(requireContext()); }).start(); }
+    private void saveGroup(String n, String c) { new Thread(() -> { AppDatabase.getInstance(requireContext()).appDao().insertRouteGroup(new RouteGroup(n, c, currentRouteId)); CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota"); }).start(); }
 
     private void promptAssignGroup(RouteStop s) { new Thread(() -> { List<RouteGroup> gs = AppDatabase.getInstance(requireContext()).appDao().getGroupsForRoute(currentRouteId); Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(() -> { String[] ns = new String[gs.size()+1]; ns[0] = "Nenhum"; for (int i=0; i<gs.size(); i++) ns[i+1] = gs.get(i).name; new AlertDialog.Builder(getContext()).setItems(ns, (d, w) -> { new Thread(() -> { s.groupId = (w == 0) ? null : gs.get(w-1).id; AppDatabase.getInstance(requireContext()).appDao().updateRouteStop(s); }).start(); }).show(); }); }).start(); }
 
@@ -1750,7 +1750,7 @@ public class RouteFragment extends Fragment {
                         homeMarker = null; homeRadiusOverlay = null;
                         map.invalidate();
                         Toast.makeText(getContext(), "Endereço de casa removido", Toast.LENGTH_SHORT).show();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
                         TrackingHelper.updateAutoTracking(requireContext());
                     })
                     .setNegativeButton("Manter Atual", null)
@@ -1805,7 +1805,7 @@ public class RouteFragment extends Fragment {
         
         showHomeMarker();
         Toast.makeText(getContext(), "Casa definida! Rastreamento iniciará ao sair daqui.", Toast.LENGTH_LONG).show();
-        CloudSyncHelper.syncNow(requireContext());
+        CloudSyncHelper.syncNow(requireContext(), "Casa Definida");
         TrackingHelper.updateAutoTracking(requireContext());
     }
 
@@ -1949,7 +1949,7 @@ public class RouteFragment extends Fragment {
                                 getActivity().runOnUiThread(() -> {
                                     showLoadingMarkers();
                                     Toast.makeText(getContext(), "Ponto removido", Toast.LENGTH_SHORT).show();
-                                    CloudSyncHelper.syncNow(requireContext());
+                                    CloudSyncHelper.syncNow(requireContext(), "Ponto Removido");
                                 });
                             }
                         }).start();
@@ -2005,7 +2005,7 @@ public class RouteFragment extends Fragment {
                     getActivity().runOnUiThread(() -> {
                         showLoadingMarkers();
                         Toast.makeText(getContext(), "Localização atualizada", Toast.LENGTH_SHORT).show();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
                     });
                 }
             }).start();
@@ -2063,7 +2063,7 @@ public class RouteFragment extends Fragment {
                             getActivity().runOnUiThread(() -> {
                                 showLoadingMarkers();
                                 Toast.makeText(getContext(), "Ponto salvo com sucesso!", Toast.LENGTH_SHORT).show();
-                                CloudSyncHelper.syncNow(requireContext());
+                                CloudSyncHelper.syncNow(requireContext(), "Ponto Carregamento");
                             });
                         }
                     }).start();
@@ -2754,7 +2754,7 @@ public class RouteFragment extends Fragment {
                 if (isAdded()) {
                     getActivity().runOnUiThread(() -> {
                         Toast.makeText(getContext(), "Rota limpa!", Toast.LENGTH_SHORT).show();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
                     });
                 }
             }).start();
@@ -2957,7 +2957,7 @@ public class RouteFragment extends Fragment {
                     if (activity != null) {
                         activity.runOnUiThread(() -> {
                             Toast.makeText(getContext(), groupName + " criado com " + toUpdate.size() + " paradas!", Toast.LENGTH_SHORT).show();
-                            CloudSyncHelper.syncNow(requireContext());
+                            CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
                         });
                     }
                 }
@@ -3258,7 +3258,7 @@ public class RouteFragment extends Fragment {
                     sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
 
                     Toast.makeText(getContext(), "Parada adicionada!", Toast.LENGTH_SHORT).show();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
                 });
             }
         }).start();
@@ -4265,7 +4265,7 @@ public class RouteFragment extends Fragment {
                         sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
 
                         Toast.makeText(getContext(), "Importado com sucesso!", Toast.LENGTH_SHORT).show(); 
-                        CloudSyncHelper.syncNow(requireContext()); 
+                        CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota"); 
                     });
                 } else {
                     getActivity().runOnUiThread(importDialog::dismiss);
@@ -4464,7 +4464,7 @@ public class RouteFragment extends Fragment {
                     if (act != null) act.runOnUiThread(() -> {
                         Toast.makeText(getContext(), km.isCompleted ? "KM Finalizado!" : "KM Inicial salvo!", Toast.LENGTH_SHORT).show();
                         dialog.dismiss();
-                        CloudSyncHelper.syncNow(requireContext());
+                        CloudSyncHelper.syncNow(requireContext(), "KM Manual Salvo");
                     });
                 }).start();
             });
@@ -4775,7 +4775,7 @@ public class RouteFragment extends Fragment {
         new Thread(() -> {
             AppDatabase.getInstance(requireContext()).appDao().updateRouteStop(stop);
             Activity activity = getActivity();
-            if (activity != null) activity.runOnUiThread(() -> CloudSyncHelper.syncNow(requireContext()));
+            if (activity != null) activity.runOnUiThread(() -> CloudSyncHelper.syncNow(requireContext(), "Status Parada"));
         }).start();
     }
 
@@ -5450,7 +5450,7 @@ public class RouteFragment extends Fragment {
                     Activity activity = getActivity();
                     if (activity != null) {
                         activity.runOnUiThread(() -> {
-                            CloudSyncHelper.syncNow(requireContext());
+                            CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
                         });
                     }
                 }
@@ -5982,7 +5982,7 @@ public class RouteFragment extends Fragment {
                 if (activity != null) activity.runOnUiThread(() -> {
                     dialog.dismiss();
                     Toast.makeText(getContext(), "Otimização 2.0 concluída!", Toast.LENGTH_SHORT).show();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
                 });
             } catch (Exception e) {
                 Activity activity = getActivity();

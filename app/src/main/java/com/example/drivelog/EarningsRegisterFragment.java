@@ -257,7 +257,7 @@ public class EarningsRegisterFragment extends Fragment {
                 cancelEdit();
                 
                 // Trigger auto cloud sync if enabled
-                CloudSyncHelper.syncNow(requireContext());
+                CloudSyncHelper.syncNow(requireContext(), "Novo Ganho (Registro)");
             });
         }).start();
     }
@@ -281,7 +281,7 @@ public class EarningsRegisterFragment extends Fragment {
             
             requireActivity().runOnUiThread(() -> {
                 Toast.makeText(getContext(), "Dia finalizado! Ganhos concluídos.", Toast.LENGTH_SHORT).show();
-                CloudSyncHelper.syncNow(requireContext());
+                CloudSyncHelper.syncNow(requireContext(), "Novo Ganho (Registro)");
             });
         }).start();
     }

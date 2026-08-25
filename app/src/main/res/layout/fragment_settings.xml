@@ -469,21 +469,41 @@
             android:layout_marginBottom="4dp"
             app:useMaterialThemeColors="true" />
 
-        <com.google.android.material.textfield.TextInputLayout
+        <LinearLayout
             android:id="@+id/layoutCpfInterval"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Intervalo (minutos)"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/editCpfInterval"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="number"
-                android:text="2" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:hint="Trocar CPF a cada (minutos)"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editCpfInterval"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Suspender após inatividade (minutos)"
+                android:layout_marginBottom="12dp"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editCpfInactivity"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="5" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"

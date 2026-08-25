@@ -12,12 +12,14 @@ android {
         }
     }
 
+    val vCode = 16
+
     defaultConfig {
         applicationId = "com.example.drivelog"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.5.15"
+        versionCode = vCode
+        versionName = "1.5.$vCode"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

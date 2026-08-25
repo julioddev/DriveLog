@@ -149,7 +149,10 @@ public class MaintenanceHistoryFragment extends Fragment implements MaintenanceA
                         AppDatabase.getInstance(getContext()).appDao().deleteMaintenance(maint);
                         updateHistory();
                         if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "Manutenção excluída", Toast.LENGTH_SHORT).show());
+                            getActivity().runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Manutenção excluída", Toast.LENGTH_SHORT).show();
+                                CloudSyncHelper.syncNow(requireContext(), "Manutenção excluída");
+                            });
                         }
                     }).start();
                 }

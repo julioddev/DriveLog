@@ -88,7 +88,7 @@ public class PlatformAdapter extends RecyclerView.Adapter<PlatformAdapter.ViewHo
                 dialog.dismiss();
                 new Thread(() -> {
                     dao.deletePlatform(platform);
-                    CloudSyncHelper.syncNow(context);
+                    CloudSyncHelper.syncNow(context, "Plataforma Excluída");
                 }).start();
             });
             dialog.show();

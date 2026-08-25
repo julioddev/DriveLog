@@ -109,6 +109,7 @@ public class LoginActivity extends AppCompatActivity {
                         .putString("profile_email", account.getEmail())
                         .putBoolean("auto_backup_cloud", true)
                         .putBoolean("auto_copy_fake_cpf", true)
+                        .putInt("app_theme", 1)
                         .putLong("install_date", cloudDate)
                         .putInt("sub_type", cloudSub)
                         .commit();
@@ -125,6 +126,7 @@ public class LoginActivity extends AppCompatActivity {
                         .putString("profile_email", account.getEmail())
                         .putBoolean("auto_backup_cloud", true)
                         .putBoolean("auto_copy_fake_cpf", true)
+                        .putInt("app_theme", 1)
                         .commit();
                 
                 checkNextPermission();

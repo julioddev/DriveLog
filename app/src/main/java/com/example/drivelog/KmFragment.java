@@ -290,7 +290,7 @@ public class KmFragment extends Fragment implements KmAdapter.OnKmClickListener 
         Toast.makeText(getContext(), "Registro atualizado!", Toast.LENGTH_SHORT).show();
         
         // Trigger auto cloud sync if enabled
-        CloudSyncHelper.syncNow(requireContext());
+        CloudSyncHelper.syncNow(requireContext(), "Início Dia");
     }
 
     private void cancelEdit() {
@@ -338,7 +338,7 @@ public class KmFragment extends Fragment implements KmAdapter.OnKmClickListener 
             updateHistory();
             
             // Trigger auto cloud sync if enabled
-            CloudSyncHelper.syncNow(requireContext());
+            CloudSyncHelper.syncNow(requireContext(), "KM Manual Salvo");
         } else {
             Toast.makeText(getContext(), "Informe o KM Inicial", Toast.LENGTH_SHORT).show();
         }
@@ -405,7 +405,7 @@ public class KmFragment extends Fragment implements KmAdapter.OnKmClickListener 
         updateHistory();
         
         // Trigger auto cloud sync if enabled
-        CloudSyncHelper.syncNow(requireContext());
+        CloudSyncHelper.syncNow(requireContext(), "KM Finalizado");
     }
 
     private void updateHistory() {

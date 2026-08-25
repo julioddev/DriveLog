@@ -186,7 +186,10 @@ public class EarningsFragment extends Fragment implements EarningsAdapter.OnEarn
                         AppDatabase.getInstance(getContext()).appDao().deleteEarnings(earnings);
                         updateHistory();
                         if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "Registro excluído", Toast.LENGTH_SHORT).show());
+                            getActivity().runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Registro excluído", Toast.LENGTH_SHORT).show();
+                                CloudSyncHelper.syncNow(requireContext(), "Ganho excluído");
+                            });
                         }
                     }).start();
                 }
@@ -316,6 +319,7 @@ public class EarningsFragment extends Fragment implements EarningsAdapter.OnEarn
                     Toast.makeText(getContext(), "Ganho salvo!", Toast.LENGTH_SHORT).show();
                     cancelEdit();
                     updateHistory();
+                    CloudSyncHelper.syncNow(requireContext(), editingEarningsId == -1 ? "Novo Ganho" : "Ganho Editado");
                 });
             }
         }).start();

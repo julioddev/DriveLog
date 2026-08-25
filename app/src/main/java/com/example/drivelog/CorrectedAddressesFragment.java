@@ -276,7 +276,7 @@ public class CorrectedAddressesFragment extends Fragment {
                         if (getActivity() != null) {
                             getActivity().runOnUiThread(() -> {
                                 Toast.makeText(getContext(), "Endereços mixados com sucesso!", Toast.LENGTH_SHORT).show();
-                                CloudSyncHelper.syncNow(requireContext());
+                                CloudSyncHelper.syncNow(requireContext(), "Endereços Importados");
                             });
                         }
                     }).start();
@@ -408,7 +408,7 @@ public class CorrectedAddressesFragment extends Fragment {
                     new Thread(() -> {
                         AppDatabase.getInstance(requireContext()).appDao().deleteCorrectedAddress(corrected);
                         if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> CloudSyncHelper.syncNow(requireContext()));
+                            getActivity().runOnUiThread(() -> CloudSyncHelper.syncNow(requireContext(), "Fixação Removida"));
                         }
                     }).start();
                 })

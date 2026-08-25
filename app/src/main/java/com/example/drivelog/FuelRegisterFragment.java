@@ -344,7 +344,7 @@ public class FuelRegisterFragment extends Fragment {
                     Toast.makeText(getContext(), "Abastecimento salvo!", Toast.LENGTH_SHORT).show();
                     cancelEdit();
                     checkPendingFuel();
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), editingFuelId == -1 ? "Novo Abastecimento" : "Abastecimento Editado");
                 });
             }
         }).start();

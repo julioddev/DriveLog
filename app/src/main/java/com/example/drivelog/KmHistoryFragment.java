@@ -146,7 +146,10 @@ public class KmHistoryFragment extends Fragment implements KmAdapter.OnKmClickLi
                         AppDatabase.getInstance(getContext()).appDao().deleteDailyKm(dailyKm);
                         updateHistory();
                         if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "Registro excluído", Toast.LENGTH_SHORT).show());
+                            getActivity().runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Registro excluído", Toast.LENGTH_SHORT).show();
+                                CloudSyncHelper.syncNow(requireContext(), "KM excluído");
+                            });
                         }
                     }).start();
                 }

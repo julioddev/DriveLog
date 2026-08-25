@@ -83,9 +83,23 @@ public class TrackingService extends Service {
             boolean enabled = prefs.getBoolean("cpf_interval_enabled", false);
             
             if (enabled) {
+                long now = System.currentTimeMillis();
+                long lastInteraction = prefs.getLong("last_drivelog_interaction", 0);
+                int inactivityMinutes = prefs.getInt("cpf_inactivity_minutes", 5);
+                long inactivityMs = inactivityMinutes * 60000L;
+                
+                // Se passou o tempo configurado sem entrar no app, para de gerar
+                if (now - lastInteraction > inactivityMs) {
+                    if (lastCpfGenerationTime != 0) {
+                        android.util.Log.d("TrackingService", "CPF Timer suspenso: " + inactivityMinutes + " min de inatividade no DriveLog.");
+                        lastCpfGenerationTime = 0; 
+                    }
+                    cpfHandler.postDelayed(this, 10000);
+                    return;
+                }
+
                 int minutes = prefs.getInt("cpf_interval_minutes", 2);
                 long intervalMs = minutes * 60000L;
-                long now = System.currentTimeMillis();
 
                 // Se for a primeira execução do ciclo, marca o tempo atual
                 if (lastCpfGenerationTime == 0) {
@@ -169,6 +183,10 @@ public class TrackingService extends Service {
                 updateNotification("Gerador de CPF Ativo", "Automação por tempo em execução.");
             } else if ("RESET_CPF_TIMER".equals(action)) {
                 lastCpfGenerationTime = System.currentTimeMillis();
+                // Também conta como uma interação para manter o timer vivo por mais tempo
+                android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
+                prefs.edit().putLong("last_drivelog_interaction", lastCpfGenerationTime).apply();
+                
                 android.util.Log.d("TrackingService", "⏲️ Timer de CPF reiniciado pelo clique no atalho.");
                 if (wakeLock == null) acquireWakeLock();
                 updateNotification("Gerador de CPF Ativo", "Ciclo reiniciado pelo último acesso.");
@@ -411,6 +429,8 @@ public class TrackingService extends Service {
                                 session.estimatedFuelCost = (session.gpsDistance / lastConsumption) * lastFuelPrice;
                                 dao.updateDailyKm(session);
                             }
+                            // 🔥 Garante sincronização da rota em andamento (cooldown de 5s no helper evita sobrecarga)
+                            CloudSyncHelper.syncNow(getApplicationContext(), "Trajeto GPS");
                         });
                     }
                     pathPoints.postValue(new ArrayList<>(currentPoints));
@@ -749,7 +769,7 @@ public class TrackingService extends Service {
                     }
 
                     // Trigger auto cloud sync if enabled
-                    CloudSyncHelper.syncNow(getApplicationContext());
+                    CloudSyncHelper.syncNow(getApplicationContext(), "Trajeto Finalizado");
                 }
             }
             

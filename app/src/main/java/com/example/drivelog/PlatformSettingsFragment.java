@@ -97,7 +97,7 @@ public class PlatformSettingsFragment extends Fragment {
                             dao.insertPlatform(new Platform(name, true, val, nextIndex));
                             
                             // Trigger auto cloud sync if enabled
-                            CloudSyncHelper.syncNow(requireContext());
+                            CloudSyncHelper.syncNow(requireContext(), "Nova Plataforma");
                         }).start();
                     } else {
                         Toast.makeText(getContext(), "Nome é obrigatório", Toast.LENGTH_SHORT).show();

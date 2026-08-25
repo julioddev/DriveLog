@@ -160,7 +160,10 @@ public class FuelHistoryFragment extends Fragment implements FuelAdapter.OnFuelC
                         AppDatabase.getInstance(getContext()).appDao().deleteFuel(fuel);
                         updateHistory();
                         if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "Abastecimento excluído", Toast.LENGTH_SHORT).show());
+                            getActivity().runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Abastecimento excluído", Toast.LENGTH_SHORT).show();
+                                CloudSyncHelper.syncNow(requireContext(), "Abastecimento excluído");
+                            });
                         }
                     }).start();
                 }

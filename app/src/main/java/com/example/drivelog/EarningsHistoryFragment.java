@@ -145,7 +145,7 @@ public class EarningsHistoryFragment extends Fragment implements EarningsAdapter
                     Toast.makeText(getContext(), "Registro excluído", Toast.LENGTH_SHORT).show();
                     
                     // Trigger auto cloud sync if enabled
-                    CloudSyncHelper.syncNow(requireContext());
+                    CloudSyncHelper.syncNow(requireContext(), "Ajuste Histórico Ganhos");
                 })
                 .setNegativeButton("Cancelar", (dialog, which) -> adapter.notifyItemChanged(position))
                 .setOnCancelListener(dialog -> adapter.notifyItemChanged(position))
@@ -185,7 +185,7 @@ public class EarningsHistoryFragment extends Fragment implements EarningsAdapter
         Toast.makeText(getContext(), "Registro atualizado", Toast.LENGTH_SHORT).show();
         
         // Trigger auto cloud sync if enabled
-        CloudSyncHelper.syncNow(requireContext());
+        CloudSyncHelper.syncNow(requireContext(), "Ajuste Histórico Ganhos");
     }
 
     @Override
