@@ -131,13 +131,18 @@ public class SettingsParentFragment extends Fragment {
         void updateTabs(List<String> allowedIds) {
             activeTabs.clear();
             
-            // Garantir que abas básicas sempre apareçam se o allowedIds vier vazio ou incompleto
-            // Abas de 0 a 4 são as básicas (Geral, Mapa, Rastreamento, Plataformas, Recursos)
-            for (TabInfo tab : allTabs) {
-                if (tab.fixedIndex <= 4) {
-                    activeTabs.add(tab);
-                } else if (allowedIds != null && allowedIds.contains(tab.id)) {
-                    if (!activeTabs.contains(tab)) activeTabs.add(tab);
+            // Se não houver configuração remota (offline ou erro), mostra as básicas (0-4)
+            if (allowedIds == null) {
+                for (TabInfo tab : allTabs) {
+                    if (tab.fixedIndex <= 4) activeTabs.add(tab);
+                }
+            } else {
+                // 🔥 Se houver configuração remota, respeita rigorosamente o que vem da nuvem
+                for (TabInfo tab : allTabs) {
+                    // Aba Geral (0) sempre visível por segurança, as outras dependem do allowedIds
+                    if (tab.fixedIndex == 0 || allowedIds.contains(tab.id)) {
+                        activeTabs.add(tab);
+                    }
                 }
             }
             notifyDataSetChanged();
