@@ -600,6 +600,21 @@ public class RouteFragment extends Fragment {
         }
     }
 
+    private void promptHideFab(String prefKey, String label) {
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setTitle("Ocultar Botão")
+                .setMessage("Deseja ocultar o botão '" + label + "'?\n\nVocê pode ativá-lo novamente nas configurações de 'Visibilidade de Botões'.")
+                .setPositiveButton("Ocultar", (d, which) -> {
+                    sharedPreferences.edit().putBoolean(prefKey, false).apply();
+                    updateFloatingButtonsVisibility();
+                    Toast.makeText(getContext(), label + " ocultado", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancelar", null)
+                .create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        dialog.show();
+    }
+
     private void updateFloatingButtonsVisibility() {
         if (getContext() == null) return;
         
@@ -794,11 +809,21 @@ public class RouteFragment extends Fragment {
         if (fabAddStop != null) fabAddStop.setOnClickListener(v -> confirmAddStop());
         if (fabCenterMap != null) fabCenterMap.setOnClickListener(v -> toggleMapFocus());
         fabMapOrientation = view.findViewById(R.id.fabMapOrientation);
-        if (fabMapOrientation != null) fabMapOrientation.setOnClickListener(v -> toggleMapOrientation());
-        if (fabDeliveryApp != null) fabDeliveryApp.setOnClickListener(v -> launchDeliveryApp());
-        if (fabReportHazard != null) fabReportHazard.setOnClickListener(v -> promptReportHazard());
+        if (fabMapOrientation != null) {
+            fabMapOrientation.setOnClickListener(v -> toggleMapOrientation());
+            fabMapOrientation.setOnLongClickListener(v -> { promptHideFab("show_fab_orientation", "Modo Norte"); return true; });
+        }
+        if (fabDeliveryApp != null) {
+            fabDeliveryApp.setOnClickListener(v -> launchDeliveryApp());
+            fabDeliveryApp.setOnLongClickListener(v -> { promptHideFab("show_fab_delivery_app", "App de Entrega"); return true; });
+        }
+        if (fabReportHazard != null) {
+            fabReportHazard.setOnClickListener(v -> promptReportHazard());
+            fabReportHazard.setOnLongClickListener(v -> { promptHideFab("show_fab_report_hazard", "Reportar Alerta"); return true; });
+        }
         if (fabKmTracking != null) {
             fabKmTracking.setOnClickListener(v -> showKmTrackingPopup());
+            fabKmTracking.setOnLongClickListener(v -> { promptHideFab("show_fab_km_tracking", "Atalho Rastreamento"); return true; });
             observeTrackingStatus();
         }
 
@@ -4033,6 +4058,17 @@ public class RouteFragment extends Fragment {
                         .withEndAction(() -> fabDeliveryApp.animate().scaleX(1f).scaleY(1f).setDuration(150).start())
                         .start();
             }
+
+            // 🔥 Inicia ou Reinicia o timer de CPF automático no TrackingService
+            if (prefs.getBoolean("cpf_interval_enabled", false)) {
+                Intent intent = new Intent(getContext(), TrackingService.class);
+                intent.setAction("RESET_CPF_TIMER");
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    requireContext().startForegroundService(intent);
+                } else {
+                    requireContext().startService(intent);
+                }
+            }
         }
 
         String pkg = prefs.getString("delivery_app_package", "").trim();
@@ -4319,6 +4355,120 @@ public class RouteFragment extends Fragment {
         MaterialButton btnManageHome = customView.findViewById(R.id.btnManageHome);
         MaterialButton btnLoadingPoints = customView.findViewById(R.id.btnManageLoadingPoints);
         MaterialButton btnTrackingHistory = customView.findViewById(R.id.btnTrackingHistory);
+        MaterialButton btnManualKmRegister = customView.findViewById(R.id.btnManualKmRegister);
+        MaterialButton btnManualKmHistory = customView.findViewById(R.id.btnManualKmHistory);
+
+        // --- Elementos de Registro Manual ---
+        View layoutMain = customView.findViewById(R.id.layoutTrackingMain);
+        View layoutManual = customView.findViewById(R.id.layoutManualRegister);
+        EditText editManualDate = customView.findViewById(R.id.editManualKmDate);
+        EditText editManualStart = customView.findViewById(R.id.editManualStartKm);
+        EditText editManualEnd = customView.findViewById(R.id.editManualEndKm);
+        MaterialButton btnSaveManual = customView.findViewById(R.id.btnSaveManualKm);
+        ImageButton btnBack = customView.findViewById(R.id.btnBackToTracking);
+
+        java.util.Calendar manualCalendar = java.util.Calendar.getInstance();
+        SimpleDateFormat manualSdf = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
+        if (editManualDate != null) {
+            editManualDate.setText(manualSdf.format(manualCalendar.getTime()));
+            editManualDate.setOnClickListener(v -> {
+                new android.app.DatePickerDialog(requireContext(), (view, year, month, day) -> {
+                    manualCalendar.set(year, month, day);
+                    editManualDate.setText(manualSdf.format(manualCalendar.getTime()));
+                }, manualCalendar.get(java.util.Calendar.YEAR), manualCalendar.get(java.util.Calendar.MONTH), manualCalendar.get(java.util.Calendar.DAY_OF_MONTH)).show();
+            });
+        }
+
+        if (btnManualKmRegister != null) {
+            AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+            DailyKm pending = dao.getLastPendingDailyKm();
+            if (pending != null) {
+                btnManualKmRegister.setText("Finalizar KM Manual");
+                btnManualKmRegister.setIconResource(android.R.drawable.ic_menu_save);
+            }
+
+            btnManualKmRegister.setOnClickListener(v -> {
+                layoutMain.setVisibility(View.GONE);
+                layoutManual.setVisibility(View.VISIBLE);
+                
+                if (pending != null) {
+                    manualCalendar.setTimeInMillis(pending.date);
+                    if (editManualDate != null) editManualDate.setText(manualSdf.format(manualCalendar.getTime()));
+                    if (editManualStart != null) {
+                        editManualStart.setText(String.valueOf(pending.kmStart));
+                        editManualStart.setEnabled(false); // Evita mudar o inicial ao finalizar
+                    }
+                    if (btnSaveManual != null) btnSaveManual.setText("Finalizar e Calcular");
+                    if (editManualEnd != null) {
+                        editManualEnd.setText("");
+                        editManualEnd.requestFocus();
+                    }
+                } else {
+                    if (btnSaveManual != null) btnSaveManual.setText("Salvar Registro");
+                    if (editManualStart != null) {
+                        editManualStart.setText("");
+                        editManualStart.setEnabled(true);
+                    }
+                    if (editManualEnd != null) editManualEnd.setText("");
+                }
+            });
+        }
+
+        if (btnBack != null) {
+            btnBack.setOnClickListener(v -> {
+                layoutManual.setVisibility(View.GONE);
+                layoutMain.setVisibility(View.VISIBLE);
+            });
+        }
+
+        if (btnSaveManual != null) {
+            btnSaveManual.setOnClickListener(v -> {
+                String startStr = editManualStart.getText().toString().trim();
+                if (startStr.isEmpty()) {
+                    Toast.makeText(getContext(), "Informe o KM inicial", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                double kmStart = parseSafeDouble(startStr);
+                String endStr = editManualEnd.getText().toString().trim();
+                double kmEnd = endStr.isEmpty() ? 0 : parseSafeDouble(endStr);
+
+                if (kmEnd > 0 && kmEnd < kmStart) {
+                    Toast.makeText(getContext(), "KM final menor que inicial", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                new Thread(() -> {
+                    AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                    DailyKm pending = dao.getLastPendingDailyKm();
+                    DailyKm km = (pending != null) ? pending : new DailyKm();
+                    
+                    km.date = manualCalendar.getTimeInMillis();
+                    km.kmStart = kmStart;
+                    km.kmEnd = kmEnd;
+                    km.isCompleted = kmEnd > 0;
+                    if (km.isCompleted) {
+                        km.totalKm = kmEnd - kmStart;
+                        Fuel lastFuel = dao.getLastCompletedFuel();
+                        if (lastFuel != null && lastFuel.liters > 0 && lastFuel.kmDriven > 0) {
+                            double cons = lastFuel.kmDriven / lastFuel.liters;
+                            km.consumptionUsed = cons;
+                            km.estimatedFuelCost = (km.totalKm / cons) * lastFuel.pricePerLiter;
+                        }
+                    }
+                    
+                    if (pending != null) dao.updateDailyKm(km);
+                    else dao.insertDailyKm(km);
+                    
+                    Activity act = getActivity();
+                    if (act != null) act.runOnUiThread(() -> {
+                        Toast.makeText(getContext(), km.isCompleted ? "KM Finalizado!" : "KM Inicial salvo!", Toast.LENGTH_SHORT).show();
+                        dialog.dismiss();
+                        CloudSyncHelper.syncNow(requireContext());
+                    });
+                }).start();
+            });
+        }
 
         boolean homeDefined = sharedPreferences.getFloat("home_lat", 0) != 0;
         if (btnManageHome != null) {
@@ -4341,6 +4491,15 @@ public class RouteFragment extends Fragment {
                 dialog.dismiss();
                 if (getActivity() instanceof MainActivity) {
                     ((MainActivity) getActivity()).openTrackingHistory();
+                }
+            });
+        }
+
+        if (btnManualKmHistory != null) {
+            btnManualKmHistory.setOnClickListener(v -> {
+                dialog.dismiss();
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).openManualKmHistory();
                 }
             });
         }

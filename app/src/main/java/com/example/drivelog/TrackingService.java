@@ -73,6 +73,43 @@ public class TrackingService extends Service {
     private static final int AUTO_PAUSE_MINUTES = 10;
     private static final int AUTO_PAUSE_RADIUS = 40;
 
+    // --- Lógica de Geração de CPF por Intervalo ---
+    private long lastCpfGenerationTime = 0;
+    private final android.os.Handler cpfHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable cpfRunnable = new Runnable() {
+        @Override
+        public void run() {
+            android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
+            boolean enabled = prefs.getBoolean("cpf_interval_enabled", false);
+            
+            if (enabled) {
+                int minutes = prefs.getInt("cpf_interval_minutes", 2);
+                long intervalMs = minutes * 60000L;
+                long now = System.currentTimeMillis();
+
+                // Se for a primeira execução do ciclo, marca o tempo atual
+                if (lastCpfGenerationTime == 0) {
+                    lastCpfGenerationTime = now;
+                    android.util.Log.d("TrackingService", "CPF Timer iniciado: Próxima geração em " + minutes + " min.");
+                }
+
+                if (now - lastCpfGenerationTime >= intervalMs) {
+                    lastCpfGenerationTime = now;
+                    android.util.Log.d("TrackingService", "⏲️ Gerando CPF por tempo...");
+                    // 🔥 Garante que a UI (Toast) rode na Main Thread
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> 
+                        CpfHelper.generateAndCopyCpf(TrackingService.this)
+                    );
+                }
+            } else {
+                lastCpfGenerationTime = 0; // Reseta se for desativado
+            }
+            
+            // Verifica com mais frequência para não perder o "timing"
+            cpfHandler.postDelayed(this, 5000); 
+        }
+    };
+
     private final IBinder binder = new LocalBinder();
 
     public class LocalBinder extends Binder {
@@ -86,6 +123,9 @@ public class TrackingService extends Service {
         super.onCreate();
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         createNotificationChannel();
+        
+        // Inicia o cronômetro de CPF
+        cpfHandler.post(cpfRunnable);
     }
 
     @Override
@@ -124,6 +164,14 @@ public class TrackingService extends Service {
                 pauseTracking();
             } else if ("STOP".equals(action)) {
                 stopTracking();
+            } else if ("CPF_ONLY".equals(action)) {
+                acquireWakeLock();
+                updateNotification("Gerador de CPF Ativo", "Automação por tempo em execução.");
+            } else if ("RESET_CPF_TIMER".equals(action)) {
+                lastCpfGenerationTime = System.currentTimeMillis();
+                android.util.Log.d("TrackingService", "⏲️ Timer de CPF reiniciado pelo clique no atalho.");
+                if (wakeLock == null) acquireWakeLock();
+                updateNotification("Gerador de CPF Ativo", "Ciclo reiniciado pelo último acesso.");
             }
         }
         return START_STICKY;
@@ -711,6 +759,7 @@ public class TrackingService extends Service {
         
         isTracking.postValue(false);
         isPaused.postValue(false);
+        lastCpfGenerationTime = 0;
 
         if (locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
@@ -754,11 +803,13 @@ public class TrackingService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        cpfHandler.removeCallbacks(cpfRunnable);
         if (locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
             locationCallback = null;
         }
         executor.shutdown();
+        releaseWakeLock();
     }
 
     @Nullable

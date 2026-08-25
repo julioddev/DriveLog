@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.drivelog"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.5.12"
+        versionCode = 13
+        versionName = "1.5.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -79,6 +79,36 @@ android {
             excludes += "/META-INF/DEPENDENCIES"
         }
     }
+}
+
+tasks.register("generateUpdateJson") {
+    group = "publishing"
+    description = "Gera o arquivo update.json baseado na versão do build.gradle.kts"
+    
+    doLast {
+        val versionCode = android.defaultConfig.versionCode
+        val versionName = android.defaultConfig.versionName
+        val apkUrl = "https://github.com/julioddev/DriveLog/releases/latest/download/app-debug.apk"
+        val releaseNotes = "Melhorias gerais e correções de bugs."
+        
+        val jsonContent = """
+            {
+              "versionCode": $versionCode,
+              "versionName": "$versionName",
+              "apkUrl": "$apkUrl",
+              "releaseNotes": "$releaseNotes"
+            }
+        """.trimIndent()
+        
+        val updateFile = file("../update.json")
+        updateFile.writeText(jsonContent)
+        println("✅ update.json atualizado para a versão $versionName (Build $versionCode)")
+    }
+}
+
+// Faz o update.json ser gerado automaticamente ao compilar o APK de Debug
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    finalizedBy("generateUpdateJson")
 }
 
 dependencies {

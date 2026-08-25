@@ -14,11 +14,7 @@ public class KmPagerAdapter extends FragmentStateAdapter {
     @Override
     public Fragment createFragment(int position) {
         if (position == 0) {
-            return new MapsFragment();
-        } else if (position == 1) {
             return new TrackHistoryFragment();
-        } else if (position == 2) {
-            return new KmRegisterFragment();
         } else {
             return new KmHistoryFragment();
         }
@@ -26,6 +22,6 @@ public class KmPagerAdapter extends FragmentStateAdapter {
 
     @Override
     public int getItemCount() {
-        return 4;
+        return 2;
     }
 }

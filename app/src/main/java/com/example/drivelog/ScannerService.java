@@ -851,6 +851,8 @@ public class ScannerService extends AccessibilityService {
         broadcastLocalAlert(getString(R.string.det_route_screen), getString(R.string.scanner_alert_message));
     }
 
+
+
     private void sendSystemNotification(String title, String content, int id) {
         android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(android.content.Context.NOTIFICATION_SERVICE);
         

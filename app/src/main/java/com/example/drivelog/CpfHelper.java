@@ -7,22 +7,31 @@ import android.widget.Toast;
 import java.util.Random;
 
 public class CpfHelper {
+    /**
+     * Gera um novo CPF fictício e copia para a área de transferência.
+     */
     public static void generateAndCopyCpf(Context context) {
         String cpf = generateFakeCpf();
+        android.util.Log.d("CpfHelper", "CPF Gerado: " + cpf);
         ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-        ClipData clip = ClipData.newPlainText("CPF", cpf);
         if (clipboard != null) {
+            ClipData clip = ClipData.newPlainText("CPF fictício", cpf);
             clipboard.setPrimaryClip(clip);
-            // Mensagem removida para tornar a cópia silenciosa
+            // Cópia realizada de forma silenciosa para não interromper o motorista
         }
     }
 
     private static String generateFakeCpf() {
         Random random = new Random();
         int[] digits = new int[11];
-        // Gera os 9 primeiros dígitos
-        for (int i = 0; i < 9; i++) digits[i] = random.nextInt(10);
-        // Calcula os dígitos verificadores
+        
+        boolean allSame = true;
+        for (int i = 0; i < 9; i++) {
+            digits[i] = random.nextInt(10);
+            if (i > 0 && digits[i] != digits[i-1]) allSame = false;
+        }
+        if (allSame) return generateFakeCpf();
+
         digits[9] = calculateCpfDigit(digits, 10);
         digits[10] = calculateCpfDigit(digits, 11);
         

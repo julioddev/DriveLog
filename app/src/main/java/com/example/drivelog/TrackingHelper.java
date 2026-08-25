@@ -77,14 +77,26 @@ public class TrackingHelper {
             cancelAlarm(context, 101);
             cancelAlarm(context, 102);
             
+            boolean cpfEnabled = prefs.getBoolean("cpf_interval_enabled", false);
+            
             // Se mudou para manual, paramos o monitoramento de saída (MONITOR)
             // mas MANTEMOS o rastreio ativo se o usuário deu Play manualmente.
             if (!Boolean.TRUE.equals(TrackingService.isTracking.getValue())) {
-                Intent intent = new Intent(context, TrackingService.class);
-                context.stopService(intent);
-            } else {
-                // Se estiver rastreando manualmente, apenas garantimos que não haja MONITOR pendente
-                // No próximo "Arrivo em Casa", o Auto-Stop cuidará de encerrar e limpar.
+                if (cpfEnabled) {
+                    // Se o CPF automático estiver ligado, iniciamos o serviço apenas para o timer
+                    Intent intent = new Intent(context.getApplicationContext(), TrackingService.class);
+                    intent.setAction("CPF_ONLY");
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            context.getApplicationContext().startForegroundService(intent);
+                        } else {
+                            context.getApplicationContext().startService(intent);
+                        }
+                    } catch (Exception ignored) {}
+                } else {
+                    Intent intent = new Intent(context, TrackingService.class);
+                    context.stopService(intent);
+                }
             }
         }
     }

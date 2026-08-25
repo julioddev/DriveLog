@@ -950,11 +950,26 @@ public class MainActivity extends AppCompatActivity {
             int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_km);
             viewPager.setCurrentItem(pos, true);
             
-            // Aguarda um pouco para o fragment carregar e muda a aba interna
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                 for (Fragment f : getSupportFragmentManager().getFragments()) {
                     if (f instanceof KmParentFragment) {
                         ((KmParentFragment) f).switchToHistory();
+                        break;
+                    }
+                }
+            }, 300);
+        }
+    }
+
+    public void openManualKmHistory() {
+        if (viewPager != null && viewPager.getAdapter() instanceof ViewPagerAdapter) {
+            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_km);
+            viewPager.setCurrentItem(pos, true);
+            
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                for (Fragment f : getSupportFragmentManager().getFragments()) {
+                    if (f instanceof KmParentFragment) {
+                        ((KmParentFragment) f).switchToManualHistory();
                         break;
                     }
                 }

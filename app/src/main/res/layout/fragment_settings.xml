@@ -457,9 +457,33 @@
             android:id="@+id/switchAutoCopyCpf"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Auto-copiar CPF fictício ao abrir app de entrega"
+            android:text="Auto-copiar CPF ao abrir app de entrega"
             android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"/>
+            android:layout_marginBottom="4dp"/>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchCpfInterval"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Gerar CPF por intervalo (quando em entrega)"
+            android:layout_marginBottom="4dp"
+            app:useMaterialThemeColors="true" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/layoutCpfInterval"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Intervalo (minutos)"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editCpfInterval"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:text="2" />
+        </com.google.android.material.textfield.TextInputLayout>
 
         <TextView
             android:layout_width="wrap_content"

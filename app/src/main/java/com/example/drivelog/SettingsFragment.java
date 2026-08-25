@@ -44,10 +44,10 @@ public class SettingsFragment extends Fragment {
     private Button btnUpgradeSubscription;
     private Button btnDetectGoogle, btnLogoutGoogle, btnBackToLogin, btnCheckUpdates, btnAboutApp;
     private TextView textSyncLog, textOverlayWarning, textNotificationWarning;
-    private TextInputEditText editWeeklyGoal, editConsumption, editFuelPrice, editRestStart, editRestEnd;
-    private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf, switchAutoCheckUpdates;
+    private TextInputEditText editWeeklyGoal, editConsumption, editFuelPrice, editRestStart, editRestEnd, editCpfInterval;
+    private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf, switchCpfInterval, switchAutoCheckUpdates;
     private RadioGroup rgKmSource, rgAppMode, rgSubscription, rgComboioVisibility;
-    private View layoutSubscriptionSimulation, layoutDevTools, layoutDevComboioVisibility;
+    private View layoutSubscriptionSimulation, layoutDevTools, layoutDevComboioVisibility, layoutCpfInterval;
     private Spinner spinnerTab, spinnerTheme;
     private SharedPreferences sharedPreferences;
     private GoogleDriveHelper driveHelper;
@@ -107,6 +107,9 @@ public class SettingsFragment extends Fragment {
         editFuelPrice = view.findViewById(R.id.editDefaultFuelPrice);
         switchSubtract = view.findViewById(R.id.switchSubtractFuel);
         switchAutoCopyCpf = view.findViewById(R.id.switchAutoCopyCpf);
+        switchCpfInterval = view.findViewById(R.id.switchCpfInterval);
+        layoutCpfInterval = view.findViewById(R.id.layoutCpfInterval);
+        editCpfInterval = view.findViewById(R.id.editCpfInterval);
         switchAutoBackup = view.findViewById(R.id.switchAutoBackup);
         switchRestEnabled = view.findViewById(R.id.switchRestEnabled);
         switchAutoCheckUpdates = view.findViewById(R.id.switchAutoCheckUpdates);
@@ -225,6 +228,11 @@ public class SettingsFragment extends Fragment {
         btnExportLocalDb.setOnClickListener(v -> performLocalDbExport());
 
         btnDetectGoogle.setOnClickListener(v -> detectGoogleProfile());
+        switchCpfInterval.setOnCheckedChangeListener((v, isChecked) -> {
+            layoutCpfInterval.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+            saveSettings();
+        });
+
         btnLogoutGoogle.setOnClickListener(v -> logoutGoogle());
         btnBackToLogin.setOnClickListener(v -> {
             new AlertDialog.Builder(getContext())
@@ -599,6 +607,9 @@ public class SettingsFragment extends Fragment {
         editFuelPrice.setText(formatDecimal(sharedPreferences.getFloat("default_fuel_price", 5.50f)));
         switchSubtract.setChecked(sharedPreferences.getBoolean("subtract_fuel", false));
         switchAutoCopyCpf.setChecked(sharedPreferences.getBoolean("auto_copy_fake_cpf", true));
+        switchCpfInterval.setChecked(sharedPreferences.getBoolean("cpf_interval_enabled", false));
+        layoutCpfInterval.setVisibility(switchCpfInterval.isChecked() ? View.VISIBLE : View.GONE);
+        editCpfInterval.setText(String.valueOf(sharedPreferences.getInt("cpf_interval_minutes", 2)));
         switchAutoCheckUpdates.setChecked(sharedPreferences.getBoolean("auto_check_updates", true));
         
         boolean restEnabled = sharedPreferences.getBoolean("rest_interval_enabled", false);
@@ -667,6 +678,8 @@ public class SettingsFragment extends Fragment {
                     .putFloat("default_fuel_price", parseDecimal(editFuelPrice))
                     .putBoolean("subtract_fuel", switchSubtract.isChecked())
                     .putBoolean("auto_copy_fake_cpf", switchAutoCopyCpf.isChecked())
+                .putBoolean("cpf_interval_enabled", switchCpfInterval.isChecked())
+                .putInt("cpf_interval_minutes", parseInterval(editCpfInterval))
                     .putBoolean("auto_check_updates", switchAutoCheckUpdates.isChecked())
                     .putBoolean("rest_interval_enabled", switchRestEnabled.isChecked())
                     .putString("rest_start_time", editRestStart.getText().toString())
@@ -678,6 +691,8 @@ public class SettingsFragment extends Fragment {
                     .putInt("default_tab", spinnerTab.getSelectedItemPosition())
                     .putInt("app_theme", selectedTheme)
                     .commit();
+
+            TrackingHelper.updateAutoTracking(requireContext());
 
             // 🔥 Sincroniza a mudança de assinatura e data de instalação com o Firebase
             String userId = sharedPreferences.getString("current_user_id", null);
@@ -721,6 +736,14 @@ public class SettingsFragment extends Fragment {
         String val = editText.getText().toString().replace(",", ".");
         if (val.isEmpty()) return 0;
         try { return Float.parseFloat(val); } catch (Exception e) { return 0; }
+    }
+
+    private int parseInterval(TextInputEditText et) {
+        if (et == null || et.getText() == null) return 2;
+        try {
+            int val = Integer.parseInt(et.getText().toString());
+            return Math.max(1, val); // Mínimo 1 minuto
+        } catch (Exception e) { return 2; }
     }
 
     private void showResetConfirmation() {

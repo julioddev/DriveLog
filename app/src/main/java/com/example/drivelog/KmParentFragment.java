@@ -38,13 +38,9 @@ public class KmParentFragment extends Fragment {
 
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
             if (position == 0) {
-                tab.setText("Rastreamento");
-            } else if (position == 1) {
                 tab.setText("Gravações/Rotas");
-            } else if (position == 2) {
-                tab.setText("Registrar");
             } else {
-                tab.setText("Histórico");
+                tab.setText("Histórico Manual");
             }
         }).attach();
 
@@ -60,23 +56,13 @@ public class KmParentFragment extends Fragment {
         return view;
     }
 
-    public void switchToRegisterAndEdit(DailyKm dailyKm) {
-        viewPager.setCurrentItem(2); // KmRegisterFragment is at index 2
-        for (Fragment fragment : getChildFragmentManager().getFragments()) {
-            if (fragment instanceof KmRegisterFragment) {
-                ((KmRegisterFragment) fragment).startEdit(dailyKm);
-                break;
-            }
-        }
-    }
-
-    public void switchToTracking() {
-        if (viewPager != null) {
-            viewPager.setCurrentItem(0, false);
-        }
-    }
-
     public void switchToHistory() {
+        if (viewPager != null) {
+            viewPager.setCurrentItem(0, true);
+        }
+    }
+
+    public void switchToManualHistory() {
         if (viewPager != null) {
             viewPager.setCurrentItem(1, true);
         }
