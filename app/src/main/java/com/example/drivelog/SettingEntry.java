@@ -14,6 +14,7 @@ public class SettingEntry {
 
     public SettingEntry() {}
 
+    @androidx.room.Ignore
     public SettingEntry(@NonNull String key, String value, String type) {
         this.key = key;
         this.value = value;

@@ -13,6 +13,7 @@ public class RouteGroup {
 
     public RouteGroup() {}
 
+    @androidx.room.Ignore
     public RouteGroup(String name, String color, int routeId) {
         this.name = name;
         this.color = color;

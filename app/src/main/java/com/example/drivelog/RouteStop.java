@@ -45,6 +45,7 @@ public class RouteStop {
 
     public RouteStop() {}
 
+    @androidx.room.Ignore
     public RouteStop(String address, double latitude, double longitude) {
         this.address = address;
         this.latitude = latitude;

@@ -20,6 +20,7 @@ public class RouteHeader {
 
     public RouteHeader() {}
 
+    @androidx.room.Ignore
     public RouteHeader(String name) {
         this.name = name;
         this.date = System.currentTimeMillis();

@@ -14,6 +14,7 @@ public class LoadingPoint {
 
     public LoadingPoint() {}
 
+    @androidx.room.Ignore
     public LoadingPoint(String name, double latitude, double longitude, String platformName) {
         this.name = name;
         this.latitude = latitude;

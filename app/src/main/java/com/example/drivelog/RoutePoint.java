@@ -14,6 +14,7 @@ public class RoutePoint {
 
     public RoutePoint() {}
 
+    @androidx.room.Ignore
     public RoutePoint(int dailyKmId, double latitude, double longitude, long timestamp) {
         this.dailyKmId = dailyKmId;
         this.latitude = latitude;

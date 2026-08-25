@@ -27,6 +27,7 @@ public class CorrectedAddress {
 
     public CorrectedAddress() {}
 
+    @androidx.room.Ignore
     public CorrectedAddress(String address, String neighborhood, double latitude, double longitude) {
         this.address = address;
         this.neighborhood = neighborhood;
@@ -35,6 +36,7 @@ public class CorrectedAddress {
         this.updatedAt = System.currentTimeMillis();
     }
 
+    @androidx.room.Ignore
     public CorrectedAddress(String address, String neighborhood, String city, double latitude, double longitude) {
         this.address = address;
         this.neighborhood = neighborhood;
