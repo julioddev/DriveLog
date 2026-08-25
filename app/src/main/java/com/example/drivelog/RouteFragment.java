@@ -140,10 +140,7 @@ public class RouteFragment extends Fragment {
                 else if (diff < -180) diff += 360;
                 
                 // 🔥 Filtro de Limiar: Ignora variações minúsculas (ruído)
-                if (Math.abs(diff) < 1.2f && isMapFollowingHeading) {
-                     // Se a mudança for pequena e estiver seguindo o rumo, não gira o mapa para evitar flicagem
-                     return;
-                }
+                if (Math.abs(diff) < 1.0f) return;
 
                 currentAzimuth = currentAzimuth + alpha * diff;
                 if (currentAzimuth < 0) currentAzimuth += 360;
@@ -154,6 +151,8 @@ public class RouteFragment extends Fragment {
                     if (userDirectionMarker != null) userDirectionMarker.setRotation(0); 
                 } else if (userDirectionMarker != null) {
                     userDirectionMarker.setRotation(currentAzimuth);
+                    // 🔥 Importante: Força a atualização do mapa para o marcador girar mesmo com o mapa fixo
+                    if (map != null) map.invalidate();
                 }
             }
         }
