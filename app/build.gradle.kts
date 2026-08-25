@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.drivelog"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.5.13"
+        versionCode = 14
+        versionName = "1.5.14"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -86,29 +86,30 @@ tasks.register("generateUpdateJson") {
     description = "Gera o arquivo update.json baseado na versão do build.gradle.kts"
     
     doLast {
-        val versionCode = android.defaultConfig.versionCode
-        val versionName = android.defaultConfig.versionName
+        val vCode = android.defaultConfig.versionCode ?: 0
+        val vName = android.defaultConfig.versionName ?: "1.0"
         val apkUrl = "https://github.com/julioddev/DriveLog/releases/latest/download/app-debug.apk"
         val releaseNotes = "Melhorias gerais e correções de bugs."
         
         val jsonContent = """
-            {
-              "versionCode": $versionCode,
-              "versionName": "$versionName",
-              "apkUrl": "$apkUrl",
-              "releaseNotes": "$releaseNotes"
-            }
+{
+  "versionCode": $vCode,
+  "versionName": "$vName",
+  "apkUrl": "$apkUrl",
+  "releaseNotes": "$releaseNotes"
+}
         """.trimIndent()
         
         val updateFile = file("../update.json")
         updateFile.writeText(jsonContent)
-        println("✅ update.json atualizado para a versão $versionName (Build $versionCode)")
+        println("✅ update.json atualizado com sucesso: $vName ($vCode)")
     }
 }
 
-// Faz o update.json ser gerado automaticamente ao compilar o APK de Debug
-tasks.matching { it.name == "assembleDebug" }.configureEach {
-    finalizedBy("generateUpdateJson")
+// Garante que o JSON seja atualizado sempre que houver um build ou sincronização
+afterEvaluate {
+    tasks.findByName("preBuild")?.finalizedBy("generateUpdateJson")
+    tasks.findByName("assembleDebug")?.finalizedBy("generateUpdateJson")
 }
 
 dependencies {
