@@ -101,15 +101,7 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private final SharedPreferences.OnSharedPreferenceChangeListener prefListener = (prefs, key) -> {
-        if ("app_mode".equals(key)) {
-            runOnUiThread(() -> {
-                updateNavigationIcon();
-                refreshTabs();
-                if (viewPager != null && viewPager.getAdapter() instanceof ViewPagerAdapter) {
-                    ((ViewPagerAdapter) viewPager.getAdapter()).refreshEnabledTabs(prefs);
-                }
-            });
-        } else if (key.startsWith("tab_") || key.equals("maps_enabled")) {
+        if (key.startsWith("tab_") || key.equals("maps_enabled")) {
             runOnUiThread(this::refreshTabs);
         } else if ("sub_type".equals(key)) {
             runOnUiThread(() -> {
@@ -207,6 +199,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         sharedPreferences = getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
+        
+        // 🔥 FORÇA MODO MAPA COMO PADRÃO ÚNICO
+        sharedPreferences.edit().putInt("app_mode", 1).apply();
+        
         // 🔥 PADRÃO: Azul Oceano (1) ao instalar pela primeira vez
         applyAppTheme(sharedPreferences.getInt("app_theme", 1));
         
@@ -223,6 +219,18 @@ public class MainActivity extends AppCompatActivity {
         String uniqueId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
         org.osmdroid.config.Configuration.getInstance().load(this, sharedPreferences);
         org.osmdroid.config.Configuration.getInstance().setUserAgentValue("DriveLogApp_v142_" + uniqueId);
+        
+        // 🔥 MELHORIA DE PERFORMANCE NO MAPA
+        // Aumenta o cache para 1GB (em vez do padrão menor) e aumenta o paralelismo
+        org.osmdroid.config.Configuration.getInstance().setTileFileSystemCacheMaxBytes(1024L * 1024L * 1024L); 
+        org.osmdroid.config.Configuration.getInstance().setTileDownloadThreads((short) 12); // Mais threads para baixar simultaneamente
+        org.osmdroid.config.Configuration.getInstance().setCacheMapTileCount((short) 60); // Mais tiles em memória RAM
+        
+        // Configurações de trim do cache (limpa quando chegar perto do limite)
+        org.osmdroid.config.Configuration.getInstance().setTileFileSystemCacheTrimBytes(800L * 1024L * 1024L);
+
+        // 🔥 NOVO: Melhora a velocidade de resposta do disco
+        org.osmdroid.config.Configuration.getInstance().setTileDownloadMaxQueueSize((short) 100);
         
         File tileCache = new File(getCacheDir(), "osmdroid_tiles_v142");
         if (!tileCache.exists()) tileCache.mkdirs();
@@ -421,29 +429,25 @@ public class MainActivity extends AppCompatActivity {
         View btnEarnings = findViewById(R.id.btnLeftEarnings);
         if (btnEarnings != null) btnEarnings.setOnClickListener(v -> {
             if (drawerLayout != null) drawerLayout.closeDrawers();
-            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_earnings);
-            viewPager.setCurrentItem(pos, true);
+            openFragmentInSettings(new EarningsParentFragment(), "Ganhos");
         });
 
         View btnKm = findViewById(R.id.btnLeftKm);
         if (btnKm != null) btnKm.setOnClickListener(v -> {
             if (drawerLayout != null) drawerLayout.closeDrawers();
-            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_km);
-            viewPager.setCurrentItem(pos, true);
+            openFragmentInSettings(new KmParentFragment(), "KM Diário");
         });
 
         View btnFuel = findViewById(R.id.btnLeftFuel);
         if (btnFuel != null) btnFuel.setOnClickListener(v -> {
             if (drawerLayout != null) drawerLayout.closeDrawers();
-            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_fuel);
-            viewPager.setCurrentItem(pos, true);
+            openFragmentInSettings(new FuelParentFragment(), "Abastecimentos");
         });
 
         View btnMaint = findViewById(R.id.btnLeftMaint);
         if (btnMaint != null) btnMaint.setOnClickListener(v -> {
             if (drawerLayout != null) drawerLayout.closeDrawers();
-            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_maintenance);
-            viewPager.setCurrentItem(pos, true);
+            openFragmentInSettings(new MaintenanceParentFragment(), "Manutenção");
         });
 
         View btnReports = findViewById(R.id.btnLeftReports);
@@ -557,34 +561,17 @@ public class MainActivity extends AppCompatActivity {
 
     private void refreshTabs() {
         if (sharedPreferences == null || bottomNav == null) return;
-        int subType = sharedPreferences.getInt("sub_type", 0); 
-        int appMode = sharedPreferences.getInt("app_mode", 0); 
-        if (subType == 0) {
-            long installDate = sharedPreferences.getLong("install_date", System.currentTimeMillis());
-            if (System.currentTimeMillis() - installDate > (7L * 24 * 60 * 60 * 1000)) appMode = 1;
-        }
-        boolean mapsOnly = appMode == 1;
+        
+        // 🔥 MODO MAPA É O ÚNICO E PADRÃO
         boolean useRemote = currentRemoteMenus != null;
         
-        Menu bnMenu = bottomNav.getMenu();
-        if (bnMenu != null) {
-            MenuItem itemMaps = bnMenu.findItem(R.id.nav_maps);
-            if (itemMaps != null) itemMaps.setVisible(getBoolSafe("maps_enabled", true) && (!useRemote || currentRemoteMenus.contains("maps")));
-            
-            MenuItem itemEarnings = bnMenu.findItem(R.id.nav_earnings);
-            if (itemEarnings != null) itemEarnings.setVisible(getBoolSafe("tab_earnings_enabled", true) && (!useRemote || currentRemoteMenus.contains("earnings")));
-            
-            MenuItem itemKm = bnMenu.findItem(R.id.nav_km);
-            if (itemKm != null) itemKm.setVisible(getBoolSafe("tab_km_enabled", true) && (!useRemote || currentRemoteMenus.contains("km")));
-            
-            MenuItem itemFuel = bnMenu.findItem(R.id.nav_fuel);
-            if (itemFuel != null) itemFuel.setVisible(getBoolSafe("tab_fuel_enabled", true) && (!useRemote || currentRemoteMenus.contains("fuel")));
-            
-            MenuItem itemMaint = bnMenu.findItem(R.id.nav_maintenance);
-            if (itemMaint != null) itemMaint.setVisible(getBoolSafe("tab_maintenance_enabled", true) && (!useRemote || currentRemoteMenus.contains("maintenance")));
-        }
+        // Esconde menu inferior e barra superior para foco total no mapa
+        bottomNav.setVisibility(View.GONE);
+        View appBar = findViewById(R.id.appBarLayout);
+        if (appBar != null) appBar.setVisibility(View.GONE);
 
-        boolean hasOtherTabs = false;
+        // Visibilidade das opções no Menu Lateral (Drawer)
+        boolean hasOtherTabs;
         if (!useRemote) {
             hasOtherTabs = getBoolSafe("tab_earnings_enabled", true) || getBoolSafe("tab_km_enabled", true) || getBoolSafe("tab_fuel_enabled", true) || getBoolSafe("tab_maintenance_enabled", true);
         } else {
@@ -614,6 +601,7 @@ public class MainActivity extends AppCompatActivity {
         View btnFuel = findViewById(R.id.btnLeftFuel);
         if (btnFuel != null) btnFuel.setVisibility((!useRemote || currentRemoteMenus.contains("fuel")) ? View.VISIBLE : View.GONE);
         
+        // ... (continua lógica do drawer)
         View btnMaint = findViewById(R.id.btnLeftMaint);
         if (btnMaint != null) btnMaint.setVisibility((!useRemote || currentRemoteMenus.contains("maintenance")) ? View.VISIBLE : View.GONE);
         
@@ -626,12 +614,6 @@ public class MainActivity extends AppCompatActivity {
         if (settingsContainer != null) settingsContainer.setVisibility(isShowingSettings ? View.VISIBLE : View.GONE);
         if (viewPager != null) viewPager.setVisibility(isShowingSettings ? View.GONE : View.VISIBLE);
 
-        boolean shouldShowUI = !mapsOnly && isSystemUIVisible && !isShowingSettings;
-        
-        bottomNav.setVisibility(shouldShowUI ? View.VISIBLE : View.GONE);
-        View appBar = findViewById(R.id.appBarLayout);
-        if (appBar != null) appBar.setVisibility(shouldShowUI ? View.VISIBLE : View.GONE);
-        
         View mainRoot = findViewById(R.id.main);
         if (mainRoot != null) ViewCompat.requestApplyInsets(mainRoot);
 
@@ -640,7 +622,7 @@ public class MainActivity extends AppCompatActivity {
         View btnFriends = findViewById(R.id.btnDrawerFriends);
         if (btnFriends != null) {
             boolean remoteVisible = (!useRemote || currentRemoteMenus.contains("friends"));
-            btnFriends.setVisibility((mapsOnly && remoteVisible) ? View.VISIBLE : View.GONE);
+            btnFriends.setVisibility(remoteVisible ? View.VISIBLE : View.GONE);
         }
 
         View btnSettings = findViewById(R.id.btnDrawerSettings);

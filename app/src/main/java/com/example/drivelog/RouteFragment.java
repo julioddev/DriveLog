@@ -109,50 +109,100 @@ public class RouteFragment extends Fragment {
     private View cardSearch, layoutSearchBalloonOuter, layoutSearchBalloonInner, layoutSearchContainer;
     private ImageButton btnToggleSearch, btnSearch, btnAddStopManual, btnRouteMenu, btnToggleSearchStops;
     private View layoutOpenDrawerInside;
+    private View fabCompass;
+    private ImageView imageCompassInner;
     private FloatingActionButton fabAddStop, fabNewRoute, fabCenterMap, fabDeliveryApp, fabMapOrientation, fabReportHazard, fabKmTracking;
     private boolean isMapFollowingHeading = false;
     private android.hardware.SensorManager sensorManager;
     private android.hardware.Sensor rotationVectorSensor;
     private float currentAzimuth = 0;
+    private long lastGpsMoveTime = 0;
+    private static final long GPS_COOLDOWN_MS = 3000;
+
     private final android.hardware.SensorEventListener compassListener = new android.hardware.SensorEventListener() {
         @Override
         public void onSensorChanged(android.hardware.SensorEvent event) {
             if (event.sensor.getType() == android.hardware.Sensor.TYPE_ROTATION_VECTOR) {
                 float[] rotationMatrix = new float[9];
-                float[] outR = new float[9];
                 android.hardware.SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
                 
-                // 🔥 Remapeia o sistema de coordenadas para compensar a inclinação do dispositivo (celular de pé no suporte)
-                android.hardware.SensorManager.remapCoordinateSystem(rotationMatrix, 
-                        android.hardware.SensorManager.AXIS_X, 
-                        android.hardware.SensorManager.AXIS_Z, 
-                        outR);
+                // --- Lógica Estável: Remapeamento baseado na rotação da tela ---
+                int worldX = android.hardware.SensorManager.AXIS_X;
+                int worldY = android.hardware.SensorManager.AXIS_Y;
 
+                if (getActivity() != null) {
+                    int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
+                    if (rotation == android.view.Surface.ROTATION_90) {
+                        worldX = android.hardware.SensorManager.AXIS_Y;
+                        worldY = android.hardware.SensorManager.AXIS_MINUS_X;
+                    } else if (rotation == android.view.Surface.ROTATION_180) {
+                        worldX = android.hardware.SensorManager.AXIS_MINUS_X;
+                        worldY = android.hardware.SensorManager.AXIS_MINUS_Y;
+                    } else if (rotation == android.view.Surface.ROTATION_270) {
+                        worldX = android.hardware.SensorManager.AXIS_MINUS_Y;
+                        worldY = android.hardware.SensorManager.AXIS_X;
+                    }
+                }
+
+                float[] remappedMatrix = new float[9];
+                android.hardware.SensorManager.remapCoordinateSystem(rotationMatrix, worldX, worldY, remappedMatrix);
+                
                 float[] orientation = new float[3];
-                android.hardware.SensorManager.getOrientation(outR, orientation);
+                android.hardware.SensorManager.getOrientation(remappedMatrix, orientation);
+                
+                // O azimute (direção) é o primeiro valor do array de orientação
                 float azimuthDegrees = (float) Math.toDegrees(orientation[0]);
                 if (azimuthDegrees < 0) azimuthDegrees += 360;
 
-                // Suavização (filtro passa-baixa) mais robusta para eliminar tremidinha
-                float alpha = 0.05f;
-                float diff = azimuthDegrees - currentAzimuth;
-                if (diff > 180) diff -= 360;
-                else if (diff < -180) diff += 360;
+                // 🔥 NOVO: Calibração TOTALMENTE separada por modo
+                String offsetKey = isMapFollowingHeading ? "compass_offset_follow" : "compass_offset_fixed";
+                String invertKey = isMapFollowingHeading ? "compass_inverted_follow" : "compass_inverted_fixed";
                 
-                // 🔥 Filtro de Limiar: Ignora variações minúsculas (ruído)
-                if (Math.abs(diff) < 1.0f) return;
+                float offset = sharedPreferences.getFloat(offsetKey, 0f);
+                boolean inverted = sharedPreferences.getBoolean(invertKey, false);
 
+                if (inverted) azimuthDegrees = (360 - azimuthDegrees) % 360;
+                azimuthDegrees = (azimuthDegrees + offset + 360) % 360;
+
+                float alpha = 0.2f; 
+                float diff = azimuthDegrees - currentAzimuth;
+                if (diff > 180) diff -= 360; else if (diff < -180) diff += 360;
                 currentAzimuth = currentAzimuth + alpha * diff;
-                if (currentAzimuth < 0) currentAzimuth += 360;
-                if (currentAzimuth >= 360) currentAzimuth -= 360;
 
-                if (isMapFollowingHeading && isMapFocusedOnUser && map != null) {
-                    map.setMapOrientation(-currentAzimuth);
-                    if (userDirectionMarker != null) userDirectionMarker.setRotation(0); 
-                } else if (userDirectionMarker != null) {
-                    userDirectionMarker.setRotation(currentAzimuth);
-                    // 🔥 Importante: Força a atualização do mapa para o marcador girar mesmo com o mapa fixo
-                    if (map != null) map.invalidate();
+                // Atualiza apenas o mostrador interno da bússola (o fundo do botão fica parado)
+                if (imageCompassInner != null && fabCompass != null && fabCompass.getVisibility() == View.VISIBLE) {
+                    imageCompassInner.setRotation(-currentAzimuth);
+                }
+
+                // 🔥 Só atualiza pela bússola se o GPS não estiver mandando rumo (parado)
+                if (System.currentTimeMillis() - lastGpsMoveTime > GPS_COOLDOWN_MS) {
+                    if (userDirectionMarker != null && map != null) {
+                        boolean hideBoneco = sharedPreferences.getBoolean("hide_marker_when_stationary", false);
+                        userDirectionMarker.setVisible(true);
+
+                        // Se estivermos parados e a opção de ocultar boneco estiver ativa, mostramos a seta
+                        int targetRes = hideBoneco ? R.drawable.ic_original_arrow : R.drawable.ic_user_stationary;
+                        
+                        Object lastIconRes = userDirectionMarker.getRelatedObject();
+                        if (!(lastIconRes instanceof Integer) || (Integer) lastIconRes != targetRes) {
+                            Bitmap bmp = drawableToBitmap(targetRes, false, 0);
+                            userDirectionMarker.setIcon(new BitmapDrawable(getResources(), bmp));
+                            userDirectionMarker.setRelatedObject(targetRes);
+                        }
+
+                        if (isMapFollowingHeading) {
+                            // Modo Seguir Direção: Mapa gira e Boneco fica travado para cima (usando o offset do modo)
+                            if (isMapFocusedOnUser) {
+                                map.setMapOrientation(-currentAzimuth);
+                            }
+                            // O boneco deve apontar para o "topo", que é corrigido pelo offset de calibração deste modo
+                            userDirectionMarker.setRotation(offset); 
+                        } else {
+                            // Modo Norte Fixo: Mapa parado e Boneco gira com a bússola
+                            userDirectionMarker.setRotation(currentAzimuth);
+                        }
+                        map.invalidate();
+                    }
                 }
             }
         }
@@ -599,6 +649,35 @@ public class RouteFragment extends Fragment {
         }
     }
 
+    private void showCompassCalibrationDialog() {
+        final String modeName = isMapFollowingHeading ? "Seguir Direção" : "Norte Fixo";
+        final String offsetKey = isMapFollowingHeading ? "compass_offset_follow" : "compass_offset_fixed";
+        final String invertKey = isMapFollowingHeading ? "compass_inverted_follow" : "compass_inverted_fixed";
+
+        float currentOffset = sharedPreferences.getFloat(offsetKey, 0f);
+        boolean currentInverted = sharedPreferences.getBoolean(invertKey, false);
+        String invertStatus = currentInverted ? "Ligado" : "Desligado";
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        String[] options = {"Girar +90°", "Girar -90°", "Inverter Sentido do Giro", "Ocultar este Botão", "Resetar Padrão"};
+        
+        builder.setTitle(modeName + " (Ajuste: " + (int)currentOffset + "° | Inverter: " + invertStatus + ")")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) sharedPreferences.edit().putFloat(offsetKey, (currentOffset + 90) % 360).apply();
+                    else if (which == 1) sharedPreferences.edit().putFloat(offsetKey, (currentOffset - 90 + 360) % 360).apply();
+                    else if (which == 2) sharedPreferences.edit().putBoolean(invertKey, !currentInverted).apply();
+                    else if (which == 3) promptHideFab("show_fab_compass", "Bússola");
+                    else if (which == 4) sharedPreferences.edit().putFloat(offsetKey, 0f).putBoolean(invertKey, false).apply();
+                    
+                    if (which != 3) Toast.makeText(getContext(), "Calibração aplicada para " + modeName, Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Fechar", null);
+        
+        AlertDialog d = builder.create();
+        if (d.getWindow() != null) d.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        d.show();
+    }
+
     private void promptHideFab(String prefKey, String label) {
         AlertDialog dialog = new AlertDialog.Builder(requireContext())
                 .setTitle("Ocultar Botão")
@@ -625,6 +704,7 @@ public class RouteFragment extends Fragment {
         boolean isRouteActive = hasStops && !isRouteFinished;
 
         boolean showDelivery = sharedPreferences.getBoolean("show_fab_delivery_app", true);
+        boolean showCompass = sharedPreferences.getBoolean("show_fab_compass", true);
         boolean showReport = sharedPreferences.getBoolean("show_fab_report_hazard", true);
         boolean showCenter = sharedPreferences.getBoolean("show_fab_center_map", true);
         boolean showNorth = sharedPreferences.getBoolean("show_fab_orientation", true);
@@ -632,6 +712,7 @@ public class RouteFragment extends Fragment {
         boolean showStopsCard = sharedPreferences.getBoolean("show_bottom_sheet_stops", true);
 
         if (fabDeliveryApp != null) fabDeliveryApp.setVisibility(showDelivery ? View.VISIBLE : View.GONE);
+        if (fabCompass != null) fabCompass.setVisibility(showCompass ? View.VISIBLE : View.GONE);
         if (fabReportHazard != null) fabReportHazard.setVisibility(showReport ? View.VISIBLE : View.GONE);
         
         // 🔥 REGRA: O botão de alternar foco só aparece se a rota estiver ativa (não vazia e não finalizada)
@@ -716,7 +797,18 @@ public class RouteFragment extends Fragment {
         map = view.findViewById(R.id.mapRoute); 
         applyMapStyle();
         map.setMultiTouchControls(true);
-        mapController = map.getController(); mapController.setZoom(15.0);
+        mapController = map.getController(); 
+        
+        // 🔥 RESTAURAR ÚLTIMA POSIÇÃO PARA EVITAR CARREGAMENTO DO ZERO
+        float lastLat = sharedPreferences.getFloat("last_map_lat", 0f);
+        float lastLon = sharedPreferences.getFloat("last_map_lon", 0f);
+        float lastZoom = sharedPreferences.getFloat("last_map_zoom", 15.0f);
+        if (lastLat != 0 && lastLon != 0) {
+            mapController.setZoom((double) lastZoom);
+            mapController.setCenter(new GeoPoint(lastLat, lastLon));
+        } else {
+            mapController.setZoom(15.0);
+        }
         sharedPreferences.registerOnSharedPreferenceChangeListener(prefListener);
         setupLocationOverlay();
         
@@ -731,15 +823,17 @@ public class RouteFragment extends Fragment {
 
         map.setOnTouchListener((v, event) -> {
             if (event.getAction() == android.view.MotionEvent.ACTION_MOVE) {
-                if (isMapFocusedOnUser) {
+                if (isMapFocusedOnUser || isMapFollowingHeading) {
                     isMapFocusedOnUser = false;
                     isMapFollowingHeading = false;
-                    map.setMapOrientation(0);
+                    // 🔥 REMOVIDO: map.setMapOrientation(0); 
+                    // Não resetamos para o Norte no toque, apenas paramos de seguir automaticamente
+                    // para permitir que o usuário arraste ou gire o mapa livremente.
                     updateCenterFabIcon();
                     updateOrientationFabIcon();
                 }
             }
-            return v.performClick();
+            return false; // Retorna false para que o MapView processe os gestos (scroll, zoom, rotação)
         });
 
         cardSearch = view.findViewById(R.id.cardSearch);
@@ -786,6 +880,29 @@ public class RouteFragment extends Fragment {
         btnOpenDrawer = view.findViewById(R.id.btnOpenRoutesDrawerInside);
         layoutOpenDrawerInside = view.findViewById(R.id.layoutOpenDrawerInside);
 
+        fabCompass = view.findViewById(R.id.fabCompass);
+        imageCompassInner = view.findViewById(R.id.imageCompassInner);
+        
+        if (imageCompassInner != null) {
+            imageCompassInner.setImageDrawable(new BitmapDrawable(getResources(), generateCompassBitmap()));
+        }
+
+        if (fabCompass != null) {
+            fabCompass.setOnClickListener(v -> {
+                // Clique rápido reseta a orientação do mapa para o Norte se estiver perdido
+                if (map != null) {
+                    map.setMapOrientation(0);
+                    isMapFollowingHeading = false;
+                    updateOrientationFabIcon();
+                    Toast.makeText(getContext(), "Mapa orientado ao Norte", Toast.LENGTH_SHORT).show();
+                }
+            });
+            fabCompass.setOnLongClickListener(v -> {
+                showCompassCalibrationDialog();
+                return true;
+            });
+        }
+        
         btnRouteMenu = view.findViewById(R.id.btnRouteMenu); layoutSideFabs = view.findViewById(R.id.layoutSideFabs);
         updateAppModeUI(view);
         if (btnOpenDrawer != null) {
@@ -810,7 +927,10 @@ public class RouteFragment extends Fragment {
         fabMapOrientation = view.findViewById(R.id.fabMapOrientation);
         if (fabMapOrientation != null) {
             fabMapOrientation.setOnClickListener(v -> toggleMapOrientation());
-            fabMapOrientation.setOnLongClickListener(v -> { promptHideFab("show_fab_orientation", "Modo Norte"); return true; });
+            fabMapOrientation.setOnLongClickListener(v -> {
+                promptHideFab("show_fab_orientation", "Modo Norte");
+                return true;
+            });
         }
         if (fabDeliveryApp != null) {
             fabDeliveryApp.setOnClickListener(v -> launchDeliveryApp());
@@ -1223,109 +1343,83 @@ public class RouteFragment extends Fragment {
     private void setupLocationOverlay() {
         if (map == null || getContext() == null) return;
         
-        // Limpeza inicial
         map.getOverlays().removeIf(o -> o instanceof MyLocationNewOverlay || o instanceof RotationGestureOverlay || (o instanceof Marker && "USER_DIR".equals(((Marker)o).getRelatedObject())));
         
         GpsMyLocationProvider provider = new GpsMyLocationProvider(requireContext());
         locationOverlay = new MyLocationNewOverlay(provider, map) {
-            @Override public void onLocationChanged(android.location.Location location, org.osmdroid.views.overlay.mylocation.IMyLocationProvider source) {
+            @Override
+            public void onLocationChanged(android.location.Location location, org.osmdroid.views.overlay.mylocation.IMyLocationProvider source) {
                 super.onLocationChanged(location, source);
                 Activity activity = getActivity();
                 if (location != null && activity != null) {
                     activity.runOnUiThread(() -> {
                         currentLocation = new GeoPoint(location.getLatitude(), location.getLongitude());
-                        
                         if (userDirectionMarker != null) {
                             userDirectionMarker.setPosition(currentLocation);
+                            float speed = location.getSpeed(); 
+                            
+                            boolean hideBoneco = sharedPreferences.getBoolean("hide_marker_when_stationary", false);
+                            userDirectionMarker.setVisible(true);
+
+                            int targetRes;
+                            if (speed > 1.0f) {
+                                targetRes = R.drawable.ic_user_moving;
+                            } else {
+                                // 🔥 Se a opção de ocultar o boneco estiver ativa, mostra a seta padrão
+                                targetRes = hideBoneco ? R.drawable.ic_original_arrow : R.drawable.ic_user_stationary;
+                            }
+
+                            if (location.hasBearing() && speed > 1.0f) {
+                                lastGpsMoveTime = System.currentTimeMillis();
+                                String offsetKey = isMapFollowingHeading ? "compass_offset_follow" : "compass_offset_fixed";
+                                float offset = sharedPreferences.getFloat(offsetKey, 0f);
+
+                                if (isMapFollowingHeading) {
+                                    // No modo Seguir Direção, o mapa gira e o boneco fica para cima (aplicando offset)
+                                    userDirectionMarker.setRotation(offset);
+                                    if (isMapFocusedOnUser && map != null) {
+                                        map.setMapOrientation(-location.getBearing());
+                                    }
+                                } else {
+                                    // No modo Norte Fixo, o mapa fica parado e o boneco gira livremente
+                                    userDirectionMarker.setRotation(location.getBearing());
+                                    if (map != null) map.setMapOrientation(0);
+                                }
+                            }
+
+                            Object lastIconRes = userDirectionMarker.getRelatedObject();
+                            if (!(lastIconRes instanceof Integer) || (Integer) lastIconRes != targetRes) {
+                                Bitmap bmp = drawableToBitmap(targetRes, false, 0);
+                                userDirectionMarker.setIcon(new BitmapDrawable(getResources(), bmp));
+                                userDirectionMarker.setRelatedObject(targetRes); 
+                            }
                         }
 
-                        // 🔥 Seguir localização se o foco estiver ativo
                         if (isMapFocusedOnUser && mapController != null) {
                             mapController.animateTo(currentLocation);
                         }
-
-                        // 🔥 Atualiza clima se moveu mais de 5km ou passou 30 minutos
-                        long now = System.currentTimeMillis();
-                        double distClima = (lastWeatherLocation != null) ? currentLocation.distanceToAsDouble(lastWeatherLocation) : 99999;
-                        if (distClima > 5000 || (now - lastWeatherUpdate > 1800000)) {
-                            fetchWeather();
-                        }
-
-                        // 🔥 Pausa/Retomada automática do timer baseada no endereço de casa
                         checkHomeAutoPause(currentLocation);
-
-                        if (currentlySelectedStop != null) {
-                            double d = (lastTraceLocation != null) ? currentLocation.distanceToAsDouble(lastTraceLocation) : 999;
-                            // Só atualiza se moveu mais de 30 metros OU se passou 1 minuto e moveu pelo menos 10 metros (evita jitter parado)
-                            if (d > 30 || (now - lastTraceUpdate > 60000 && d > 10)) { 
-                                lastTraceUpdate = now; 
-                                lastTraceLocation = currentLocation; 
-                                updateSelectionTrace(currentlySelectedStop); 
-                            }
-                        }
                     });
                 }
             }
         };
 
-        // Customização do Ícone do Usuário
-        String iconType = sharedPreferences.getString("user_map_icon", "arrow");
-        int resId = R.drawable.ic_car_marker; // Default car
-        int tintColor = ContextCompat.getColor(requireContext(), R.color.teal_700);
-        
-        if (iconType.equals("moto")) resId = R.drawable.ic_play; 
-        else if (iconType.equals("truck")) resId = R.drawable.ic_package;
-        else if (iconType.equals("arrow")) {
-            // 🔥 NOVO: Ícone 3D Branco Profissional
-            resId = R.drawable.ic_nav_3d; 
-            tintColor = 0; // Sinaliza para não aplicar cor sólida
-        }
+        locationOverlay.setPersonIcon(Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888));
+        locationOverlay.setDirectionIcon(Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888));
+        locationOverlay.enableMyLocation();
 
-        try {
-            Bitmap bmp = drawableToBitmap(resId, iconType.equals("moto"), tintColor);
-            
-            // Usamos um marcador separado para a direção para garantir norte fixo de navegação
-            userDirectionMarker = new Marker(map);
-            userDirectionMarker.setInfoWindow(null);
-            userDirectionMarker.setRelatedObject("USER_DIR");
-            userDirectionMarker.setPosition(currentLocation);
-            userDirectionMarker.setIcon(new BitmapDrawable(getResources(), bmp));
-            userDirectionMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
-            userDirectionMarker.setFlat(false); // 🔥 Alinhado à tela, não ao mapa
-            userDirectionMarker.setRotation(isMapFollowingHeading ? 0 : currentAzimuth);
-            
-            // Oculta os ícones padrões do overlay para usar o nosso marcador customizado
-            locationOverlay.setPersonIcon(Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888));
-            locationOverlay.setDirectionIcon(Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888));
-            locationOverlay.setDrawAccuracyEnabled(false);
-        } catch (Exception e) { 
-            e.printStackTrace(); 
-            locationOverlay.setPersonIcon(null); 
-            locationOverlay.setDirectionIcon(null);
-        }
-
-        // 🔥 Posicionamento imediato baseado na última localização conhecida
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.getLastLocation().addOnSuccessListener(l -> {
-                if (l != null && userDirectionMarker != null) {
-                    currentLocation = new GeoPoint(l.getLatitude(), l.getLongitude());
-                    userDirectionMarker.setPosition(currentLocation);
-                    if (isMapFocusedOnUser && mapController != null) {
-                        mapController.animateTo(currentLocation);
-                    }
-                    map.invalidate();
-                }
-            });
-        }
-
-        if (!isRestIntervalNow()) {
-            locationOverlay.enableMyLocation();
-        }
+        userDirectionMarker = new Marker(map);
+        userDirectionMarker.setInfoWindow(null);
+        userDirectionMarker.setRelatedObject("USER_DIR");
+        userDirectionMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
+        userDirectionMarker.setFlat(false);
         
         map.getOverlays().add(locationOverlay);
-        if (userDirectionMarker != null) map.getOverlays().add(userDirectionMarker);
-        
-        RotationGestureOverlay ro = new RotationGestureOverlay(map); ro.setEnabled(true); map.getOverlays().add(ro);
+        map.getOverlays().add(userDirectionMarker);
+
+        RotationGestureOverlay rotationGestureOverlay = new RotationGestureOverlay(map);
+        rotationGestureOverlay.setEnabled(true);
+        map.getOverlays().add(rotationGestureOverlay);
     }
 
     private Bitmap drawableToBitmap(int resId, boolean rotate, int tintColor) {
@@ -1333,10 +1427,13 @@ public class RouteFragment extends Fragment {
         int size = (int) (38 * getResources().getDisplayMetrics().density);
         Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
+        
+        // 🔥 Removido o rotate fixo de -90 que entortava a seta original
         if (rotate) {
             c.save();
             c.rotate(-90, size/2f, size/2f);
         }
+        
         d.setBounds(0, 0, size, size);
         if (tintColor != 0) d.setTint(tintColor);
         d.draw(c);
@@ -2126,14 +2223,16 @@ public class RouteFragment extends Fragment {
             centerOnCurrentLocation();
         }
         isMapFollowingHeading = !isMapFollowingHeading;
+        
+        // 🔥 NOVO: Ao trocar de modo, forçamos o azimute a ler os novos valores de calibração imediatamente
+        // para evitar o efeito "elástico" (smooth rotation) lento.
+        currentAzimuth = -1; // Flag para forçar atualização no próximo sensor event ou aqui
+        
         if (!isMapFollowingHeading) {
             map.setMapOrientation(0); // Reseta para o Norte
         } else {
             // Ao ativar, já pega a orientação atual do sensor se disponível
             map.setMapOrientation(-currentAzimuth);
-        }
-        if (userDirectionMarker != null) {
-            userDirectionMarker.setRotation(isMapFollowingHeading ? 0 : currentAzimuth);
         }
         updateOrientationFabIcon();
         Toast.makeText(getContext(), isMapFollowingHeading ? "Seguindo direção" : "Norte fixo", Toast.LENGTH_SHORT).show();
@@ -2333,6 +2432,54 @@ public class RouteFragment extends Fragment {
             d.setBounds(left, top, left + iconSize, top + iconSize);
             d.draw(c);
         }
+
+        return b;
+    }
+
+    private Bitmap generateCompassBitmap() {
+        int size = (int) (48 * getResources().getDisplayMetrics().density);
+        Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        float center = size / 2f;
+        float radius = size * 0.42f;
+
+        // Fundo transparente do mostrador (o fundo branco vem do CardView)
+        p.setColor(Color.TRANSPARENT);
+        p.setStyle(Paint.Style.FILL);
+        c.drawCircle(center, center, radius, p);
+
+        // Borda externa
+        p.setColor(Color.DKGRAY);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(3f);
+        c.drawCircle(center, center, radius, p);
+
+        // Desenhar Letras Norte, Sul, Leste, Oeste
+        p.setStyle(Paint.Style.FILL);
+        p.setTextSize(size * 0.25f); // Aumentado o tamanho da fonte
+        p.setTextAlign(Paint.Align.CENTER);
+        p.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        
+        Paint.FontMetrics fm = p.getFontMetrics();
+        float baselineOffset = (fm.descent - fm.ascent) / 2 - fm.descent;
+
+        // Norte (N) - Vermelho
+        p.setColor(Color.RED);
+        c.drawText("N", center, center - radius + (size * 0.22f), p);
+
+        // Sul (S)
+        p.setColor(Color.BLACK);
+        c.drawText("S", center, center + radius - (size * 0.05f), p);
+
+        // Leste (L)
+        p.setColor(Color.BLACK);
+        c.drawText("L", center + radius - (size * 0.12f), center + baselineOffset, p);
+
+        // Oeste (O)
+        p.setColor(Color.BLACK);
+        c.drawText("O", center - radius + (size * 0.12f), center + baselineOffset, p);
 
         return b;
     }
@@ -2581,7 +2728,8 @@ public class RouteFragment extends Fragment {
         // --- NOVO: Submenu de Visibilidade dos Botões ---
         android.view.SubMenu subVis = p.getMenu().addSubMenu("Visibilidade dos Botões");
         subVis.add(3, 301, 0, "Botão Atalho App").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_delivery_app", true));
-        subVis.add(3, 302, 1, "Botão Reportar").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_report_hazard", true));
+        subVis.add(3, 307, 1, "Botão Bússola").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_compass", true));
+        subVis.add(3, 302, 2, "Botão Reportar").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_report_hazard", true));
         subVis.add(3, 303, 2, "Botão Localização").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_center_map", true));
         subVis.add(3, 304, 3, "Botão Norte").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_orientation", true));
         
@@ -2662,6 +2810,11 @@ public class RouteFragment extends Fragment {
                 boolean n = !item.isChecked();
                 item.setChecked(n);
                 sharedPreferences.edit().putBoolean("show_fab_delivery_app", n).apply();
+                updateFloatingButtonsVisibility();
+            } else if (item.getItemId() == 307) {
+                boolean n = !item.isChecked();
+                item.setChecked(n);
+                sharedPreferences.edit().putBoolean("show_fab_compass", n).apply();
                 updateFloatingButtonsVisibility();
             } else if (item.getItemId() == 302) {
                 boolean n = !item.isChecked();
@@ -3862,8 +4015,12 @@ public class RouteFragment extends Fragment {
             ContextCompat.registerReceiver(requireContext(), newRouteReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         }
 
-        if (sensorManager != null && rotationVectorSensor != null) {
-            sensorManager.registerListener(compassListener, rotationVectorSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
+        if (sensorManager != null) {
+            android.hardware.Sensor accel = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER);
+            android.hardware.Sensor magnet = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_MAGNETIC_FIELD);
+            if (rotationVectorSensor != null) sensorManager.registerListener(compassListener, rotationVectorSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
+            if (accel != null) sensorManager.registerListener(compassListener, accel, android.hardware.SensorManager.SENSOR_DELAY_UI);
+            if (magnet != null) sensorManager.registerListener(compassListener, magnet, android.hardware.SensorManager.SENSOR_DELAY_UI);
         }
         if (map != null) { 
             map.onResume(); 
@@ -3938,6 +4095,16 @@ public class RouteFragment extends Fragment {
 
     @Override public void onPause() { 
         super.onPause(); 
+        
+        // 🔥 SALVAR ESTADO DO MAPA PARA CARREGAMENTO RÁPIDO NO PRÓXIMO INÍCIO
+        if (map != null) {
+            sharedPreferences.edit()
+                .putFloat("last_map_lat", (float) map.getMapCenter().getLatitude())
+                .putFloat("last_map_lon", (float) map.getMapCenter().getLongitude())
+                .putFloat("last_map_zoom", (float) map.getZoomLevelDouble())
+                .apply();
+        }
+
         timerHandler.removeCallbacks(timerRunnable);
         animationHandler.removeCallbacks(markerAnimationRunnable);
         if (sensorManager != null) sensorManager.unregisterListener(compassListener);

@@ -27,9 +27,9 @@ public class TrackingSettingsFragment extends Fragment {
     private SharedPreferences sharedPreferences;
     
     // UI Elements
-    private RadioGroup rgTrackingMode, rgComboioMode;
+    private RadioGroup rgComboioMode;
     private MaterialSwitch switchBackgroundTracking;
-    private LinearLayout layoutAutoTime, layoutAutoDistance, layoutDevComboioSettings;
+    private LinearLayout layoutDevComboioSettings;
     private TextInputEditText editStart, editEnd, editHomeTriggerRadius, editHomeArrivalRadius, editHomeArrivalTime, editMinStopDuration;
     private TextInputEditText editShortTime, editShortRadius, editMediumTime, editMediumRadius, editLongRadius;
     private TextInputEditText editLoadingRadius, editLoadingTime;
@@ -64,12 +64,9 @@ public class TrackingSettingsFragment extends Fragment {
         sharedPreferences = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
 
         // Mode & Auto Time & Auto Distance
-        rgTrackingMode = view.findViewById(R.id.rgTrackingMode);
         rgComboioMode = view.findViewById(R.id.rgComboioMode);
         layoutDevComboioSettings = view.findViewById(R.id.layoutDevComboioSettings);
         switchBackgroundTracking = view.findViewById(R.id.switchBackgroundTracking);
-        layoutAutoTime = view.findViewById(R.id.layoutAutoTrackingTime);
-        layoutAutoDistance = view.findViewById(R.id.layoutAutoTrackingDistance);
         editStart = view.findViewById(R.id.editTrackingStart);
         editEnd = view.findViewById(R.id.editTrackingEnd);
         editHomeTriggerRadius = view.findViewById(R.id.editHomeTriggerRadius);
@@ -121,28 +118,6 @@ public class TrackingSettingsFragment extends Fragment {
     }
 
     private void setupListeners() {
-        // Mode
-        rgTrackingMode.setOnCheckedChangeListener((group, checkedId) -> {
-            int mode = 0;
-            if (checkedId == R.id.rbAutoTracking) mode = 1;
-            else if (checkedId == R.id.rbDistanceTracking) mode = 2;
-            
-            layoutAutoTime.setVisibility(mode == 1 ? View.VISIBLE : View.GONE);
-            layoutAutoDistance.setVisibility(mode == 2 ? View.VISIBLE : View.GONE);
-            
-            sharedPreferences.edit()
-                .putInt(PREF_TRACKING_MODE, mode)
-                .putBoolean("tracking_auto", mode == 1) 
-                .putBoolean("home_tracking_enabled", mode == 2)
-                .apply();
-                
-            if (mode != 0) {
-                sharedPreferences.edit().putInt("last_auto_mode_v2", mode).apply();
-            }
-                
-            TrackingHelper.updateAutoTracking(requireContext());
-        });
-
         switchBackgroundTracking.setOnCheckedChangeListener((buttonView, isChecked) -> {
             sharedPreferences.edit().putBoolean("background_tracking_enabled", isChecked).apply();
             CloudSyncHelper.syncNow(requireContext(), "Ajuste Rastreamento");
@@ -247,25 +222,6 @@ public class TrackingSettingsFragment extends Fragment {
     }
 
     private void loadSettings() {
-        // Mode
-        int mode = 0;
-        try {
-            mode = sharedPreferences.getInt(PREF_TRACKING_MODE, 0);
-        } catch (Exception e) {
-            Object val = sharedPreferences.getAll().get(PREF_TRACKING_MODE);
-            if (val != null) {
-                try { mode = (int) Double.parseDouble(String.valueOf(val)); } catch (Exception ignored) {}
-            }
-            sharedPreferences.edit().putInt(PREF_TRACKING_MODE, mode).apply();
-        }
-        
-        if (mode == 0) rgTrackingMode.check(R.id.rbManualTracking);
-        else if (mode == 1) rgTrackingMode.check(R.id.rbAutoTracking);
-        else rgTrackingMode.check(R.id.rbDistanceTracking);
-        
-        layoutAutoTime.setVisibility(mode == 1 ? View.VISIBLE : View.GONE);
-        layoutAutoDistance.setVisibility(mode == 2 ? View.VISIBLE : View.GONE);
-        
         switchBackgroundTracking.setChecked(sharedPreferences.getBoolean("background_tracking_enabled", true));
         
         // 🔥 PADRÃO: Modo Comboio inicia DESATIVADO (2) ao instalar

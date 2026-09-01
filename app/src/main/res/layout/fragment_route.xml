@@ -703,6 +703,24 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
 
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/fabCompass"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="@android:color/white"
+                android:clickable="true"
+                android:focusable="true">
+                <ImageView
+                    android:id="@+id/imageCompassInner"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="4dp"
+                    android:scaleType="centerInside" />
+            </com.google.android.material.card.MaterialCardView>
+
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fabDeliveryApp"
                 android:layout_width="wrap_content"

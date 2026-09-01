@@ -10,48 +10,13 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Modo de Rastreamento"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="16dp"
-            android:textColor="?attr/colorPrimary"/>
-
-        <RadioGroup
-            android:id="@+id/rgTrackingMode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
-            <RadioButton
-                android:id="@+id/rbManualTracking"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Manual"
-                android:checked="true"/>
-            <RadioButton
-                android:id="@+id/rbAutoTracking"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="Tempo"/>
-            <RadioButton
-                android:id="@+id/rbDistanceTracking"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="Distância"/>
-        </RadioGroup>
-
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/switchBackgroundTracking"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Rastreamento em Segundo Plano"
             android:checked="true"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="16dp"
             app:thumbIcon="@drawable/ic_map"
             android:textColor="?attr/colorOnSurface"/>
 
@@ -107,12 +72,10 @@
 
         <!-- Configuração por Tempo (Horário) -->
         <LinearLayout
-            android:id="@+id/layoutAutoTrackingTime"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="24dp"
-            android:visibility="gone">
+            android:layout_marginBottom="24dp">
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="0dp"
@@ -146,12 +109,10 @@
 
         <!-- Configuração por Distância (Raio de Casa) -->
         <LinearLayout
-            android:id="@+id/layoutAutoTrackingDistance"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:layout_marginBottom="24dp"
-            android:visibility="gone">
+            android:layout_marginBottom="24dp">
 
             <TextView
                 android:layout_width="match_parent"

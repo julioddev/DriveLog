@@ -283,6 +283,19 @@ public class TrackingService extends Service {
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null);
+            
+            // 🔥 Tenta pegar a última localização conhecida IMEDIATAMENTE para não esperar o primeiro callback
+            fusedLocationClient.getLastLocation().addOnSuccessListener(l -> {
+                if (l != null && locationCallback != null) {
+                    float[] res = new float[1];
+                    Location.distanceBetween(l.getLatitude(), l.getLongitude(), homeLat, homeLon, res);
+                    if (res[0] > prefs.getInt("home_trigger_radius", 100)) {
+                        android.util.Log.d("TrackingService", "Usuário já está fora do raio. Iniciando rastreio imediato.");
+                        LocationResult lr = LocationResult.create(java.util.Collections.singletonList(l));
+                        locationCallback.onLocationResult(lr);
+                    }
+                }
+            });
         }
     }
 

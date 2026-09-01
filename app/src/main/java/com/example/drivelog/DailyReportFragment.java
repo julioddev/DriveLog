@@ -39,6 +39,29 @@ public class DailyReportFragment extends Fragment {
         textKmRodados = view.findViewById(R.id.textDailyKmRodados);
         Button btnSelectDate = view.findViewById(R.id.btnSelectDate);
 
+        // 🔥 Acesso rápido: Clicar nos valores abre os menus correspondentes
+        if (textEarnings != null) {
+            ((View)textEarnings.getParent()).setOnClickListener(v -> {
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).openFragmentInSettings(new EarningsParentFragment(), "Ganhos");
+                }
+            });
+        }
+        if (textKmRodados != null) {
+            ((View)textKmRodados.getParent()).setOnClickListener(v -> {
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).openFragmentInSettings(new KmParentFragment(), "KM Diário");
+                }
+            });
+        }
+        if (textFuel != null) {
+            ((View)textFuel.getParent()).setOnClickListener(v -> {
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).openFragmentInSettings(new FuelParentFragment(), "Abastecimentos");
+                }
+            });
+        }
+
         btnSelectDate.setOnClickListener(v -> showDatePicker());
 
         AppDao dao = AppDatabase.getInstance(getContext()).appDao();

@@ -45,8 +45,8 @@ public class SettingsFragment extends Fragment {
     private Button btnDetectGoogle, btnLogoutGoogle, btnBackToLogin, btnCheckUpdates, btnAboutApp;
     private TextView textSyncLog, textOverlayWarning, textNotificationWarning;
     private TextInputEditText editWeeklyGoal, editConsumption, editFuelPrice, editRestStart, editRestEnd, editCpfInterval, editCpfInactivity;
-    private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf, switchCpfInterval, switchAutoCheckUpdates;
-    private RadioGroup rgKmSource, rgAppMode, rgSubscription, rgComboioVisibility;
+    private MaterialSwitch switchSubtract, switchAutoBackup, switchRestEnabled, switchAutoCopyCpf, switchCpfInterval, switchAutoCheckUpdates, switchHideMarkerStationary;
+    private RadioGroup rgKmSource, rgSubscription, rgComboioVisibility;
     private View layoutDevTools, layoutCpfInterval, layoutAdvancedDevControls;
     private Spinner spinnerTab, spinnerTheme;
     private SharedPreferences sharedPreferences;
@@ -114,10 +114,11 @@ public class SettingsFragment extends Fragment {
         switchAutoBackup = view.findViewById(R.id.switchAutoBackup);
         switchRestEnabled = view.findViewById(R.id.switchRestEnabled);
         switchAutoCheckUpdates = view.findViewById(R.id.switchAutoCheckUpdates);
+        switchHideMarkerStationary = view.findViewById(R.id.switchHideMarkerStationary);
+
         editRestStart = view.findViewById(R.id.editRestStart);
         editRestEnd = view.findViewById(R.id.editRestEnd);
         rgKmSource = view.findViewById(R.id.rgKmSource);
-        rgAppMode = view.findViewById(R.id.rgAppMode);
         rgComboioVisibility = view.findViewById(R.id.rgComboioVisibility);
         rgSubscription = view.findViewById(R.id.rgSubscriptionType);
         spinnerTab = view.findViewById(R.id.spinnerDefaultTab);
@@ -624,6 +625,8 @@ public class SettingsFragment extends Fragment {
         editCpfInterval.setText(String.valueOf(sharedPreferences.getInt("cpf_interval_minutes", 2)));
         editCpfInactivity.setText(String.valueOf(sharedPreferences.getInt("cpf_inactivity_minutes", 5)));
         switchAutoCheckUpdates.setChecked(sharedPreferences.getBoolean("auto_check_updates", true));
+        switchHideMarkerStationary.setChecked(sharedPreferences.getBoolean("hide_marker_when_stationary", false));
+
         
         boolean restEnabled = sharedPreferences.getBoolean("rest_interval_enabled", false);
         switchRestEnabled.setChecked(restEnabled);
@@ -635,20 +638,8 @@ public class SettingsFragment extends Fragment {
         if (sharedPreferences.getInt("report_km_source", 0) == 1) rgKmSource.check(R.id.rbKmAuto);
         else rgKmSource.check(R.id.rbKmManual);
         
-        if (trialExpired) {
-            rgAppMode.check(R.id.rbModeMapsOnly);
-            for (int i = 0; i < rgAppMode.getChildCount(); i++) {
-                rgAppMode.getChildAt(i).setEnabled(false);
-            }
-            rgAppMode.setAlpha(0.5f); // Visual cinza
-        } else {
-            if (sharedPreferences.getInt("app_mode", 0) == 1) rgAppMode.check(R.id.rbModeMapsOnly);
-            else rgAppMode.check(R.id.rbModeFull);
-            for (int i = 0; i < rgAppMode.getChildCount(); i++) {
-                rgAppMode.getChildAt(i).setEnabled(true);
-            }
-            rgAppMode.setAlpha(1.0f);
-        }
+        // MODO MAPA É AGORA O PADRÃO ÚNICO
+        sharedPreferences.edit().putInt("app_mode", 1).apply();
 
         int cVisibility = sharedPreferences.getInt("comboio_visibility_mode", 2);
         if (cVisibility == 0) rgComboioVisibility.check(R.id.rbComboioShowMap);
@@ -670,10 +661,6 @@ public class SettingsFragment extends Fragment {
 
     private void saveSettings() {
         try {
-            int oldMode = sharedPreferences.getInt("app_mode", 0);
-            int newMode = rgAppMode.getCheckedRadioButtonId() == R.id.rbModeMapsOnly ? 1 : 0;
-            boolean modeChanged = oldMode != newMode;
-
             int selectedTheme = spinnerTheme.getSelectedItemPosition();
             
             int cVisibility = 2;
@@ -696,11 +683,12 @@ public class SettingsFragment extends Fragment {
                 .putInt("cpf_interval_minutes", parseSafeInt(editCpfInterval, 2))
                 .putInt("cpf_inactivity_minutes", parseSafeInt(editCpfInactivity, 5))
                     .putBoolean("auto_check_updates", switchAutoCheckUpdates.isChecked())
+                .putBoolean("hide_marker_when_stationary", switchHideMarkerStationary.isChecked())
                     .putBoolean("rest_interval_enabled", switchRestEnabled.isChecked())
                     .putString("rest_start_time", editRestStart.getText().toString())
                     .putString("rest_end_time", editRestEnd.getText().toString())
                     .putInt("report_km_source", rgKmSource.getCheckedRadioButtonId() == R.id.rbKmAuto ? 1 : 0)
-                    .putInt("app_mode", newMode)
+                    .putInt("app_mode", 1)
                     .putInt("comboio_visibility_mode", cVisibility)
                     .putInt("sub_type", subType)
                     .putInt("default_tab", spinnerTab.getSelectedItemPosition())
@@ -720,11 +708,8 @@ public class SettingsFragment extends Fragment {
             MainActivity main = (MainActivity) getActivity();
             if (main != null) {
                 main.applyAppTheme(selectedTheme);
-                if (modeChanged) {
-                    requireActivity().getSupportFragmentManager().popBackStack();
-                }
             }
-            Toast.makeText(getContext(), modeChanged ? "Modo de App alterado!" : "Configurações salvas!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Configurações salvas!", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             Toast.makeText(getContext(), "Erro ao salvar.", Toast.LENGTH_SHORT).show();
         }
