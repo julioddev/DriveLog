@@ -218,8 +218,8 @@ public class RouteFragment extends Fragment {
     private RecyclerView recyclerAllStops;
     private StopsListAdapter stopsListAdapter;
     private TextView textSuccessCount, textFailedCount, textPendingCount, textSuccessPackageCount, textPendingPackageCount;
-    private TextView textWeatherTemp, textWeatherCity, textRouteTotalTime, textSheetHeader;
-    private View cardWeatherSummary, cardRouteTotalTime, cardSuccessSummary, cardFailedSummary, cardPendingSummary, layoutStatsGroup, btnToggleStatsSummary;
+    private TextView textWeatherTemp, textWeatherCity, textRouteTotalTime, textRouteCorrections, textSheetHeader;
+    private View cardWeatherSummary, cardRouteTotalTime, cardRouteCorrections, cardSuccessSummary, cardFailedSummary, cardPendingSummary, layoutStatsGroup, btnToggleStatsSummary;
     private ImageView imageWeatherIcon, imageHomeWarning, imageToggleStatsSummary;
     private boolean isStopDeleteDialogShowing = false;
     private final Handler autoHideHandler = new Handler(Looper.getMainLooper());
@@ -1002,6 +1002,15 @@ public class RouteFragment extends Fragment {
         cardWeatherSummary = view.findViewById(R.id.cardWeatherSummary);
         cardRouteTotalTime = view.findViewById(R.id.cardRouteTotalTime);
         textRouteTotalTime = view.findViewById(R.id.textRouteTotalTime);
+        cardRouteCorrections = view.findViewById(R.id.cardRouteCorrections);
+        textRouteCorrections = view.findViewById(R.id.textRouteCorrections);
+        if (cardRouteCorrections != null) {
+            cardRouteCorrections.setOnClickListener(v -> showRouteCorrectionsDialog());
+        }
+        
+        AppDatabase.getInstance(requireContext()).appDao().getAllCorrectedAddressesLive()
+            .observe(getViewLifecycleOwner(), caList -> updateRouteCorrectionsCount());
+
         textSheetHeader = view.findViewById(R.id.textSheetHeader);
         imageHomeWarning = view.findViewById(R.id.imageHomeWarning);
         if (cardRouteTotalTime != null) {
@@ -3435,6 +3444,7 @@ public class RouteFragment extends Fragment {
             if (stops == null) return;
             currentStops = new ArrayList<>(stops); 
             refreshMarkers(); 
+            updateRouteCorrectionsCount();
             
             // Atualiza Estatísticas
             int okStops = 0, okPackages = 0;
@@ -5082,7 +5092,7 @@ public class RouteFragment extends Fragment {
         // --- Status Inicial de Correção ---
         textCorrectionStatus.setVisibility(View.GONE);
 
-        // --- Seção de Correção Global ---
+        // --- Seção de Correção Global / Local ---
         View cardGlobal = v.findViewById(R.id.cardGlobalDetails);
         TextView textGlobalLikes = v.findViewById(R.id.textGlobalLikes);
         TextView textGlobalNoteDetails = v.findViewById(R.id.textGlobalNoteDetails);
@@ -5093,63 +5103,61 @@ public class RouteFragment extends Fragment {
             public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date) {
                 Activity activity = getActivity();
                 if (activity != null) activity.runOnUiThread(() -> {
-                    // Se a correção global for do próprio usuário OU já estiver baixada localmente, não mostra o card de download
-                    AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
-                    new Thread(() -> {
-                        CorrectedAddress localFix = dao.getCorrectedAddress(stop.address);
-                        Activity activity2 = getActivity();
-                        if (activity2 != null) activity2.runOnUiThread(() -> {
-                            String currentUserId = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE).getString("current_user_id", "anon");
-                            boolean isMine = creatorId != null && creatorId.equals(currentUserId);
-                            boolean isAlreadyDownloaded = localFix != null && !isMine;
+                    String currentUserId = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE).getString("current_user_id", "anon");
+                    boolean alreadyApplied = Math.abs(stop.latitude - lat) < 0.00001 && Math.abs(stop.longitude - lon) < 0.00001;
 
-                            // Mostra sempre o feedback se existir na comunidade
-                            cardGlobal.setVisibility(View.VISIBLE);
-                            textGlobalLikes.setText(likes + " 👍 | " + dislikes + " 👎");
-                            textGlobalLikes.setOnClickListener(v3 -> showGlobalFeedbackDialog(stop.address));
+                    // Mostra sempre o feedback se existir na comunidade
+                    cardGlobal.setVisibility(View.VISIBLE);
+                    textGlobalLikes.setText(likes + " 👍 | " + dislikes + " 👎");
+                    textGlobalLikes.setOnClickListener(v3 -> showGlobalFeedbackDialog(stop.address));
 
-                            if (isMine || isAlreadyDownloaded) {
-                                btnDownload.setVisibility(View.GONE);
-                            } else {
-                                btnDownload.setVisibility(View.VISIBLE);
-                                // Se chegou aqui, tem uma correção global disponível que não é a atual
-                                textCorrectionStatus.setVisibility(View.VISIBLE);
-                                textCorrectionStatus.setText("Correção disponível");
-                                textCorrectionStatus.setTextColor(Color.parseColor("#F44336")); // Vermelho
-                            }
+                    if (alreadyApplied) {
+                        btnDownload.setVisibility(View.GONE);
+                    } else {
+                        btnDownload.setVisibility(View.VISIBLE);
+                        btnDownload.setEnabled(true);
+                        btnDownload.setText("📥 BAIXAR E APLICAR CORREÇÃO DA COMUNIDADE");
+                        textCorrectionStatus.setVisibility(View.VISIBLE);
+                        textCorrectionStatus.setText("Correção disponível");
+                        textCorrectionStatus.setTextColor(Color.parseColor("#F44336")); // Vermelho
+                    }
 
-                            if (note != null && !note.isEmpty()) {
-                                textGlobalNoteDetails.setVisibility(View.VISIBLE);
-                                textGlobalNoteDetails.setText("Obs: " + note);
-                            } else {
-                                textGlobalNoteDetails.setVisibility(View.GONE);
-                            }
+                    if (note != null && !note.isEmpty()) {
+                        textGlobalNoteDetails.setVisibility(View.VISIBLE);
+                        textGlobalNoteDetails.setText("Obs: " + note);
+                    } else {
+                        textGlobalNoteDetails.setVisibility(View.GONE);
+                    }
+                    
+                    btnDownload.setOnClickListener(v3 -> {
+                        btnDownload.setEnabled(false);
+                        btnDownload.setText("BAIXANDO E APLICANDO...");
+                        AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                        new Thread(() -> {
+                            CorrectedAddress ca = dao.getCorrectedAddress(stop.address);
+                            if (ca == null) ca = new CorrectedAddress(stop.address, stop.neighborhood, lat, lon);
+                            else { ca.latitude = lat; ca.longitude = lon; }
+                            ca.notes = note; 
+                            ca.creatorId = (creatorId != null) ? creatorId : "community_anon"; // Marca como baixada
+                            ca.updatedAt = System.currentTimeMillis();
+                            dao.insertCorrectedAddress(ca);
                             
-                            btnDownload.setOnClickListener(v3 -> {
-                                new Thread(() -> {
-                                    CorrectedAddress ca = dao.getCorrectedAddress(stop.address);
-                                    if (ca == null) ca = new CorrectedAddress(stop.address, stop.neighborhood, lat, lon);
-                                    else { ca.latitude = lat; ca.longitude = lon; }
-                                    ca.notes = note; 
-                                    ca.creatorId = (creatorId != null) ? creatorId : "community_anon"; // Marca como baixada
-                                    ca.updatedAt = System.currentTimeMillis();
-                                    dao.insertCorrectedAddress(ca);
-                                    
-                                    // Atualiza a parada atual com a nova coordenada
-                                    stop.latitude = lat; stop.longitude = lon;
-                                    dao.updateRouteStop(stop);
-                                    
-                                    Activity activity3 = getActivity();
-                                    if (activity3 != null) activity3.runOnUiThread(() -> {
-                                        Toast.makeText(getContext(), "Correção baixada e aplicada!", Toast.LENGTH_SHORT).show();
-                                        cardGlobal.setVisibility(View.GONE); // Esconde o card após baixar
-                                        textCorrectionStatus.setText("Correção baixada");
-                                        textCorrectionStatus.setTextColor(Color.parseColor("#FF9800")); // Laranja
-                                    });
-                                }).start();
+                            // Atualiza a parada atual com a nova coordenada
+                            stop.latitude = lat; stop.longitude = lon;
+                            dao.updateRouteStop(stop);
+                            
+                            Activity activity3 = getActivity();
+                            if (activity3 != null) activity3.runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Correção baixada e aplicada nesta parada!", Toast.LENGTH_SHORT).show();
+                                btnDownload.setVisibility(View.GONE); // Esconde o botão após baixar
+                                textCorrectionStatus.setVisibility(View.VISIBLE);
+                                textCorrectionStatus.setText("Correção baixada e aplicada");
+                                textCorrectionStatus.setTextColor(Color.parseColor("#4CAF50")); // Verde
+                                refreshMarkers();
+                                updateRouteCorrectionsCount();
                             });
-                        });
-                    }).start();
+                        }).start();
+                    });
                 });
             }
             @Override public void onError(String msg) {}
@@ -5165,16 +5173,49 @@ public class RouteFragment extends Fragment {
         new Thread(() -> {
             AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
             CorrectedAddress corrected = dao.getCorrectedAddress(stop.address);
-            getActivity().runOnUiThread(() -> {
-                if (corrected != null && corrected.notes != null && !corrected.notes.isEmpty()) {
-                    editNotes.setText(corrected.notes);
-                    switchPublic.setChecked(corrected.isNotePublic);
-                    layoutNote.setVisibility(View.VISIBLE);
-                    ((MaterialButton) btnShowAddNote).setText("EDITAR OBSERVAÇÃO");
-                }
-
-                // Lógica do botão de compartilhar correção local
+            
+            Activity act = getActivity();
+            if (act != null) act.runOnUiThread(() -> {
                 if (corrected != null) {
+                    boolean localApplied = Math.abs(stop.latitude - corrected.latitude) < 0.00001 
+                                        && Math.abs(stop.longitude - corrected.longitude) < 0.00001;
+                    if (!localApplied) {
+                        cardGlobal.setVisibility(View.VISIBLE);
+                        btnDownload.setVisibility(View.VISIBLE);
+                        btnDownload.setEnabled(true);
+                        btnDownload.setText("📥 APLICAR CORREÇÃO DESTE ENDEREÇO");
+                        textCorrectionStatus.setVisibility(View.VISIBLE);
+                        textCorrectionStatus.setText("Correção disponível");
+                        textCorrectionStatus.setTextColor(Color.parseColor("#F44336"));
+
+                        btnDownload.setOnClickListener(v3 -> {
+                            btnDownload.setEnabled(false);
+                            btnDownload.setText("APLICANDO...");
+                            new Thread(() -> {
+                                stop.latitude = corrected.latitude;
+                                stop.longitude = corrected.longitude;
+                                dao.updateRouteStop(stop);
+
+                                Activity activity3 = getActivity();
+                                if (activity3 != null) activity3.runOnUiThread(() -> {
+                                    Toast.makeText(getContext(), "Correção aplicada nesta parada!", Toast.LENGTH_SHORT).show();
+                                    btnDownload.setVisibility(View.GONE);
+                                    textCorrectionStatus.setText("Correção aplicada");
+                                    textCorrectionStatus.setTextColor(Color.parseColor("#4CAF50"));
+                                    refreshMarkers();
+                                    updateRouteCorrectionsCount();
+                                });
+                            }).start();
+                        });
+                    }
+
+                    if (corrected.notes != null && !corrected.notes.isEmpty()) {
+                        editNotes.setText(corrected.notes);
+                        switchPublic.setChecked(corrected.isNotePublic);
+                        layoutNote.setVisibility(View.VISIBLE);
+                        ((MaterialButton) btnShowAddNote).setText("EDITAR OBSERVAÇÃO");
+                    }
+
                     textCorrectionStatus.setVisibility(View.VISIBLE);
                     String currentUserId = sharedPreferences.getString("current_user_id", "anon");
                     boolean isMine = (corrected.creatorId == null || (currentUserId != null && !currentUserId.equals("anon") && currentUserId.equals(corrected.creatorId)));
@@ -5191,7 +5232,6 @@ public class RouteFragment extends Fragment {
                         btnShareLocalFix.setVisibility(View.VISIBLE);
                         btnShareLocalFix.setOnClickListener(v2 -> {
                             String uName = sharedPreferences.getString("profile_name", "Entregador");
-                            
                             btnShareLocalFix.setEnabled(false);
                             btnShareLocalFix.setText("ENVIANDO...");
 
@@ -5235,31 +5275,24 @@ public class RouteFragment extends Fragment {
                     btnDeleteLocalFix.setOnClickListener(v2 -> {
                         new AlertDialog.Builder(requireContext())
                             .setTitle("Remover Minha Correção")
-                            .setMessage("Deseja apagar esta correção e voltar para a localização original do Excel/Comunidade?")
+                            .setMessage("Deseja apagar esta correção e voltar para a localização original da planilha?")
                             .setPositiveButton("Sim, Remover", (dialogInterface, i) -> {
                                 new Thread(() -> {
                                     dao.deleteCorrectedAddress(corrected);
-                                    FirebaseHelper.searchGlobal(stop.address, new FirebaseHelper.GlobalCorrectionCallback() {
-                                        @Override
-                                        public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String publicNote, int commentCount, String creatorName, long updateDate) {
-                                            new Thread(() -> {
-                                                stop.latitude = lat;
-                                                stop.longitude = lon;
-                                                dao.updateRouteStop(stop);
-                                                Activity activity2 = getActivity();
-                                                if (activity2 != null) activity2.runOnUiThread(() -> {
-                                                    dialog.dismiss();
-                                                    Toast.makeText(getContext(), "Correção removida!", Toast.LENGTH_SHORT).show();
-                                                });
-                                            }).start();
-                                        }
-                                        @Override
-                                        public void onError(String msg) {
-                                            getActivity().runOnUiThread(() -> {
-                                                dialog.dismiss();
-                                                Toast.makeText(getContext(), "Correção removida localmente.", Toast.LENGTH_SHORT).show();
-                                            });
-                                        }
+                                    
+                                    // 🔥 RESTAURAÇÃO COMPLETA: Volta sempre para a coordenada original da planilha
+                                    if (stop.originalLatitude != 0 && stop.originalLongitude != 0) {
+                                        stop.latitude = stop.originalLatitude;
+                                        stop.longitude = stop.originalLongitude;
+                                    }
+                                    dao.updateRouteStop(stop);
+
+                                    Activity activity2 = getActivity();
+                                    if (activity2 != null) activity2.runOnUiThread(() -> {
+                                        dialog.dismiss();
+                                        Toast.makeText(getContext(), "Correção removida! Localização original da planilha restaurada.", Toast.LENGTH_SHORT).show();
+                                        refreshMarkers();
+                                        updateRouteCorrectionsCount();
                                     });
                                 }).start();
                             })
@@ -5272,25 +5305,23 @@ public class RouteFragment extends Fragment {
                     btnDeleteDownloadedFix.setOnClickListener(v2 -> {
                         new AlertDialog.Builder(requireContext())
                             .setTitle("Excluir Correção Baixada")
-                            .setMessage("Deseja apagar esta correção baixada da comunidade e voltar para a localização original?")
+                            .setMessage("Deseja apagar esta correção baixada da comunidade e voltar para a localização original da planilha?")
                             .setPositiveButton("Sim, Excluir", (dialogInterface, i) -> {
                                 new Thread(() -> {
                                     dao.deleteCorrectedAddress(corrected);
                                     
-                                    // Restaura para a localização original (do Excel ou valor padrão se não houver original)
-                                    if (stop.originalLatitude != 0) {
+                                    if (stop.originalLatitude != 0 && stop.originalLongitude != 0) {
                                         stop.latitude = stop.originalLatitude;
                                         stop.longitude = stop.originalLongitude;
-                                    } else {
-                                        // Fallback se não tiver original: tenta zerar ou manter? 
-                                        // Idealmente restauramos para o que estava na planilha.
                                     }
                                     dao.updateRouteStop(stop);
 
                                     Activity activity2 = getActivity();
                                     if (activity2 != null) activity2.runOnUiThread(() -> {
                                         dialog.dismiss();
-                                        Toast.makeText(getContext(), "Correção baixada excluída!", Toast.LENGTH_SHORT).show();
+                                        Toast.makeText(getContext(), "Correção baixada excluída! Localização original restaurada.", Toast.LENGTH_SHORT).show();
+                                        refreshMarkers();
+                                        updateRouteCorrectionsCount();
                                     });
                                 }).start();
                             })
@@ -5818,6 +5849,265 @@ public class RouteFragment extends Fragment {
             }
             sharedPreferences.edit().putBoolean("stats_summary_expanded", true).apply();
         }
+    }
+
+    private void updateRouteCorrectionsCount() {
+        if (currentRouteId == -1 || currentStops == null || currentStops.isEmpty() || getContext() == null) {
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    if (cardRouteCorrections != null) cardRouteCorrections.setVisibility(View.GONE);
+                });
+            }
+            return;
+        }
+
+        final List<RouteStop> stopsCopy = new ArrayList<>(currentStops);
+        final Context ctx = getContext();
+        if (ctx == null) return;
+
+        new Thread(() -> {
+            try {
+                AppDao dao = AppDatabase.getInstance(ctx.getApplicationContext()).appDao();
+                List<CorrectedAddress> allCa = dao.getAllCorrectedAddresses();
+                
+                Map<String, CorrectedAddress> localCaMap = new HashMap<>();
+                if (allCa != null) {
+                    for (CorrectedAddress ca : allCa) {
+                        if (ca.address != null && !ca.address.trim().isEmpty()) {
+                            localCaMap.put(ca.address.trim().toUpperCase(), ca);
+                        }
+                    }
+                }
+
+                final List<RouteStop> availableCorrectionsStops = Collections.synchronizedList(new ArrayList<>());
+                final Map<Integer, CorrectedAddress> stopToCaMap = new java.util.concurrent.ConcurrentHashMap<>();
+
+                List<RouteStop> stopsNeedingGlobalCheck = new ArrayList<>();
+
+                for (RouteStop s : stopsCopy) {
+                    if (s.address == null || s.address.trim().isEmpty()) continue;
+                    String addrClean = s.address.trim().toUpperCase();
+                    
+                    CorrectedAddress ca = localCaMap.get(addrClean);
+                    if (ca == null) {
+                        ca = dao.getCorrectedAddress(s.address);
+                    }
+
+                    if (ca != null) {
+                        // Se existe uma correção local para este endereço,
+                        // verifica se a parada nesta rota JÁ ESTÁ usando estas coordenadas corrigidas
+                        boolean alreadyApplied = Math.abs(s.latitude - ca.latitude) < 0.00001 
+                                              && Math.abs(s.longitude - ca.longitude) < 0.00001;
+                        if (!alreadyApplied) {
+                            availableCorrectionsStops.add(s);
+                            stopToCaMap.put(s.id, ca);
+                        }
+                    } else {
+                        stopsNeedingGlobalCheck.add(s);
+                    }
+                }
+
+                // Atualiza UI com as correções já encontradas no banco local
+                updateCorrectionsBalloonUI(availableCorrectionsStops, stopToCaMap);
+
+                if (stopsNeedingGlobalCheck.isEmpty()) {
+                    return;
+                }
+
+                final String currentUserId = ctx.getSharedPreferences("AppConfig", Context.MODE_PRIVATE).getString("current_user_id", "anon");
+
+                for (RouteStop s : stopsNeedingGlobalCheck) {
+                    FirebaseHelper.searchGlobal(s.address, new FirebaseHelper.GlobalCorrectionCallback() {
+                        @Override
+                        public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date) {
+                            boolean alreadyApplied = Math.abs(s.latitude - lat) < 0.00001 && Math.abs(s.longitude - lon) < 0.00001;
+
+                            // Se a parada na rota atual ainda não está aplicada nesta localização corrigida,
+                            // adiciona como correção disponível na comunidade!
+                            if (!alreadyApplied) {
+                                CorrectedAddress globalCa = new CorrectedAddress(s.address, s.neighborhood, lat, lon);
+                                globalCa.notes = note;
+                                globalCa.creatorId = creatorId != null ? creatorId : "community_anon";
+
+                                synchronized (availableCorrectionsStops) {
+                                    if (!availableCorrectionsStops.contains(s)) {
+                                        availableCorrectionsStops.add(s);
+                                        stopToCaMap.put(s.id, globalCa);
+                                    }
+                                }
+                                updateCorrectionsBalloonUI(availableCorrectionsStops, stopToCaMap);
+                            }
+                        }
+                        @Override public void onError(String msg) {}
+                    });
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    private void updateCorrectionsBalloonUI(List<RouteStop> availableStops, Map<Integer, CorrectedAddress> caMap) {
+        Activity activity = getActivity();
+        if (activity == null) return;
+
+        activity.runOnUiThread(() -> {
+            if (cardRouteCorrections != null && textRouteCorrections != null) {
+                int count;
+                List<RouteStop> copyStops;
+                Map<Integer, CorrectedAddress> copyMap;
+                synchronized (availableStops) {
+                    count = availableStops.size();
+                    copyStops = new ArrayList<>(availableStops);
+                    copyMap = new HashMap<>(caMap);
+                }
+
+                if (count > 0) {
+                    cardRouteCorrections.setVisibility(View.VISIBLE);
+                    String label = count == 1 ? "1 correção disponível" : count + " correções disponíveis";
+                    textRouteCorrections.setText(label);
+                    
+                    Object[] payload = new Object[] { copyStops, copyMap };
+                    cardRouteCorrections.setTag(payload);
+                } else {
+                    cardRouteCorrections.setVisibility(View.GONE);
+                }
+            }
+        });
+    }
+
+    private void showRouteCorrectionsDialog() {
+        if (cardRouteCorrections == null || getContext() == null) return;
+        Object tag = cardRouteCorrections.getTag();
+        if (!(tag instanceof Object[])) return;
+
+        Object[] payload = (Object[]) tag;
+        if (payload.length < 2) return;
+
+        @SuppressWarnings("unchecked")
+        List<RouteStop> stopsWithFixes = (List<RouteStop>) payload[0];
+        @SuppressWarnings("unchecked")
+        Map<Integer, CorrectedAddress> caMap = (Map<Integer, CorrectedAddress>) payload[1];
+
+        if (stopsWithFixes == null || stopsWithFixes.isEmpty()) return;
+
+        Context ctx = requireContext();
+
+        LinearLayout rootLayout = new LinearLayout(ctx);
+        rootLayout.setOrientation(LinearLayout.VERTICAL);
+        int p = (int) (16 * getResources().getDisplayMetrics().density);
+        rootLayout.setPadding(p, p, p, p);
+
+        // 🔥 Botão Destacado na Parte Superior para Baixar e Aplicar Todas as Correções da Comunidade
+        com.google.android.material.button.MaterialButton btnApplyAll = new com.google.android.material.button.MaterialButton(ctx);
+        btnApplyAll.setText("📥 Baixar e aplicar todas as correções da comunidade (" + stopsWithFixes.size() + ")");
+        btnApplyAll.setTextSize(13f);
+        btnApplyAll.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnApplyAll.setCornerRadius((int) (12 * getResources().getDisplayMetrics().density));
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnParams.bottomMargin = (int) (12 * getResources().getDisplayMetrics().density);
+        btnApplyAll.setLayoutParams(btnParams);
+
+        rootLayout.addView(btnApplyAll);
+
+        // Subtítulo
+        TextView textListTitle = new TextView(ctx);
+        textListTitle.setText("Paradas com correção disponível:");
+        textListTitle.setTextSize(12f);
+        textListTitle.setTextColor(Color.parseColor("#666666"));
+        textListTitle.setPadding(0, 0, 0, (int) (8 * getResources().getDisplayMetrics().density));
+        rootLayout.addView(textListTitle);
+
+        // Lista de paradas individuais
+        String[] items = new String[stopsWithFixes.size() + 1];
+        for (int i = 0; i < stopsWithFixes.size(); i++) {
+            RouteStop s = stopsWithFixes.get(i);
+            items[i] = "Parada " + s.stopNumber + ": " + s.address;
+        }
+        items[stopsWithFixes.size()] = "📍 Gerenciar Endereços Corrigidos";
+
+        android.widget.ListView listView = new android.widget.ListView(ctx);
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(
+                ctx, android.R.layout.simple_list_item_1, items);
+        listView.setAdapter(adapter);
+
+        int listHeight = (int) (Math.min(stopsWithFixes.size() + 1, 5) * 48 * getResources().getDisplayMetrics().density);
+        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, listHeight);
+        listView.setLayoutParams(listParams);
+        rootLayout.addView(listView);
+
+        AlertDialog dialog = new AlertDialog.Builder(ctx)
+                .setTitle("Correções na Rota (" + stopsWithFixes.size() + ")")
+                .setView(rootLayout)
+                .setNegativeButton("Fechar", null)
+                .create();
+
+        btnApplyAll.setOnClickListener(v -> {
+            dialog.dismiss();
+            applyAllRouteCorrections(stopsWithFixes, caMap);
+        });
+
+        listView.setOnItemClickListener((parent, view, position, id) -> {
+            dialog.dismiss();
+            if (position == stopsWithFixes.size()) {
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).openFragmentInSettings(new CorrectedAddressesParentFragment(), "Endereços Corrigidos");
+                }
+            } else {
+                RouteStop selected = stopsWithFixes.get(position);
+                if (mapController != null && selected.latitude != 0 && selected.longitude != 0) {
+                    mapController.animateTo(new GeoPoint(selected.latitude, selected.longitude));
+                }
+                showStopDetails(selected);
+            }
+        });
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+        }
+        dialog.show();
+    }
+
+    private void applyAllRouteCorrections(List<RouteStop> stopsToFix, Map<Integer, CorrectedAddress> caMap) {
+        if (stopsToFix == null || stopsToFix.isEmpty() || getContext() == null) return;
+
+        final Context ctx = getContext();
+        new Thread(() -> {
+            try {
+                AppDao dao = AppDatabase.getInstance(ctx.getApplicationContext()).appDao();
+                int appliedCount = 0;
+
+                for (RouteStop s : stopsToFix) {
+                    CorrectedAddress ca = caMap.get(s.id);
+                    if (ca != null) {
+                        CorrectedAddress localCa = dao.getCorrectedAddress(s.address);
+                        if (localCa == null) {
+                            dao.insertCorrectedAddress(ca);
+                        }
+
+                        s.latitude = ca.latitude;
+                        s.longitude = ca.longitude;
+                        dao.updateRouteStop(s);
+                        appliedCount++;
+                    }
+                }
+
+                final int finalApplied = appliedCount;
+                Activity activity = getActivity();
+                if (activity != null) {
+                    activity.runOnUiThread(() -> {
+                        Toast.makeText(getContext(), finalApplied + " correções da comunidade baixadas e aplicadas!", Toast.LENGTH_SHORT).show();
+                        updateRouteCorrectionsCount();
+                    });
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
     }
 
     private void flashStatsSummary(View targetCard) {

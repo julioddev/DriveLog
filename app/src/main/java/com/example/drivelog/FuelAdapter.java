@@ -188,25 +188,39 @@ public class FuelAdapter extends RecyclerView.Adapter<FuelAdapter.FuelViewHolder
             // TextWatchers for auto-calculation
             TextWatcher calculationWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(Editable s) {
                     if (!isUpdatingInternal) {
                         isUpdatingInternal = true;
                         try {
                             double totalValue = parseDouble(holder.editValue.getText().toString());
                             double pricePerLiter = parseDouble(holder.editPricePerLiter.getText().toString());
-                            if (pricePerLiter > 0) {
-                                double liters = totalValue / pricePerLiter;
-                                holder.editLiters.setText(String.format(Locale.getDefault(), "%.2f", liters));
+                            double liters = parseDouble(holder.editLiters.getText().toString());
+
+                            if (holder.editPricePerLiter.hasFocus() && pricePerLiter > 0) {
+                                double calcLit = totalValue / pricePerLiter;
+                                holder.editLiters.setText(String.format(Locale.getDefault(), "%.2f", calcLit));
+                            } else if (holder.editLiters.hasFocus() && liters > 0) {
+                                double calcPrice = totalValue / liters;
+                                holder.editPricePerLiter.setText(String.format(Locale.getDefault(), "%.2f", calcPrice));
+                            } else if (holder.editValue.hasFocus() && totalValue > 0) {
+                                if (pricePerLiter > 0) {
+                                    double calcLit = totalValue / pricePerLiter;
+                                    holder.editLiters.setText(String.format(Locale.getDefault(), "%.2f", calcLit));
+                                } else if (liters > 0) {
+                                    double calcPrice = totalValue / liters;
+                                    holder.editPricePerLiter.setText(String.format(Locale.getDefault(), "%.2f", calcPrice));
+                                }
                             }
-                        } catch (Exception e) {}
+                        } catch (Exception ignored) {}
                         isUpdatingInternal = false;
                     }
                 }
-                @Override public void afterTextChanged(Editable s) {}
             };
             
             holder.editValue.addTextChangedListener(calculationWatcher);
             holder.editPricePerLiter.addTextChangedListener(calculationWatcher);
+            holder.editLiters.addTextChangedListener(calculationWatcher);
 
         } else {
             holder.layoutEdit.setVisibility(View.GONE);

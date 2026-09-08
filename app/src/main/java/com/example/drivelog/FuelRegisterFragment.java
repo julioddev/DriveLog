@@ -177,25 +177,43 @@ public class FuelRegisterFragment extends Fragment {
                 .show();
     }
 
+    private boolean isUpdatingCalculation = false;
+
     private void setupCalculationWatcher() {
-        TextWatcher watcher = new TextWatcher() {
+        TextWatcher calculationWatcher = new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
-            @Override public void afterTextChanged(Editable s) { calculateLiters(); }
-        };
-        editValue.addTextChangedListener(watcher);
-        editPricePerLiter.addTextChangedListener(watcher);
-    }
+            @Override public void afterTextChanged(Editable s) {
+                if (isUpdatingCalculation) return;
+                isUpdatingCalculation = true;
+                try {
+                    double val = parseDouble(editValue.getText().toString());
+                    double price = parseDouble(editPricePerLiter.getText().toString());
+                    double lit = parseDouble(editLiters.getText().toString());
 
-    private void calculateLiters() {
-        double val = parseDouble(editValue.getText().toString());
-        double price = parseDouble(editPricePerLiter.getText().toString());
-        if (price > 0) {
-            double lit = val / price;
-            editLiters.setText(String.format(Locale.getDefault(), "%.2f", lit));
-        } else {
-            editLiters.setText("");
-        }
+                    if (editPricePerLiter.hasFocus() && price > 0) {
+                        double calcLit = val / price;
+                        editLiters.setText(String.format(Locale.getDefault(), "%.2f", calcLit));
+                    } else if (editLiters.hasFocus() && lit > 0) {
+                        double calcPrice = val / lit;
+                        editPricePerLiter.setText(String.format(Locale.getDefault(), "%.2f", calcPrice));
+                    } else if (editValue.hasFocus() && val > 0) {
+                        if (price > 0) {
+                            double calcLit = val / price;
+                            editLiters.setText(String.format(Locale.getDefault(), "%.2f", calcLit));
+                        } else if (lit > 0) {
+                            double calcPrice = val / lit;
+                            editPricePerLiter.setText(String.format(Locale.getDefault(), "%.2f", calcPrice));
+                        }
+                    }
+                } catch (Exception ignored) {}
+                isUpdatingCalculation = false;
+            }
+        };
+
+        editValue.addTextChangedListener(calculationWatcher);
+        editPricePerLiter.addTextChangedListener(calculationWatcher);
+        editLiters.addTextChangedListener(calculationWatcher);
     }
 
     private void setupKmCalculationWatcher() {
