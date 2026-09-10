@@ -366,7 +366,43 @@ public class MapsFragment extends Fragment {
     private void updateTrackingUI() {
         boolean isTracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
         if (fabStop != null) fabStop.setVisibility(isTracking ? View.VISIBLE : View.GONE);
-        if (textStatus != null) textStatus.setText(isTracking ? "Rastreamento Ativo" : "Rastreamento Inativo");
+        if (textStatus != null) {
+            int mode = sharedPreferences.getInt("tracking_mode_v2", 0);
+            if (isTracking) {
+                textStatus.setText("Rastreamento Ativo");
+            } else if (mode == 2) {
+                float homeLat = sharedPreferences.getFloat("home_lat", 0);
+                float homeLon = sharedPreferences.getFloat("home_lon", 0);
+                Float distHome = TrackingService.distanceToHome.getValue();
+                int triggerRadius = sharedPreferences.getInt("home_trigger_radius", 100);
+
+                if (homeLat == 0 || homeLon == 0) {
+                    textStatus.setText("Defina sua Casa no Mapa");
+                } else {
+                    float currentDist = (distHome != null && distHome >= 0) ? distHome : -1f;
+                    if (currentDist < 0 && locationOverlay != null && locationOverlay.getMyLocation() != null) {
+                        GeoPoint myLoc = locationOverlay.getMyLocation();
+                        float[] res = new float[1];
+                        android.location.Location.distanceBetween(myLoc.getLatitude(), myLoc.getLongitude(), homeLat, homeLon, res);
+                        currentDist = res[0];
+                    }
+
+                    if (currentDist >= 0) {
+                        if (currentDist <= triggerRadius) {
+                            textStatus.setText(String.format(Locale.getDefault(), "Dentro do raio da casa (%.0fm / %dm)", currentDist, triggerRadius));
+                        } else {
+                            textStatus.setText(String.format(Locale.getDefault(), "Fora do raio da casa (%.0fm / %dm)", currentDist, triggerRadius));
+                        }
+                    } else {
+                        textStatus.setText("Buscando sinal GPS...");
+                    }
+                }
+            } else if (mode == 1) {
+                textStatus.setText("Aguardando Horário");
+            } else {
+                textStatus.setText("Rastreamento Inativo");
+            }
+        }
     }
 
     private void centerOnCurrentLocation() {
@@ -398,6 +434,16 @@ public class MapsFragment extends Fragment {
         });
 
         btnStop.setOnClickListener(v1 -> {
+            int currentMode = sharedPreferences.getInt("tracking_mode_v2", 0);
+            if (currentMode != 0) {
+                sharedPreferences.edit()
+                        .putInt("tracking_mode_v2", 0)
+                        .putBoolean("tracking_auto", false)
+                        .putBoolean("home_tracking_enabled", false)
+                        .apply();
+                TrackingHelper.updateAutoTracking(requireContext());
+                Toast.makeText(getContext(), "Trajeto salvo e Modo Automático desativado.", Toast.LENGTH_SHORT).show();
+            }
             Intent intent = new Intent(getContext(), TrackingService.class);
             intent.setAction("STOP");
             requireContext().startService(intent);

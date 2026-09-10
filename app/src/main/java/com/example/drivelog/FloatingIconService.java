@@ -11,6 +11,8 @@ import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -181,6 +183,39 @@ public class FloatingIconService extends Service {
         }
     }
 
+    private void performHapticAndVisualEffect() {
+        if (floatingView != null) {
+            floatingView.animate()
+                    .scaleX(1.3f)
+                    .scaleY(1.3f)
+                    .setDuration(120)
+                    .withEndAction(() -> {
+                        if (floatingView != null) {
+                            floatingView.animate()
+                                    .scaleX(1.0f)
+                                    .scaleY(1.0f)
+                                    .setDuration(120)
+                                    .start();
+                        }
+                    })
+                    .start();
+        }
+
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm != null && pm.isInteractive()) {
+                Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
+                    } else {
+                        vibrator.vibrate(50);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
     private void setupTouchListener() {
         floatingView.findViewById(R.id.root_container).setOnTouchListener(new View.OnTouchListener() {
             private int initialX;
@@ -193,10 +228,13 @@ public class FloatingIconService extends Service {
             private final Runnable longPressRunnable = new Runnable() {
                 @Override
                 public void run() {
-                    if (isDeveloper && btnPausePlay != null) {
-                        isLongPressTriggered = true;
-                        btnPausePlay.setVisibility(btnPausePlay.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                    isLongPressTriggered = true;
+                    if (btnPausePlay != null) {
+                        btnPausePlay.setVisibility(View.GONE);
                     }
+                    performHapticAndVisualEffect();
+                    CpfHelper.generateAndCopyCpf(FloatingIconService.this);
+                    Toast.makeText(FloatingIconService.this, "Novo CPF fictício gerado e copiado!", Toast.LENGTH_SHORT).show();
                 }
             };
 

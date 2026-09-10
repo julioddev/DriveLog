@@ -52,15 +52,17 @@
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Litros Calculados"
+                android:hint="Litros"
                 android:layout_marginTop="8dp">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/editFuelLiters"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="numberDecimal"
-                    android:focusable="false"
-                    android:clickable="false" />
+                    android:digits="0123456789,."
+                    android:focusable="true"
+                    android:clickable="true"
+                    android:focusableInTouchMode="true" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.textfield.TextInputLayout

@@ -1,21 +1,26 @@
 package com.example.drivelog;
 
 import android.app.DatePickerDialog;
+import android.graphics.Color;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
 
@@ -24,10 +29,19 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
     private OnKmClickListener listener;
     private int editingKmId = -1;
 
+    // 🔥 Estrutura de Seleção Múltipla
+    private boolean isSelectionMode = false;
+    private final Set<Integer> selectedIds = new HashSet<>();
+    private OnSelectionChangeListener selectionChangeListener;
+
     public interface OnKmClickListener {
         void onKmClick(DailyKm dailyKm);
         void onKmLongClick(DailyKm dailyKm, View anchor);
         void onSaveEdit(DailyKm dailyKm, int position);
+    }
+
+    public interface OnSelectionChangeListener {
+        void onSelectionChanged(int selectedCount, boolean isSelectionMode);
     }
 
     public KmAdapter(List<DailyKm> kmList, OnKmClickListener listener) {
@@ -35,9 +49,68 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
         this.listener = listener;
     }
 
+    public void setOnSelectionChangeListener(OnSelectionChangeListener listener) {
+        this.selectionChangeListener = listener;
+    }
+
+    public boolean isSelectionMode() {
+        return isSelectionMode;
+    }
+
+    public Set<Integer> getSelectedIds() {
+        return selectedIds;
+    }
+
+    public void startSelectionMode(int initialId) {
+        isSelectionMode = true;
+        selectedIds.clear();
+        selectedIds.add(initialId);
+        notifyDataSetChanged();
+        if (selectionChangeListener != null) {
+            selectionChangeListener.onSelectionChanged(selectedIds.size(), isSelectionMode);
+        }
+    }
+
+    public void toggleSelection(int id) {
+        if (selectedIds.contains(id)) {
+            selectedIds.remove(id);
+        } else {
+            selectedIds.add(id);
+        }
+        if (selectedIds.isEmpty()) {
+            isSelectionMode = false;
+        }
+        notifyDataSetChanged();
+        if (selectionChangeListener != null) {
+            selectionChangeListener.onSelectionChanged(selectedIds.size(), isSelectionMode);
+        }
+    }
+
+    public void selectAll() {
+        isSelectionMode = true;
+        selectedIds.clear();
+        if (kmList != null) {
+            for (DailyKm item : kmList) {
+                selectedIds.add(item.id);
+            }
+        }
+        notifyDataSetChanged();
+        if (selectionChangeListener != null) {
+            selectionChangeListener.onSelectionChanged(selectedIds.size(), isSelectionMode);
+        }
+    }
+
+    public void clearSelection() {
+        isSelectionMode = false;
+        selectedIds.clear();
+        notifyDataSetChanged();
+        if (selectionChangeListener != null) {
+            selectionChangeListener.onSelectionChanged(0, false);
+        }
+    }
+
     public void setKmList(List<DailyKm> kmList) {
         this.kmList = kmList;
-        // Não resetamos mais o editingKmId aqui para evitar fechar a janela durante rastreamento
         notifyDataSetChanged();
     }
 
@@ -88,6 +161,21 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
         DailyKm dailyKm = kmList.get(position);
         holder.textDate.setText(dateFormat.format(new Date(dailyKm.date)));
         
+        // --- Visual da Seleção Múltipla ---
+        boolean isSelected = selectedIds.contains(dailyKm.id);
+        if (holder.checkSelectKm != null) {
+            holder.checkSelectKm.setVisibility(isSelectionMode ? View.VISIBLE : View.GONE);
+            holder.checkSelectKm.setChecked(isSelected);
+        }
+        if (holder.cardKmItem != null) {
+            if (isSelectionMode && isSelected) {
+                holder.cardKmItem.setStrokeColor(Color.parseColor("#2196F3"));
+                holder.cardKmItem.setStrokeWidth((int) (2 * holder.itemView.getResources().getDisplayMetrics().density));
+            } else {
+                holder.cardKmItem.setStrokeWidth(0);
+            }
+        }
+
         if (dailyKm.isCompleted || dailyKm.isAutomatic) {
             StringBuilder valueBuilder = new StringBuilder();
             
@@ -141,7 +229,7 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
         }
 
         // Inline Editing Logic
-        if (dailyKm.id == editingKmId) {
+        if (dailyKm.id == editingKmId && !isSelectionMode) {
             holder.layoutEdit.setVisibility(View.VISIBLE);
             holder.editStart.setText(String.format(Locale.getDefault(), "%.1f", dailyKm.kmStart));
             holder.editEnd.setText(String.format(Locale.getDefault(), "%.1f", dailyKm.kmEnd));
@@ -155,7 +243,6 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
 
             holder.editDate.setText(dateFormat.format(new Date(dailyKm.date)));
 
-            // Watchers para atualizar o objeto em tempo real (evita perda de dados ao minimizar)
             TextWatcher draftWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
@@ -217,11 +304,19 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
         });
 
         holder.itemView.setOnClickListener(v -> {
-            if (listener != null) listener.onKmClick(dailyKm);
+            if (isSelectionMode) {
+                toggleSelection(dailyKm.id);
+            } else {
+                if (listener != null) listener.onKmClick(dailyKm);
+            }
         });
 
         holder.itemView.setOnLongClickListener(v -> {
-            if (listener != null) listener.onKmLongClick(dailyKm, v);
+            if (!isSelectionMode) {
+                startSelectionMode(dailyKm.id);
+            } else {
+                toggleSelection(dailyKm.id);
+            }
             return true;
         });
     }
@@ -235,10 +330,12 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
 
     @Override
     public int getItemCount() {
-        return kmList.size();
+        return kmList != null ? kmList.size() : 0;
     }
 
     static class KmViewHolder extends RecyclerView.ViewHolder {
+        MaterialCardView cardKmItem;
+        CheckBox checkSelectKm;
         TextView textDate, textValue, textDetails, textPending;
         View layoutEdit;
         EditText editStart, editEnd, editDate;
@@ -246,6 +343,8 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
 
         public KmViewHolder(@NonNull View itemView) {
             super(itemView);
+            cardKmItem = itemView.findViewById(R.id.cardKmItem);
+            checkSelectKm = itemView.findViewById(R.id.checkSelectKm);
             textDate = itemView.findViewById(R.id.textKmDate);
             textValue = itemView.findViewById(R.id.textKmValue);
             textDetails = itemView.findViewById(R.id.textKmDetails);

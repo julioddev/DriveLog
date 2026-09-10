@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
@@ -12,7 +13,10 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.button.MaterialButton;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 public class TrackHistoryFragment extends Fragment implements KmAdapter.OnKmClickListener {
 
@@ -31,6 +35,64 @@ public class TrackHistoryFragment extends Fragment implements KmAdapter.OnKmClic
         recyclerHistory.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new KmAdapter(new ArrayList<>(), this);
         recyclerHistory.setAdapter(adapter);
+
+        // Barra de Seleção Múltipla
+        View layoutSelectionBar = view.findViewById(R.id.layoutTrackSelectionBar);
+        TextView textSelectedCount = view.findViewById(R.id.textTrackSelectedCount);
+        ImageButton btnCancelSelection = view.findViewById(R.id.btnCancelTrackSelection);
+        MaterialButton btnSelectAll = view.findViewById(R.id.btnSelectAllTrack);
+        MaterialButton btnDeleteSelected = view.findViewById(R.id.btnDeleteSelectedTrack);
+
+        adapter.setOnSelectionChangeListener((count, isSelection) -> {
+            if (layoutSelectionBar != null) {
+                layoutSelectionBar.setVisibility(isSelection ? View.VISIBLE : View.GONE);
+                if (textSelectedCount != null) {
+                    textSelectedCount.setText(count + " selecionados");
+                }
+            }
+        });
+
+        if (btnCancelSelection != null) {
+            btnCancelSelection.setOnClickListener(v -> adapter.clearSelection());
+        }
+
+        if (btnSelectAll != null) {
+            btnSelectAll.setOnClickListener(v -> adapter.selectAll());
+        }
+
+        if (btnDeleteSelected != null) {
+            btnDeleteSelected.setOnClickListener(v -> {
+                Set<Integer> ids = new HashSet<>(adapter.getSelectedIds());
+                if (ids.isEmpty()) return;
+
+                UiHelper.showBottomSheetConfirm(
+                        requireContext(),
+                        "Excluir " + ids.size() + " Gravações?",
+                        "Deseja realmente excluir as " + ids.size() + " gravações GPS selecionadas?",
+                        "EXCLUIR TODAS",
+                        () -> {
+                            android.content.Context ctx = requireContext().getApplicationContext();
+                            new Thread(() -> {
+                                AppDao dao = AppDatabase.getInstance(ctx).appDao();
+                                for (Integer id : ids) {
+                                    dao.deleteRoutePointsForKm(id);
+                                    DailyKm item = dao.getDailyKmById(id);
+                                    if (item != null) {
+                                        dao.deleteDailyKm(item);
+                                    }
+                                }
+                                if (getActivity() != null) {
+                                    getActivity().runOnUiThread(() -> {
+                                        adapter.clearSelection();
+                                        Toast.makeText(getContext(), ids.size() + " gravações excluídas com sucesso!", Toast.LENGTH_SHORT).show();
+                                        CloudSyncHelper.syncNow(requireContext(), "Lote de Gravações GPS excluído");
+                                    });
+                                }
+                            }).start();
+                        }
+                );
+            });
+        }
 
         View btnOptions = view.findViewById(R.id.btnTrackOptions);
         if (btnOptions != null) {

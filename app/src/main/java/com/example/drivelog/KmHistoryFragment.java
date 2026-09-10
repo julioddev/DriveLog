@@ -9,7 +9,10 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
+import com.google.android.material.button.MaterialButton;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -45,6 +48,64 @@ public class KmHistoryFragment extends Fragment implements KmAdapter.OnKmClickLi
         recyclerHistory.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new KmAdapter(new ArrayList<>(), this);
         recyclerHistory.setAdapter(adapter);
+
+        // Barra de Seleção Múltipla
+        View layoutSelectionBar = view.findViewById(R.id.layoutKmSelectionBar);
+        TextView textSelectedCount = view.findViewById(R.id.textKmSelectedCount);
+        ImageButton btnCancelSelection = view.findViewById(R.id.btnCancelKmSelection);
+        MaterialButton btnSelectAll = view.findViewById(R.id.btnSelectAllKm);
+        MaterialButton btnDeleteSelected = view.findViewById(R.id.btnDeleteSelectedKm);
+
+        adapter.setOnSelectionChangeListener((count, isSelection) -> {
+            if (layoutSelectionBar != null) {
+                layoutSelectionBar.setVisibility(isSelection ? View.VISIBLE : View.GONE);
+                if (textSelectedCount != null) {
+                    textSelectedCount.setText(count + " selecionados");
+                }
+            }
+        });
+
+        if (btnCancelSelection != null) {
+            btnCancelSelection.setOnClickListener(v -> adapter.clearSelection());
+        }
+
+        if (btnSelectAll != null) {
+            btnSelectAll.setOnClickListener(v -> adapter.selectAll());
+        }
+
+        if (btnDeleteSelected != null) {
+            btnDeleteSelected.setOnClickListener(v -> {
+                java.util.Set<Integer> ids = new java.util.HashSet<>(adapter.getSelectedIds());
+                if (ids.isEmpty()) return;
+
+                UiHelper.showBottomSheetConfirm(
+                        requireContext(),
+                        "Excluir " + ids.size() + " Registros?",
+                        "Deseja realmente excluir os " + ids.size() + " registros selecionados?",
+                        "EXCLUIR TODOS",
+                        () -> {
+                            android.content.Context ctx = requireContext().getApplicationContext();
+                            new Thread(() -> {
+                                AppDao dao = AppDatabase.getInstance(ctx).appDao();
+                                for (Integer id : ids) {
+                                    dao.deleteRoutePointsForKm(id);
+                                    DailyKm item = dao.getDailyKmById(id);
+                                    if (item != null) {
+                                        dao.deleteDailyKm(item);
+                                    }
+                                }
+                                if (getActivity() != null) {
+                                    getActivity().runOnUiThread(() -> {
+                                        adapter.clearSelection();
+                                        Toast.makeText(getContext(), ids.size() + " registros excluídos com sucesso!", Toast.LENGTH_SHORT).show();
+                                        CloudSyncHelper.syncNow(requireContext(), "Lote de KM excluído");
+                                    });
+                                }
+                            }).start();
+                        }
+                );
+            });
+        }
 
         if (savedInstanceState != null) {
             restoredEditId = savedInstanceState.getInt("editing_km_id", -1);
@@ -142,9 +203,9 @@ public class KmHistoryFragment extends Fragment implements KmAdapter.OnKmClickLi
                 "Deseja realmente excluir este registro de KM?",
                 "EXCLUIR",
                 () -> {
+                    android.content.Context ctx = requireContext().getApplicationContext();
                     new Thread(() -> {
-                        AppDatabase.getInstance(getContext()).appDao().deleteDailyKm(dailyKm);
-                        updateHistory();
+                        AppDatabase.getInstance(ctx).appDao().deleteDailyKm(dailyKm);
                         if (getActivity() != null) {
                             getActivity().runOnUiThread(() -> {
                                 Toast.makeText(getContext(), "Registro excluído", Toast.LENGTH_SHORT).show();

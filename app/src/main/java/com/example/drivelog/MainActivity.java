@@ -979,34 +979,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void openTrackingHistory() {
-        if (viewPager != null && viewPager.getAdapter() instanceof ViewPagerAdapter) {
-            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_km);
-            viewPager.setCurrentItem(pos, true);
-            
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                for (Fragment f : getSupportFragmentManager().getFragments()) {
-                    if (f instanceof KmParentFragment) {
-                        ((KmParentFragment) f).switchToHistory();
-                        break;
-                    }
-                }
-            }, 300);
-        }
+        KmParentFragment fragment = new KmParentFragment();
+        openFragmentInSettings(fragment, "KM Diário");
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            fragment.switchToHistory();
+        }, 200);
     }
 
     public void openManualKmHistory() {
-        if (viewPager != null && viewPager.getAdapter() instanceof ViewPagerAdapter) {
-            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_km);
-            viewPager.setCurrentItem(pos, true);
-            
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                for (Fragment f : getSupportFragmentManager().getFragments()) {
-                    if (f instanceof KmParentFragment) {
-                        ((KmParentFragment) f).switchToManualHistory();
-                        break;
-                    }
-                }
-            }, 300);
-        }
+        KmParentFragment fragment = new KmParentFragment();
+        openFragmentInSettings(fragment, "KM Diário");
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            fragment.switchToManualHistory();
+        }, 200);
     }
 }

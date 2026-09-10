@@ -49,6 +49,7 @@ public class TrackingService extends Service {
     public static final MutableLiveData<Boolean> isPaused = new MutableLiveData<>(false);
     public static final MutableLiveData<Double> currentDistance = new MutableLiveData<>(0.0);
     public static final MutableLiveData<Double> estimatedCost = new MutableLiveData<>(0.0);
+    public static final MutableLiveData<Float> distanceToHome = new MutableLiveData<>(-1f);
 
     private static int currentSessionId = -1;
     private double lastConsumption = 10.0;
@@ -63,6 +64,7 @@ public class TrackingService extends Service {
     private long homeArrivalStartTime = 0;
     private boolean isInsideHomeRadius = false;
     private boolean isResting = false;
+    private boolean hasLeftHome = false;
     
     // Auto-Earnings at Loading Points
     private List<LoadingPoint> activeLoadingPoints = new ArrayList<>();
@@ -166,7 +168,7 @@ public class TrackingService extends Service {
                 startTracking();
             } else if ("MONITOR".equals(action)) {
                 acquireWakeLock();
-                updateNotification("Monitorando Saída", "Aguardando você sair de casa...");
+                updateNotification("Dentro do Raio de Casa", "Iniciará automaticamente ao sair de casa...");
                 if (isRestIntervalNow()) {
                     // Já chamamos startForeground, então podemos parar com segurança.
                     stopForeground(true);
@@ -219,7 +221,7 @@ public class TrackingService extends Service {
         int mode = prefs.getInt("tracking_mode_v2", 0);
         
         // Só monitora se o modo for 2 (Distância/Localização)
-        if (mode != 2 || !prefs.getBoolean("home_tracking_enabled", false)) {
+        if (mode != 2) {
             android.util.Log.d("TrackingService", "Monitoramento cancelado: Modo não é Localização (" + mode + ")");
             stopForeground(true);
             stopSelf();
@@ -229,6 +231,8 @@ public class TrackingService extends Service {
         float homeLat = prefs.getFloat("home_lat", 0);
         float homeLon = prefs.getFloat("home_lon", 0);
         if (homeLat == 0 || homeLon == 0) {
+            android.util.Log.d("TrackingService", "Monitoramento cancelado: Endereço de Casa não cadastrado.");
+            updateNotification("Endereço de Casa Não Definido", "Defina o local de Casa no mapa para ativar o rastreio automático por raio.");
             stopForeground(true);
             stopSelf();
             return;
@@ -239,8 +243,8 @@ public class TrackingService extends Service {
             activeLoadingPoints = AppDatabase.getInstance(this).appDao().getAllLoadingPoints();
         });
 
-        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
-                .setMinUpdateIntervalMillis(5000)
+        LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
+                .setMinUpdateIntervalMillis(3000)
                 .build();
 
         if (locationCallback != null) fusedLocationClient.removeLocationUpdates(locationCallback);
@@ -261,6 +265,7 @@ public class TrackingService extends Service {
                 float[] results = new float[1];
                 Location.distanceBetween(lastLoc.getLatitude(), lastLoc.getLongitude(), homeLat, homeLon, results);
                 float distance = results[0];
+                distanceToHome.postValue(distance);
 
                 int triggerRadius = 100;
                 try {
@@ -273,8 +278,10 @@ public class TrackingService extends Service {
                     prefs.edit().putInt("home_trigger_radius", triggerRadius).apply();
                 }
 
+                android.util.Log.d("TrackingService", "Monitorando saída de casa. Distância atual: " + distance + "m | Raio gatilho: " + triggerRadius + "m");
+
                 if (distance > triggerRadius) {
-                    // Remove o monitoramento antes de iniciar o rastreio real
+                    android.util.Log.d("TrackingService", "🚀 Saiu do raio da casa! Iniciando rastreamento automático...");
                     fusedLocationClient.removeLocationUpdates(this);
                     startTracking();
                 }
@@ -282,34 +289,28 @@ public class TrackingService extends Service {
         };
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null);
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, android.os.Looper.getMainLooper());
             
-            // 🔥 Tenta pegar a última localização conhecida IMEDIATAMENTE para não esperar o primeiro callback
-            fusedLocationClient.getLastLocation().addOnSuccessListener(l -> {
-                if (l != null && locationCallback != null) {
-                    float[] res = new float[1];
-                    Location.distanceBetween(l.getLatitude(), l.getLongitude(), homeLat, homeLon, res);
-                    if (res[0] > prefs.getInt("home_trigger_radius", 100)) {
-                        android.util.Log.d("TrackingService", "Usuário já está fora do raio. Iniciando rastreio imediato.");
-                        LocationResult lr = LocationResult.create(java.util.Collections.singletonList(l));
-                        locationCallback.onLocationResult(lr);
-                    }
-                }
-            });
+            // 🔥 Obter localização atualizada IMEDIATAMENTE (sem depender de cache antigo do GPS)
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener(l -> {
+                        if (l != null && locationCallback != null && !Boolean.TRUE.equals(isTracking.getValue())) {
+                            float[] res = new float[1];
+                            Location.distanceBetween(l.getLatitude(), l.getLongitude(), homeLat, homeLon, res);
+                            distanceToHome.postValue(res[0]);
+                            int triggerRadius = prefs.getInt("home_trigger_radius", 100);
+                            android.util.Log.d("TrackingService", "Checagem imediata GPS: Distância da casa: " + res[0] + "m | Raio gatilho: " + triggerRadius + "m");
+                            if (res[0] > triggerRadius) {
+                                android.util.Log.d("TrackingService", "🚀 Já está fora do raio da casa (" + res[0] + "m > " + triggerRadius + "m). Iniciando rastreamento automático!");
+                                if (locationCallback != null) fusedLocationClient.removeLocationUpdates(locationCallback);
+                                startTracking();
+                            }
+                        }
+                    });
         }
     }
 
     private void startTracking() {
-        if (Boolean.TRUE.equals(isTracking.getValue()) && Boolean.FALSE.equals(isPaused.getValue())) {
-            if (currentSessionId == -1) {
-                executor.execute(() -> {
-                    DailyKm last = AppDatabase.getInstance(this).appDao().getLastPendingAutomaticKm();
-                    if (last != null) currentSessionId = last.id;
-                });
-            }
-            return;
-        }
-
         // Garante que qualquer callback anterior (como o de monitoramento) seja removido
         if (locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);
@@ -346,11 +347,14 @@ public class TrackingService extends Service {
                 lastFuelPrice = prefs.getFloat("default_fuel_price", 5.50f);
             }
 
-            // Cria sessão automática se for um novo início ou se não tiver ID
-            if (currentSessionId == -1) {
+            // Recupera sessão pendente não concluída ou cria uma nova sessão
+            DailyKm pending = dao.getLastPendingAutomaticKm();
+            if (pending != null) {
+                currentSessionId = pending.id;
+            } else {
                 DailyKm newSession = new DailyKm();
                 newSession.date = System.currentTimeMillis();
-                newSession.isAutomatic = true;
+                newSession.isAutomatic = true; // 🔥 Todas as sessões do TrackingService são rastreamentos GPS!
                 newSession.isCompleted = false;
                 newSession.consumptionUsed = lastConsumption;
                 currentSessionId = (int) dao.insertDailyKm(newSession);
@@ -413,8 +417,7 @@ public class TrackingService extends Service {
                         sendLiveLocationToFirebase(location);
 
                         final int sessionIdSnapshot = currentSessionId;
-                        
-                        if (sessionIdSnapshot == -1) continue; // Pula se a sessão ainda não foi criada no banco
+                        if (sessionIdSnapshot <= 0) continue; // Aguarda a sessão ser criada no executor de fundo
 
                         RoutePoint newRp = new RoutePoint(sessionIdSnapshot, location.getLatitude(), location.getLongitude(), now);
                         
@@ -471,7 +474,7 @@ public class TrackingService extends Service {
         }
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null);
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, android.os.Looper.getMainLooper());
         }
     }
 
@@ -565,8 +568,18 @@ public class TrackingService extends Service {
             prefs.edit().putInt("home_arrival_radius", arrivalRadius).apply();
         }
 
-        if (distanceToHome <= arrivalRadius) {
-            // 🔥 Para e salva IMEDIATAMENTE ao entrar no raio de casa
+        Double currentKm = currentDistance.getValue();
+        double distKm = currentKm != null ? currentKm : 0.0;
+
+        // Marcamos que o usuário saiu de casa se a distância atual for maior que o dobro do raio de chegada OU já percorreu mais de 200m
+        if (distanceToHome > (arrivalRadius * 2) || distKm >= 0.2) {
+            hasLeftHome = true;
+        }
+
+        // 🔥 Só para automaticamente se ele JÁ TIVER SAÍDO DE CASA durante esta viagem e agora RETORNOU
+        if (hasLeftHome && distanceToHome <= arrivalRadius) {
+            android.util.Log.d("TrackingService", "🏡 Chegou de volta em casa! Parando e salvando trajeto automaticamente...");
+            hasLeftHome = false;
             stopTracking();
             
             // Se estiver no modo de localização, volta a monitorar a saída após o stop
@@ -575,9 +588,6 @@ public class TrackingService extends Service {
                 TrackingHelper.updateAutoTracking(getApplicationContext());
             }, 2000);
             
-            isInsideHomeRadius = false;
-            homeArrivalStartTime = 0;
-        } else {
             isInsideHomeRadius = false;
             homeArrivalStartTime = 0;
         }
@@ -770,19 +780,23 @@ public class TrackingService extends Service {
             if (sessionIdToStop != -1) {
                 DailyKm session = dao.getDailyKmById(sessionIdToStop);
                 if (session != null) {
-                    session.isCompleted = true;
-                    // Garante que o custo final seja salvo baseado na distância rastreada
-                    session.estimatedFuelCost = (session.gpsDistance / session.consumptionUsed) * lastFuelPrice;
-                    dao.updateDailyKm(session);
-                    
-                    // 🔥 MODO DEV: Compartilhamento Automático
-                    android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
-                    if (prefs.getBoolean("dev_auto_share_recordings", false)) {
-                        performDevAutoShare(session);
-                    }
+                    // 🔥 Se o trajeto não teve movimento significativo (< 10 metros), descarta o registro zerado
+                    if (session.gpsDistance < 0.01 && session.totalKm < 0.01) {
+                        dao.deleteRoutePointsForKm(sessionIdToStop);
+                        dao.deleteDailyKm(session);
+                        android.util.Log.d("TrackingService", "Trajeto zerado descartado do banco.");
+                    } else {
+                        session.isCompleted = true;
+                        session.estimatedFuelCost = (session.gpsDistance / session.consumptionUsed) * lastFuelPrice;
+                        dao.updateDailyKm(session);
+                        
+                        android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
+                        if (prefs.getBoolean("dev_auto_share_recordings", false)) {
+                            performDevAutoShare(session);
+                        }
 
-                    // Trigger auto cloud sync if enabled
-                    CloudSyncHelper.syncNow(getApplicationContext(), "Trajeto Finalizado");
+                        CloudSyncHelper.syncNow(getApplicationContext(), "Trajeto Finalizado");
+                    }
                 }
             }
             
@@ -793,6 +807,7 @@ public class TrackingService extends Service {
         isTracking.postValue(false);
         isPaused.postValue(false);
         lastCpfGenerationTime = 0;
+        hasLeftHome = false;
 
         if (locationCallback != null) {
             fusedLocationClient.removeLocationUpdates(locationCallback);

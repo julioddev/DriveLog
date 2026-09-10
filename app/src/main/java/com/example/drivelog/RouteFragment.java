@@ -399,6 +399,8 @@ public class RouteFragment extends Fragment {
             Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::setupLocationOverlay);
         } else if ("map_tile_style".equals(key)) {
             Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::applyMapStyle);
+        } else if ("home_trigger_radius".equals(key) || "home_arrival_radius".equals(key) || "home_lat".equals(key) || "home_lon".equals(key)) {
+            Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::showHomeMarker);
         }
     };
 
@@ -1936,12 +1938,13 @@ public class RouteFragment extends Fragment {
                 map.getOverlays().add(homeMarker);
             }
 
-            if (homeRadiusOverlay != null) {
-                map.getOverlays().remove(homeRadiusOverlay);
-            }
+            // Remocao garantida de qualquer overlay antigo do raio de casa
+            map.getOverlays().removeIf(o -> o instanceof org.osmdroid.views.overlay.Polygon 
+                    && "HOME_RADIUS".equals(((org.osmdroid.views.overlay.Polygon) o).getTitle()));
 
             int triggerRadius = sharedPreferences.getInt("home_trigger_radius", 100);
             homeRadiusOverlay = new org.osmdroid.views.overlay.Polygon(map);
+            homeRadiusOverlay.setTitle("HOME_RADIUS");
             homeRadiusOverlay.setPoints(org.osmdroid.views.overlay.Polygon.pointsAsCircle(homePoint, triggerRadius));
             homeRadiusOverlay.getFillPaint().setColor(Color.parseColor("#334CAF50"));
             homeRadiusOverlay.getOutlinePaint().setColor(Color.parseColor("#4CAF50"));
@@ -4699,10 +4702,7 @@ public class RouteFragment extends Fragment {
                 
                 Toast.makeText(getContext(), isChecked ? "Modo Automático Ativado" : "Modo Manual Ativado", Toast.LENGTH_SHORT).show();
                 
-                // Atualiza a visibilidade do botão de play/pause no próprio diálogo
-                if (!tracking) {
-                    btnPlayPause.setVisibility(isChecked ? View.GONE : View.VISIBLE);
-                }
+                btnPlayPause.setVisibility(View.VISIBLE);
                 
                 updateKmTrackingUI(); 
             });
@@ -4713,8 +4713,56 @@ public class RouteFragment extends Fragment {
             if (textKm != null) textKm.setText(String.format(Locale.getDefault(), "%.2f KM", dist != null ? dist : 0.0));
         });
 
+        TrackingService.distanceToHome.observe(getViewLifecycleOwner(), distHome -> {
+            if (!tracking && currentMode == 2 && textStatus != null) {
+                float homeLat = sharedPreferences.getFloat("home_lat", 0);
+                float homeLon = sharedPreferences.getFloat("home_lon", 0);
+                int triggerRadius = sharedPreferences.getInt("home_trigger_radius", 100);
+                if (homeLat == 0 || homeLon == 0) {
+                    textStatus.setText("Defina sua Casa no Mapa");
+                } else if (distHome != null && distHome >= 0) {
+                    if (distHome <= triggerRadius) {
+                        textStatus.setText(String.format(Locale.getDefault(), "Dentro do raio da casa (%.0fm / %dm)", distHome, triggerRadius));
+                    } else {
+                        textStatus.setText(String.format(Locale.getDefault(), "Fora do raio da casa (%.0fm / %dm)", distHome, triggerRadius));
+                    }
+                }
+            }
+        });
+
         if (!tracking) {
-            textStatus.setText("Rastreamento Inativo");
+            if (currentMode == 2) {
+                float homeLat = sharedPreferences.getFloat("home_lat", 0);
+                float homeLon = sharedPreferences.getFloat("home_lon", 0);
+                Float distHome = TrackingService.distanceToHome.getValue();
+                int triggerRadius = sharedPreferences.getInt("home_trigger_radius", 100);
+
+                if (homeLat == 0 || homeLon == 0) {
+                    textStatus.setText("Defina sua Casa no Mapa");
+                } else {
+                    float currentDist = (distHome != null && distHome >= 0) ? distHome : -1f;
+                    if (currentDist < 0 && locationOverlay != null && locationOverlay.getMyLocation() != null) {
+                        GeoPoint myLoc = locationOverlay.getMyLocation();
+                        float[] res = new float[1];
+                        android.location.Location.distanceBetween(myLoc.getLatitude(), myLoc.getLongitude(), homeLat, homeLon, res);
+                        currentDist = res[0];
+                    }
+
+                    if (currentDist >= 0) {
+                        if (currentDist <= triggerRadius) {
+                            textStatus.setText(String.format(Locale.getDefault(), "Dentro do raio da casa (%.0fm / %dm)", currentDist, triggerRadius));
+                        } else {
+                            textStatus.setText(String.format(Locale.getDefault(), "Fora do raio da casa (%.0fm / %dm)", currentDist, triggerRadius));
+                        }
+                    } else {
+                        textStatus.setText("Buscando sinal GPS...");
+                    }
+                }
+            } else if (currentMode == 1) {
+                textStatus.setText("Aguardando Horário");
+            } else {
+                textStatus.setText("Rastreamento Inativo");
+            }
             btnPlayPause.setText("Iniciar");
             btnPlayPause.setIconResource(R.drawable.ic_play);
             btnStop.setVisibility(View.GONE);
@@ -4725,13 +4773,7 @@ public class RouteFragment extends Fragment {
             btnStop.setVisibility(View.VISIBLE);
         }
 
-        // Oculta botão de play/pause se o modo for automático e não estiver rastreando ainda
-        // (No modo automático o início é por gatilho de tempo ou localização)
-        if (!tracking && currentMode != 0) {
-            btnPlayPause.setVisibility(View.GONE);
-        } else {
-            btnPlayPause.setVisibility(View.VISIBLE);
-        }
+        btnPlayPause.setVisibility(View.VISIBLE);
 
         btnPlayPause.setOnClickListener(v -> {
             Intent intent = new Intent(getContext(), TrackingService.class);
@@ -4751,6 +4793,16 @@ public class RouteFragment extends Fragment {
                     .setTitle("Finalizar Rastreamento")
                     .setMessage("Deseja parar e salvar este trajeto?")
                     .setPositiveButton("Parar e Salvar", (d, which) -> {
+                        // 🔥 Se o modo automático estava ativo, desativa o modo automático ao forçar o botão Parar
+                        if (currentMode != 0) {
+                            sharedPreferences.edit()
+                                    .putInt("tracking_mode_v2", 0)
+                                    .putBoolean("tracking_auto", false)
+                                    .putBoolean("home_tracking_enabled", false)
+                                    .apply();
+                            TrackingHelper.updateAutoTracking(requireContext());
+                            Toast.makeText(getContext(), "Trajeto salvo e Modo Automático desativado.", Toast.LENGTH_SHORT).show();
+                        }
                         Intent intent = new Intent(getContext(), TrackingService.class);
                         intent.setAction("STOP");
                         requireContext().startService(intent);

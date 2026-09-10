@@ -57,6 +57,8 @@ public class TrackingHelper {
             // MODO 2: Rastreamento por Localização (Ao sair de casa)
             cancelAlarm(context, 101);
             cancelAlarm(context, 102);
+            
+            prefs.edit().putBoolean("home_tracking_enabled", true).apply();
 
             // Inicia monitoramento de casa se não estiver rastreando já
             if (!Boolean.TRUE.equals(TrackingService.isTracking.getValue())) {
@@ -76,28 +78,8 @@ public class TrackingHelper {
             // MODO 0: Manual ou Mapas Desativados
             cancelAlarm(context, 101);
             cancelAlarm(context, 102);
-            
-            boolean cpfEnabled = prefs.getBoolean("cpf_interval_enabled", false);
-            
-            // Se mudou para manual, paramos o monitoramento de saída (MONITOR)
-            // mas MANTEMOS o rastreio ativo se o usuário deu Play manualmente.
-            if (!Boolean.TRUE.equals(TrackingService.isTracking.getValue())) {
-                if (cpfEnabled) {
-                    // Se o CPF automático estiver ligado, iniciamos o serviço apenas para o timer
-                    Intent intent = new Intent(context.getApplicationContext(), TrackingService.class);
-                    intent.setAction("CPF_ONLY");
-                    try {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            context.getApplicationContext().startForegroundService(intent);
-                        } else {
-                            context.getApplicationContext().startService(intent);
-                        }
-                    } catch (Exception ignored) {}
-                } else {
-                    Intent intent = new Intent(context, TrackingService.class);
-                    context.stopService(intent);
-                }
-            }
+            // No Modo Manual, o usuário controla Iniciar/Parar via botões.
+            // Não paramos forçadamente o serviço aqui para não interromper a inicialização manual.
         }
     }
 

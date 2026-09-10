@@ -161,14 +161,20 @@ public class KmFragment extends Fragment implements KmAdapter.OnKmClickListener 
     }
 
     private void showDeleteConfirmation(DailyKm dailyKm, int position) {
-        new AlertDialog.Builder(getContext())
+        new AlertDialog.Builder(requireContext())
                 .setTitle("Confirmar Exclusão")
                 .setMessage("Deseja realmente excluir este registro de KM?")
                 .setPositiveButton("Excluir", (dialog, which) -> {
-                    AppDatabase.getInstance(getContext()).appDao().deleteDailyKm(dailyKm);
-                    updateHistory();
-                    checkPendingKm();
-                    Toast.makeText(getContext(), "Registro excluído", Toast.LENGTH_SHORT).show();
+                    android.content.Context ctx = requireContext().getApplicationContext();
+                    new Thread(() -> {
+                        AppDatabase.getInstance(ctx).appDao().deleteDailyKm(dailyKm);
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> {
+                                checkPendingKm();
+                                Toast.makeText(getContext(), "Registro excluído", Toast.LENGTH_SHORT).show();
+                            });
+                        }
+                    }).start();
                 })
                 .setNegativeButton("Cancelar", (dialog, which) -> adapter.notifyItemChanged(position))
                 .setOnCancelListener(dialog -> adapter.notifyItemChanged(position))
