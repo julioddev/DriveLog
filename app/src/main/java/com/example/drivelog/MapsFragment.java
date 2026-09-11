@@ -413,8 +413,6 @@ public class MapsFragment extends Fragment {
     }
 
     private void showKmTrackingPopup() {
-        boolean tracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
-        boolean paused = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
         View customView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_km_tracking_mini, null);
         builder.setView(customView);
@@ -423,12 +421,49 @@ public class MapsFragment extends Fragment {
 
         MaterialButton btnPlayPause = customView.findViewById(R.id.btnPlayPauseTracking);
         MaterialButton btnStop = customView.findViewById(R.id.btnStopTracking);
-        btnPlayPause.setText(tracking ? (paused ? "Retomar" : "Pausar") : "Iniciar");
-        btnStop.setVisibility(tracking ? View.VISIBLE : View.GONE);
+
+        // 🔥 Observação Dinâmica de Estado no Popup
+        TrackingService.isTracking.observe(getViewLifecycleOwner(), isTrk -> {
+            boolean isPsd = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
+            int mode = sharedPreferences.getInt("tracking_mode_v2", 0);
+
+            if (isTrk) {
+                if (textStatus != null) textStatus.setText(isPsd ? "Pausado" : "Rastreamento Ativo");
+                if (btnPlayPause != null) {
+                    btnPlayPause.setVisibility(View.VISIBLE);
+                    btnPlayPause.setText(isPsd ? "Retomar" : "Pausar");
+                }
+                if (btnStop != null) btnStop.setVisibility(View.VISIBLE);
+            } else {
+                if (btnStop != null) btnStop.setVisibility(View.GONE);
+                if (btnPlayPause != null) {
+                    btnPlayPause.setVisibility(mode == 0 ? View.VISIBLE : View.GONE);
+                    btnPlayPause.setText("Iniciar");
+                }
+            }
+        });
+
+        TrackingService.isPaused.observe(getViewLifecycleOwner(), isPsd -> {
+            boolean isTrk = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+            if (isTrk) {
+                if (textStatus != null) textStatus.setText(isPsd ? "Pausado" : "Rastreamento Ativo");
+                if (btnPlayPause != null) {
+                    btnPlayPause.setText(isPsd ? "Retomar" : "Pausar");
+                }
+            }
+        });
 
         btnPlayPause.setOnClickListener(v -> {
+            boolean activeTracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+            boolean activePaused = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
             Intent intent = new Intent(getContext(), TrackingService.class);
-            intent.setAction(tracking ? (paused ? "START" : "PAUSE") : "START");
+            if (!activeTracking) {
+                intent.setAction("START");
+            } else if (!activePaused) {
+                intent.setAction("PAUSE");
+            } else {
+                intent.setAction("START");
+            }
             requireContext().startService(intent);
             dialog.dismiss();
         });

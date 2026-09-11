@@ -276,6 +276,7 @@ public class RouteFragment extends Fragment {
     private RouteStop currentlySelectedStop = null;
     private long lastTraceUpdate = 0;
     private GeoPoint lastTraceLocation = null;
+    private List<GeoPoint> fullTracePoints = new ArrayList<>();
 
     private com.google.firebase.firestore.ListenerRegistration comboioListener;
     private com.google.firebase.firestore.ListenerRegistration hazardListener;
@@ -1392,9 +1393,10 @@ public class RouteFragment extends Fragment {
                                         map.setMapOrientation(-location.getBearing());
                                     }
                                 } else {
-                                    // No modo Norte Fixo, o mapa fica parado e o boneco gira livremente
+                                    // No modo Norte Fixo, o boneco/seta gira com o rumo do GPS,
+                                    // mas NÃO resetamos a rotação do mapa a cada ponto do GPS!
+                                    // Isso permite que o motorista gire o mapa livremente sem que o mapa "flique" de volta pro Norte.
                                     userDirectionMarker.setRotation(location.getBearing());
-                                    if (map != null) map.setMapOrientation(0);
                                 }
                             }
 
@@ -1410,6 +1412,11 @@ public class RouteFragment extends Fragment {
                             mapController.animateTo(currentLocation);
                         }
                         checkHomeAutoPause(currentLocation);
+
+                        // 🔥 Atualiza a linha azul de navegação conforme o motorista anda
+                        if (currentlySelectedStop != null && switchTraceLine != null && switchTraceLine.isChecked()) {
+                            updateNavigationLineProgress();
+                        }
                     });
                 }
             }
@@ -3560,31 +3567,63 @@ public class RouteFragment extends Fragment {
             Map<Integer, String> colorMap = new HashMap<>();
             for (RouteGroup g : groups) colorMap.put(g.id, g.color);
 
+            // Mapeia grupos de paradas que estão no mesmo local/encostando (distância < 2.5 metros)
+            Map<Integer, List<RouteStop>> overlapMap = new HashMap<>();
+            for (int i = 0; i < stopsSnapshot.size(); i++) {
+                RouteStop s = stopsSnapshot.get(i);
+                if (s.latitude == 0 && s.longitude == 0) continue;
+
+                List<RouteStop> sameLocList = new ArrayList<>();
+                for (int j = 0; j < stopsSnapshot.size(); j++) {
+                    RouteStop other = stopsSnapshot.get(j);
+                    if (other.latitude == 0 && other.longitude == 0) continue;
+
+                    float[] res = new float[1];
+                    android.location.Location.distanceBetween(s.latitude, s.longitude, other.latitude, other.longitude, res);
+                    if (res[0] < 2.5) { // Menos de 2.5m = ícones encostados/sobrepostos exatamente no mesmo ponto
+                        sameLocList.add(other);
+                    }
+                }
+                overlapMap.put(s.id, sameLocList);
+            }
+
             List<Bitmap> bitmaps = new ArrayList<>();
             for (int i = 0; i < stopsSnapshot.size(); i++) {
                 RouteStop s = stopsSnapshot.get(i);
                 
-                // Se a opção estiver ativa e a parada for status 1 (Sucesso/Entregue), não gera o bitmap
                 if (hideDelivered && s.deliveryStatus == 1) {
                     bitmaps.add(null);
                 } else {
                     String gColor = (s.groupId != null) ? colorMap.get(s.groupId) : null;
-                    bitmaps.add(generateMarkerBitmap(i+1, s.deliveryStatus, s.packageCount > 1, (i == selectedIndex), gColor));
+                    List<RouteStop> sameLoc = overlapMap.get(s.id);
+                    
+                    boolean isGroupOverlapping = sameLoc != null && sameLoc.size() > 1;
+                    int pendingCountAtLocation = 0;
+                    if (sameLoc != null) {
+                        for (RouteStop st : sameLoc) {
+                            if (st.deliveryStatus == 0) { // 0 = Pendente
+                                pendingCountAtLocation++;
+                            }
+                        }
+                    }
+
+                    // 🔥 A bolinha vermelha só desaparece quando TODAS as paradas daquele local forem entregues ou com erro (pendingCount == 0)
+                    boolean hasOverlap = isGroupOverlapping && pendingCountAtLocation > 0;
+
+                    bitmaps.add(generateMarkerBitmap(i+1, s.deliveryStatus, s.packageCount > 1, (i == selectedIndex), gColor, hasOverlap));
                 }
             }
 
             Activity activity = getActivity();
             if (activity != null) activity.runOnUiThread(() -> {
-                // 🔥 Verificações de segurança para evitar NPE se o fragmento foi fechado
                 if (map == null || currentRouteId != targetRouteId || !isAdded()) return;
                 
                 List<org.osmdroid.views.overlay.Overlay> toAdd = new ArrayList<>();
                 for (int i = 0; i < stopsSnapshot.size(); i++) { 
                     Bitmap markerBmp = bitmaps.get(i);
-                    if (markerBmp == null) continue; // Pula paradas ocultas
+                    if (markerBmp == null) continue;
 
                     RouteStop s = stopsSnapshot.get(i); 
-                    
                     if (s.latitude == 0 && s.longitude == 0 || map == null) continue;
 
                     Marker m = new Marker(map) {
@@ -3613,8 +3652,24 @@ public class RouteFragment extends Fragment {
                         }
                     }; 
                     m.setInfoWindow(null); 
-                    m.setRelatedObject("STOP_INDEX_" + i); // 🔥 Identificador único baseado no índice, não na coordenada
-                    m.setPosition(new GeoPoint(s.latitude, s.longitude)); 
+                    m.setRelatedObject("STOP_INDEX_" + i);
+
+                    // 🔥 Micro-deslocamento radial em leque para desobstruir os marcadores sobrepostos
+                    List<RouteStop> sameLoc = overlapMap.get(s.id);
+                    double markerLat = s.latitude;
+                    double markerLon = s.longitude;
+
+                    if (sameLoc != null && sameLoc.size() > 1) {
+                        int k = sameLoc.indexOf(s);
+                        if (k != -1) {
+                            double angle = (2.0 * Math.PI * k) / sameLoc.size();
+                            double offsetDegrees = 0.000045; // ~4.5 metros de leque no mapa
+                            markerLat += offsetDegrees * Math.sin(angle);
+                            markerLon += (offsetDegrees * Math.cos(angle)) / Math.cos(Math.toRadians(s.latitude));
+                        }
+                    }
+
+                    m.setPosition(new GeoPoint(markerLat, markerLon)); 
                     m.setIcon(new BitmapDrawable(getResources(), bitmaps.get(i)));
                     
                     final int index = i;
@@ -3714,6 +3769,10 @@ public class RouteFragment extends Fragment {
     }
 
     private Bitmap generateMarkerBitmap(int n, int status, boolean multi, boolean selected, String gColor) {
+        return generateMarkerBitmap(n, status, multi, selected, gColor, false);
+    }
+
+    private Bitmap generateMarkerBitmap(int n, int status, boolean multi, boolean selected, String gColor, boolean hasOverlap) {
         int size = selected ? 110 : 80;
         Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b); 
@@ -3737,12 +3796,9 @@ public class RouteFragment extends Fragment {
 
         // 2. Desenhar Borda
         if (selected) {
-            // Efeito de Carregamento (Spinner)
             p.setStyle(Paint.Style.STROKE);
             p.setStrokeWidth(8f);
             
-            // SweepGradient: Começa com a cor da parada e tem um arco branco
-            // Usamos uma transição nítida para parecer uma "peça" girando
             int[] colors = {stopColor, stopColor, Color.WHITE, stopColor, stopColor};
             float[] positions = {0.0f, 0.30f, 0.5f, 0.70f, 1.0f};
             
@@ -3756,12 +3812,10 @@ public class RouteFragment extends Fragment {
             c.drawCircle(center, center, radius, p);
             p.setShader(null);
             
-            // Borda externa fina para acabamento
             p.setStrokeWidth(1f);
             p.setColor(Color.WHITE);
             c.drawCircle(center, center, radius + 4f, p);
         } else {
-            // Borda Simples Branca
             p.setColor(Color.WHITE);
             p.setStyle(Paint.Style.STROKE);
             p.setStrokeWidth(4f);
@@ -3769,17 +3823,31 @@ public class RouteFragment extends Fragment {
             c.drawCircle(center, center, radius, p);
         }
 
-        // 3. Texto (Número)
+        // 3. Texto (Número da Parada)
         p.setStyle(Paint.Style.FILL);
         p.setTextSize(selected ? 44 : 32);
         p.setTextAlign(Paint.Align.CENTER);
         p.setAlpha(alpha);
         if (stopColor == Color.parseColor("#FF9800")) p.setColor(Color.BLACK); else p.setColor(Color.WHITE);
         
-        // Ajuste vertical do texto
         Paint.FontMetrics fm = p.getFontMetrics();
         float textY = center - (fm.ascent + fm.descent) / 2;
         c.drawText(String.valueOf(n), center, textY, p);
+
+        // 4. 🔥 Badge de Paradas Sobrepostas (Bolinha Vermelha no canto superior direito)
+        if (hasOverlap) {
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.parseColor("#FF1744"));
+            float badgeX = center + radius * 0.65f;
+            float badgeY = center - radius * 0.65f;
+            float badgeR = selected ? 13f : 9f;
+            c.drawCircle(badgeX, badgeY, badgeR, p);
+            
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(2f);
+            p.setColor(Color.WHITE);
+            c.drawCircle(badgeX, badgeY, badgeR, p);
+        }
 
         return b;
     }
@@ -3863,10 +3931,10 @@ public class RouteFragment extends Fragment {
                         if (activity != null) activity.runOnUiThread(() -> {
                                 if (map == null || !isAdded()) return;
 
+                                fullTracePoints = new ArrayList<>(pts);
+                                lastTraceUpdate = System.currentTimeMillis();
                                 lastRouteInstructions = finalAllInstructions;
-                            // Criamos a nova linha antes de remover a antiga para evitar o "pisca"
-                            // Usamos o construtor sem argumentos para evitar NPE interno em alguns dispositivos/versões do osmdroid
-                            // onde map.getRepository() pode falhar se o mapa estiver em estado inconsistente.
+
                             Polyline newPolyline = new Polyline();
                             
                             int opacityPercent = sharedPreferences.getInt("route_line_opacity", 95);
@@ -3935,6 +4003,60 @@ public class RouteFragment extends Fragment {
                 }
             } catch (Exception ignored) {}
         }).start();
+    }
+
+    private void updateNavigationLineProgress() {
+        if (map == null || currentLocation == null || currentlySelectedStop == null) return;
+        if (selectionTracePolyline == null || fullTracePoints == null || fullTracePoints.isEmpty()) return;
+
+        long now = System.currentTimeMillis();
+        // Se passou mais de 15 segundos desde a última rota OSRM, recalcula do zero no servidor
+        if (now - lastTraceUpdate > 15000) {
+            lastTraceUpdate = now;
+            updateSelectionTrace(currentlySelectedStop);
+            return;
+        }
+
+        // Encontra o ponto no caminho mais próximo do motorista
+        int closestIndex = -1;
+        double minDistance = Double.MAX_VALUE;
+
+        for (int i = 0; i < fullTracePoints.size(); i++) {
+            double dist = currentLocation.distanceToAsDouble(fullTracePoints.get(i));
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestIndex = i;
+            }
+        }
+
+        // Se o motorista desviou mais de 60 metros da rota, recalcula nova rota no OSRM
+        if (minDistance > 60) {
+            lastTraceUpdate = now;
+            updateSelectionTrace(currentlySelectedStop);
+            return;
+        }
+
+        if (closestIndex != -1 && closestIndex < fullTracePoints.size()) {
+            List<GeoPoint> remainingPoints = new ArrayList<>();
+            remainingPoints.add(currentLocation); // A linha azul começa na localização exata do veículo
+
+            for (int i = closestIndex; i < fullTracePoints.size(); i++) {
+                remainingPoints.add(fullTracePoints.get(i));
+            }
+
+            selectionTracePolyline.setPoints(remainingPoints);
+
+            // Atualiza distância restante até a parada
+            double remainingMeters = currentLocation.distanceToAsDouble(new GeoPoint(currentlySelectedStop.latitude, currentlySelectedStop.longitude));
+            if (textSwitchDistance != null) {
+                String distStr;
+                if (remainingMeters < 1000) distStr = String.format(Locale.getDefault(), "%.0fm", remainingMeters);
+                else distStr = String.format(Locale.getDefault(), "%.1fkm", remainingMeters / 1000.0);
+                textSwitchDistance.setText(distStr);
+            }
+
+            map.invalidate();
+        }
     }
 
     private void animateNavigationCard(boolean show) {
@@ -4702,7 +4824,9 @@ public class RouteFragment extends Fragment {
                 
                 Toast.makeText(getContext(), isChecked ? "Modo Automático Ativado" : "Modo Manual Ativado", Toast.LENGTH_SHORT).show();
                 
-                btnPlayPause.setVisibility(View.VISIBLE);
+                if (!tracking) {
+                    btnPlayPause.setVisibility(isChecked ? View.GONE : View.VISIBLE);
+                }
                 
                 updateKmTrackingUI(); 
             });
@@ -4714,7 +4838,9 @@ public class RouteFragment extends Fragment {
         });
 
         TrackingService.distanceToHome.observe(getViewLifecycleOwner(), distHome -> {
-            if (!tracking && currentMode == 2 && textStatus != null) {
+            boolean isTrk = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+            int mode = sharedPreferences.getInt("tracking_mode_v2", 0);
+            if (!isTrk && mode == 2 && textStatus != null) {
                 float homeLat = sharedPreferences.getFloat("home_lat", 0);
                 float homeLon = sharedPreferences.getFloat("home_lon", 0);
                 int triggerRadius = sharedPreferences.getInt("home_trigger_radius", 100);
@@ -4724,13 +4850,57 @@ public class RouteFragment extends Fragment {
                     if (distHome <= triggerRadius) {
                         textStatus.setText(String.format(Locale.getDefault(), "Dentro do raio da casa (%.0fm / %dm)", distHome, triggerRadius));
                     } else {
-                        textStatus.setText(String.format(Locale.getDefault(), "Fora do raio da casa (%.0fm / %dm)", distHome, triggerRadius));
+                        textStatus.setText(String.format(Locale.getDefault(), "Fora do raio da casa (%.0fm / %dm) - Iniciando...", distHome, triggerRadius));
+                        // 🔥 Disparo Imediato: Se identificou fora do raio, forca o inicio imediato!
+                        if (!TrackingService.isTrackingActive && !Boolean.TRUE.equals(TrackingService.isTracking.getValue())) {
+                            Intent intent = new Intent(getContext(), TrackingService.class);
+                            intent.setAction("START");
+                            startTrackingService(intent);
+                        }
                     }
                 }
             }
         });
 
-        if (!tracking) {
+        // 🔥 Observação Dinâmica de Estado no Popup
+        TrackingService.isTracking.observe(getViewLifecycleOwner(), isTrk -> {
+            boolean isPsd = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
+            int mode = sharedPreferences.getInt("tracking_mode_v2", 0);
+
+            if (isTrk) {
+                if (textStatus != null) textStatus.setText(isPsd ? "Pausado" : "Rastreando...");
+                if (btnPlayPause != null) {
+                    btnPlayPause.setVisibility(View.VISIBLE);
+                    btnPlayPause.setText(isPsd ? "Retomar" : "Pausar");
+                    btnPlayPause.setIconResource(isPsd ? R.drawable.ic_play : R.drawable.ic_pause);
+                }
+                if (btnStop != null) btnStop.setVisibility(View.VISIBLE);
+            } else {
+                if (btnStop != null) btnStop.setVisibility(View.GONE);
+                if (btnPlayPause != null) {
+                    btnPlayPause.setVisibility(mode == 0 ? View.VISIBLE : View.GONE);
+                    btnPlayPause.setText("Iniciar");
+                    btnPlayPause.setIconResource(R.drawable.ic_play);
+                }
+            }
+        });
+
+        TrackingService.isPaused.observe(getViewLifecycleOwner(), isPsd -> {
+            boolean isTrk = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+            if (isTrk) {
+                if (textStatus != null) textStatus.setText(isPsd ? "Pausado" : "Rastreando...");
+                if (btnPlayPause != null) {
+                    btnPlayPause.setText(isPsd ? "Retomar" : "Pausar");
+                    btnPlayPause.setIconResource(isPsd ? R.drawable.ic_play : R.drawable.ic_pause);
+                }
+            }
+        });
+
+        // Estado inicial ao abrir o diálogo
+        boolean isCurrentlyTracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+        boolean isCurrentlyPaused = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
+
+        if (!isCurrentlyTracking) {
             if (currentMode == 2) {
                 float homeLat = sharedPreferences.getFloat("home_lat", 0);
                 float homeLon = sharedPreferences.getFloat("home_lon", 0);
@@ -4752,7 +4922,12 @@ public class RouteFragment extends Fragment {
                         if (currentDist <= triggerRadius) {
                             textStatus.setText(String.format(Locale.getDefault(), "Dentro do raio da casa (%.0fm / %dm)", currentDist, triggerRadius));
                         } else {
-                            textStatus.setText(String.format(Locale.getDefault(), "Fora do raio da casa (%.0fm / %dm)", currentDist, triggerRadius));
+                            textStatus.setText(String.format(Locale.getDefault(), "Fora do raio da casa (%.0fm / %dm) - Iniciando...", currentDist, triggerRadius));
+                            if (!TrackingService.isTrackingActive && !Boolean.TRUE.equals(TrackingService.isTracking.getValue())) {
+                                Intent intent = new Intent(getContext(), TrackingService.class);
+                                intent.setAction("START");
+                                startTrackingService(intent);
+                            }
                         }
                     } else {
                         textStatus.setText("Buscando sinal GPS...");
@@ -4766,20 +4941,22 @@ public class RouteFragment extends Fragment {
             btnPlayPause.setText("Iniciar");
             btnPlayPause.setIconResource(R.drawable.ic_play);
             btnStop.setVisibility(View.GONE);
+            btnPlayPause.setVisibility(currentMode == 0 ? View.VISIBLE : View.GONE);
         } else {
-            textStatus.setText(paused ? "Pausado" : "Rastreando...");
-            btnPlayPause.setText(paused ? "Retomar" : "Pausar");
-            btnPlayPause.setIconResource(paused ? R.drawable.ic_play : R.drawable.ic_pause);
+            textStatus.setText(isCurrentlyPaused ? "Pausado" : "Rastreando...");
+            btnPlayPause.setText(isCurrentlyPaused ? "Retomar" : "Pausar");
+            btnPlayPause.setIconResource(isCurrentlyPaused ? R.drawable.ic_play : R.drawable.ic_pause);
+            btnPlayPause.setVisibility(View.VISIBLE);
             btnStop.setVisibility(View.VISIBLE);
         }
 
-        btnPlayPause.setVisibility(View.VISIBLE);
-
         btnPlayPause.setOnClickListener(v -> {
+            boolean activeTracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
+            boolean activePaused = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
             Intent intent = new Intent(getContext(), TrackingService.class);
-            if (!tracking) {
+            if (!activeTracking) {
                 intent.setAction("START");
-            } else if (!paused) {
+            } else if (!activePaused) {
                 intent.setAction("PAUSE");
             } else {
                 intent.setAction("START");

@@ -26,6 +26,8 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
 
     private List<DailyKm> kmList;
     private SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yy", Locale.getDefault());
+    private SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
+    private final java.util.Map<Integer, String> timeRangeCache = new java.util.concurrent.ConcurrentHashMap<>();
     private OnKmClickListener listener;
     private int editingKmId = -1;
 
@@ -159,7 +161,43 @@ public class KmAdapter extends RecyclerView.Adapter<KmAdapter.KmViewHolder> {
     public void onBindViewHolder(@NonNull KmViewHolder holder, int pos) {
         final int position = holder.getBindingAdapterPosition();
         DailyKm dailyKm = kmList.get(position);
-        holder.textDate.setText(dateFormat.format(new Date(dailyKm.date)));
+        
+        String dateStr = dateFormat.format(new Date(dailyKm.date));
+        if (dailyKm.isAutomatic) {
+            if (timeRangeCache.containsKey(dailyKm.id)) {
+                holder.textDate.setText(timeRangeCache.get(dailyKm.id));
+            } else {
+                String startTimeStr = timeFormat.format(new Date(dailyKm.date));
+                String initialHeader = dateStr + " (" + startTimeStr + ")";
+                holder.textDate.setText(initialHeader);
+
+                final int kmId = dailyKm.id;
+                final String baseDate = dateStr;
+                final String startT = startTimeStr;
+                
+                new Thread(() -> {
+                    try {
+                        AppDao dao = AppDatabase.getInstance(holder.itemView.getContext().getApplicationContext()).appDao();
+                        List<RoutePoint> pts = dao.getRoutePointsForKm(kmId);
+                        String finalHeader;
+                        if (pts != null && !pts.isEmpty()) {
+                            long endTs = pts.get(pts.size() - 1).timestamp;
+                            String endT = timeFormat.format(new Date(endTs));
+                            finalHeader = baseDate + " (" + startT + " - " + endT + ")";
+                        } else {
+                            finalHeader = baseDate + " (" + startT + " - " + startT + ")";
+                        }
+                        timeRangeCache.put(kmId, finalHeader);
+
+                        if (holder.getBindingAdapterPosition() == position) {
+                            holder.itemView.post(() -> holder.textDate.setText(finalHeader));
+                        }
+                    } catch (Exception ignored) {}
+                }).start();
+            }
+        } else {
+            holder.textDate.setText(dateStr);
+        }
         
         // --- Visual da Seleção Múltipla ---
         boolean isSelected = selectedIds.contains(dailyKm.id);

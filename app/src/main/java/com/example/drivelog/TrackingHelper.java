@@ -61,7 +61,7 @@ public class TrackingHelper {
             prefs.edit().putBoolean("home_tracking_enabled", true).apply();
 
             // Inicia monitoramento de casa se não estiver rastreando já
-            if (!Boolean.TRUE.equals(TrackingService.isTracking.getValue())) {
+            if (!TrackingService.isTrackingActive && !Boolean.TRUE.equals(TrackingService.isTracking.getValue())) {
                 Intent intent = new Intent(context.getApplicationContext(), TrackingService.class);
                 intent.setAction("MONITOR");
                 try {
