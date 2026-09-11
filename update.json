@@ -1,6 +1,6 @@
 {
-  "versionCode": 19,
-  "versionName": "1.5.19",
+  "versionCode": 23,
+  "versionName": "1.5.23",
   "apkUrl": "https://github.com/julioddev/DriveLog/releases/latest/download/app-debug.apk",
   "releaseNotes": "Melhorias gerais e correções de bugs."
 }
