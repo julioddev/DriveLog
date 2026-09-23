@@ -1371,6 +1371,7 @@ public class FirebaseHelper {
         data.put("notes", quadra.notes != null ? quadra.notes : "");
         data.put("creatorId", creatorId != null ? creatorId : "anon");
         data.put("creatorName", creatorName != null ? creatorName : "Entregador");
+        data.put("type", quadra.type != null ? quadra.type : "QUADRA");
         data.put("updatedAt", FieldValue.serverTimestamp());
 
         db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId).get()
@@ -1415,6 +1416,7 @@ public class FirebaseHelper {
                             q.notes = doc.getString("notes");
                             q.creatorId = doc.getString("creatorId");
                             q.creatorName = doc.getString("creatorName");
+                            q.type = doc.getString("type");
                             q.docId = doc.getId();
                             Long likes = doc.getLong("likes");
                             Long dislikes = doc.getLong("dislikes");

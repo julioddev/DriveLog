@@ -17,6 +17,9 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.material.button.MaterialButton;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -153,14 +156,17 @@ public class QuadrasFragment extends Fragment implements QuadraAdapter.OnQuadraC
     @Override
     public void onDelete(CorrectedQuadra quadra) {
         if (getContext() == null) return;
+        boolean isBloco = "BLOCO".equalsIgnoreCase(quadra.type);
+        String itemTypeLabel = isBloco ? "Bloco" : "Quadra";
+
         View view = getLayoutInflater().inflate(R.layout.dialog_modern_confirm, null);
         TextView txtTitle = view.findViewById(R.id.textModernTitle);
         TextView txtMessage = view.findViewById(R.id.textModernMessage);
-        com.google.android.material.button.MaterialButton btnNegative = view.findViewById(R.id.btnModernNegative);
-        com.google.android.material.button.MaterialButton btnPositive = view.findViewById(R.id.btnModernPositive);
+        MaterialButton btnNegative = view.findViewById(R.id.btnModernNegative);
+        MaterialButton btnPositive = view.findViewById(R.id.btnModernPositive);
 
-        if (txtTitle != null) txtTitle.setText("Excluir Quadra");
-        if (txtMessage != null) txtMessage.setText("Deseja realmente apagar esta Quadra (" + quadra.name + ")?");
+        if (txtTitle != null) txtTitle.setText("Excluir " + itemTypeLabel);
+        if (txtMessage != null) txtMessage.setText("Deseja realmente apagar este(a) " + itemTypeLabel + " (" + quadra.name + ")?");
         if (btnPositive != null) btnPositive.setText("EXCLUIR");
 
         AlertDialog dialog = new AlertDialog.Builder(requireContext())
@@ -193,7 +199,7 @@ public class QuadrasFragment extends Fragment implements QuadraAdapter.OnQuadraC
 
                     if (getActivity() != null) {
                         getActivity().runOnUiThread(() -> {
-                            Toast.makeText(getContext(), "Quadra excluída", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(getContext(), itemTypeLabel + " excluído(a)", Toast.LENGTH_SHORT).show();
                             loadQuadras();
                         });
                     }

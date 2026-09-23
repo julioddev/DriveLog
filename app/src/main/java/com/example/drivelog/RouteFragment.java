@@ -1,41 +1,83 @@
 package com.example.drivelog;
 
 import android.Manifest;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DatePickerDialog;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Point;
+import android.graphics.Shader;
+import android.graphics.SweepGradient;
+import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.ShapeDrawable;
+import android.graphics.drawable.shapes.OvalShape;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.location.Location;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.Voice;
 import android.text.Editable;
+import android.text.Html;
 import android.text.TextWatcher;
+import android.text.format.DateUtils;
+import android.transition.Explode;
+import android.util.Base64;
+import android.util.Log;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.SubMenu;
+import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.AnticipateInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.widget.PopupMenu;
@@ -43,8 +85,13 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LiveData;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -65,8 +112,16 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.progressindicator.CircularProgressIndicator;
+import com.google.android.material.tabs.TabLayout;
+import com.google.firebase.Timestamp;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -74,16 +129,25 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.osmdroid.api.IMapController;
+import org.osmdroid.events.MapEventsReceiver;
+import org.osmdroid.events.MapListener;
+import org.osmdroid.events.ScrollEvent;
+import org.osmdroid.events.ZoomEvent;
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase;
 import org.osmdroid.tileprovider.tilesource.XYTileSource;
 import org.osmdroid.util.BoundingBox;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.util.MapTileIndex;
 import org.osmdroid.views.MapView;
+import org.osmdroid.views.Projection;
+import org.osmdroid.views.overlay.MapEventsOverlay;
 import org.osmdroid.views.overlay.Marker;
+import org.osmdroid.views.overlay.Overlay;
+import org.osmdroid.views.overlay.Polygon;
 import org.osmdroid.views.overlay.Polyline;
 import org.osmdroid.views.overlay.gestures.RotationGestureOverlay;
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider;
+import org.osmdroid.views.overlay.mylocation.IMyLocationProvider;
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay;
 
 import java.io.BufferedReader;
@@ -92,15 +156,26 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class RouteFragment extends Fragment {
 
@@ -114,42 +189,42 @@ public class RouteFragment extends Fragment {
     private ImageView imageCompassInner;
     private FloatingActionButton fabAddStop, fabNewRoute, fabCenterMap, fabDeliveryApp, fabMapOrientation, fabReportHazard, fabKmTracking;
     private boolean isMapFollowingHeading = false;
-    private android.hardware.SensorManager sensorManager;
-    private android.hardware.Sensor rotationVectorSensor;
+    private SensorManager sensorManager;
+    private Sensor rotationVectorSensor;
     private float currentAzimuth = 0;
     private long lastGpsMoveTime = 0;
     private static final long GPS_COOLDOWN_MS = 3000;
 
-    private final android.hardware.SensorEventListener compassListener = new android.hardware.SensorEventListener() {
+    private final SensorEventListener compassListener = new SensorEventListener() {
         @Override
-        public void onSensorChanged(android.hardware.SensorEvent event) {
-            if (event.sensor.getType() == android.hardware.Sensor.TYPE_ROTATION_VECTOR) {
+        public void onSensorChanged(SensorEvent event) {
+            if (event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR) {
                 float[] rotationMatrix = new float[9];
-                android.hardware.SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
+                SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
                 
                 // --- Lógica Estável: Remapeamento baseado na rotação da tela ---
-                int worldX = android.hardware.SensorManager.AXIS_X;
-                int worldY = android.hardware.SensorManager.AXIS_Y;
+                int worldX = SensorManager.AXIS_X;
+                int worldY = SensorManager.AXIS_Y;
 
                 if (getActivity() != null) {
                     int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
-                    if (rotation == android.view.Surface.ROTATION_90) {
-                        worldX = android.hardware.SensorManager.AXIS_Y;
-                        worldY = android.hardware.SensorManager.AXIS_MINUS_X;
-                    } else if (rotation == android.view.Surface.ROTATION_180) {
-                        worldX = android.hardware.SensorManager.AXIS_MINUS_X;
-                        worldY = android.hardware.SensorManager.AXIS_MINUS_Y;
-                    } else if (rotation == android.view.Surface.ROTATION_270) {
-                        worldX = android.hardware.SensorManager.AXIS_MINUS_Y;
-                        worldY = android.hardware.SensorManager.AXIS_X;
+                    if (rotation == Surface.ROTATION_90) {
+                        worldX = SensorManager.AXIS_Y;
+                        worldY = SensorManager.AXIS_MINUS_X;
+                    } else if (rotation == Surface.ROTATION_180) {
+                        worldX = SensorManager.AXIS_MINUS_X;
+                        worldY = SensorManager.AXIS_MINUS_Y;
+                    } else if (rotation == Surface.ROTATION_270) {
+                        worldX = SensorManager.AXIS_MINUS_Y;
+                        worldY = SensorManager.AXIS_X;
                     }
                 }
 
                 float[] remappedMatrix = new float[9];
-                android.hardware.SensorManager.remapCoordinateSystem(rotationMatrix, worldX, worldY, remappedMatrix);
+                SensorManager.remapCoordinateSystem(rotationMatrix, worldX, worldY, remappedMatrix);
                 
                 float[] orientation = new float[3];
-                android.hardware.SensorManager.getOrientation(remappedMatrix, orientation);
+                SensorManager.getOrientation(remappedMatrix, orientation);
                 
                 // O azimute (direção) é o primeiro valor do array de orientação
                 float azimuthDegrees = (float) Math.toDegrees(orientation[0]);
@@ -207,7 +282,7 @@ public class RouteFragment extends Fragment {
                 }
             }
         }
-        @Override public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {}
+        @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
     };
     private RecyclerView recyclerSuggestions;
     private SuggestionsAdapter suggestionsAdapter;
@@ -227,7 +302,7 @@ public class RouteFragment extends Fragment {
     private Runnable autoHideRunnable;
     private List<LoadingPoint> loadingPoints = new ArrayList<>();
     private final List<Marker> loadingMarkers = new ArrayList<>();
-    private org.osmdroid.views.overlay.MapEventsOverlay loadingSelectionOverlay;
+    private MapEventsOverlay loadingSelectionOverlay;
     private String lastCityName = "";
     private GeoPoint lastWeatherLocation = null;
     private long lastWeatherUpdate = 0;
@@ -249,7 +324,7 @@ public class RouteFragment extends Fragment {
     private View bottomSheet, layoutSheetHeader;
     private BottomSheetBehavior<View> bottomSheetBehavior;
     private MaterialButton btnEditList, btnCreateGroup, btnUnifyManual, btnStartLassoDraw, btnUndoLasso, btnExitLasso;
-    private com.google.android.material.materialswitch.MaterialSwitch switchTraceLine;
+    private MaterialSwitch switchTraceLine;
     private TextView textSwitchDistance;
     private boolean isEditMode = false;
     private boolean isUnifyMode = false;
@@ -259,9 +334,9 @@ public class RouteFragment extends Fragment {
     private ItemTouchHelper itemTouchHelper;
     private MyLocationNewOverlay locationOverlay;
     private Marker homeMarker, userDirectionMarker;
-    private org.osmdroid.views.overlay.Polygon homeRadiusOverlay;
+    private Polygon homeRadiusOverlay;
     private Polyline selectionTracePolyline;
-    private org.osmdroid.views.overlay.MapEventsOverlay currentFixOverlay, homeSelectionOverlay;
+    private MapEventsOverlay currentFixOverlay, homeSelectionOverlay;
     private LassoOverlay lassoOverlay;
     private View cardFixMode, cardLassoMode, layoutSideFabs;
     private View layoutSummary, layoutLeftSummary, layoutSwitchContainer;
@@ -279,8 +354,8 @@ public class RouteFragment extends Fragment {
     private GeoPoint lastTraceLocation = null;
     private List<GeoPoint> fullTracePoints = new ArrayList<>();
 
-    private com.google.firebase.firestore.ListenerRegistration comboioListener;
-    private com.google.firebase.firestore.ListenerRegistration hazardListener;
+    private ListenerRegistration comboioListener;
+    private ListenerRegistration hazardListener;
     private final Map<String, Marker> friendMarkers = new HashMap<>();
     private final Map<String, Marker> hazardMarkers = new HashMap<>();
 
@@ -299,7 +374,7 @@ public class RouteFragment extends Fragment {
     private ImageView btnTimelinePlayPause;
     private Marker timelineMarker;
     private List<RoutePoint> historicalPoints = new ArrayList<>();
-    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault());
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
     private boolean isTimelinePlaying = false;
     private int timelineSpeedMultiplier = 1;
     private final Handler playbackHandler = new Handler(Looper.getMainLooper());
@@ -372,9 +447,9 @@ public class RouteFragment extends Fragment {
     private int currentRouteId = -1;
     private int pendingRestoreIndex = -1;
     private boolean isPositionRestored = false;
-    private androidx.lifecycle.LiveData<List<RouteStop>> currentStopsLive;
-    private androidx.lifecycle.LiveData<List<RouteGroup>> currentGroupsLive;
-    private androidx.lifecycle.LiveData<RouteHeader> currentHeaderLive;
+    private LiveData<List<RouteStop>> currentStopsLive;
+    private LiveData<List<RouteGroup>> currentGroupsLive;
+    private LiveData<RouteHeader> currentHeaderLive;
 
     private static final String PREF_LAST_ROUTE = "last_opened_route_id";
     private static final String PREF_LAST_STOP_PREFIX = "last_stop_index_";
@@ -384,7 +459,7 @@ public class RouteFragment extends Fragment {
     private boolean shouldFocusOnFirstStop = false;
     private final Handler searchHandler = new Handler(Looper.getMainLooper());
     private Runnable searchRunnable;
-    private android.net.ConnectivityManager.NetworkCallback networkCallback;
+    private ConnectivityManager.NetworkCallback networkCallback;
 
     private ImageButton btnOpenDrawer;
     private SharedPreferences sharedPreferences;
@@ -475,8 +550,8 @@ public class RouteFragment extends Fragment {
         View bs = root.findViewById(R.id.bottomSheetStops);
         View vp = root.findViewById(R.id.viewPagerStops);
 
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
-            androidx.core.graphics.Insets systemBars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             
             // Verificamos se há propaganda (mesma lógica da MainActivity)
             int adHeight = 0;
@@ -538,7 +613,7 @@ public class RouteFragment extends Fragment {
             }
             
             if (layoutSideFabs != null) {
-                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams lp = (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) layoutSideFabs.getLayoutParams();
+                ConstraintLayout.LayoutParams lp = (ConstraintLayout.LayoutParams) layoutSideFabs.getLayoutParams();
                 
                 // 🔥 Lógica de Alinhamento dos Botões Flutuantes (Preferência do usuário ou Auto)
                 String alignment = sharedPreferences.getString("side_fabs_alignment", "auto");
@@ -554,13 +629,13 @@ public class RouteFragment extends Fragment {
                 }
 
                 if (shouldBeOnRight) {
-                    lp.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET;
-                    lp.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID;
+                    lp.startToStart = ConstraintLayout.LayoutParams.UNSET;
+                    lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
                     lp.setMarginEnd((int) (16 * getResources().getDisplayMetrics().density));
                     lp.setMarginStart(0);
                 } else {
-                    lp.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.UNSET;
-                    lp.startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID;
+                    lp.endToEnd = ConstraintLayout.LayoutParams.UNSET;
+                    lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
                     lp.setMarginStart((int) (16 * getResources().getDisplayMetrics().density));
                     lp.setMarginEnd(0);
                 }
@@ -588,7 +663,7 @@ public class RouteFragment extends Fragment {
             v.post(this::updateFloatingButtonsVisibility);
             return insets;
         });
-        androidx.core.view.ViewCompat.requestApplyInsets(root);
+        ViewCompat.requestApplyInsets(root);
     }
 
     private void closeSearchUI() {
@@ -615,7 +690,7 @@ public class RouteFragment extends Fragment {
         
         if (recyclerSuggestions != null) recyclerSuggestions.setVisibility(View.GONE);
 
-        android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(editSearch.getWindowToken(), 0);
 
         // Restaura botão do drawer se necessário
@@ -646,8 +721,8 @@ public class RouteFragment extends Fragment {
         }
 
         ViewGroup.LayoutParams lp = layoutSideFabs.getLayoutParams();
-        if (lp instanceof androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) {
-            androidx.constraintlayout.widget.ConstraintLayout.LayoutParams p = (androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) lp;
+        if (lp instanceof ConstraintLayout.LayoutParams) {
+            ConstraintLayout.LayoutParams p = (ConstraintLayout.LayoutParams) lp;
             p.bottomMargin = mb; 
             layoutSideFabs.setLayoutParams(p);
         }
@@ -746,17 +821,17 @@ public class RouteFragment extends Fragment {
         
         if (initialValue == targetValue) return;
 
-        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofInt(initialValue, targetValue);
+        ValueAnimator animator = ValueAnimator.ofInt(initialValue, targetValue);
         animator.setDuration(800);
         animator.addUpdateListener(animation -> textView.setText(animation.getAnimatedValue().toString()));
         animator.start();
     }
 
     private final ActivityResultLauncher<Intent> importXlsxLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-        if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) processXlsxImport(result.getData().getData());
+        if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) processXlsxImport(result.getData().getData());
     });
 
-    private final android.content.BroadcastReceiver newRouteReceiver = new android.content.BroadcastReceiver() {
+    private final BroadcastReceiver newRouteReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) { if ("com.example.entregas.ACTION_NEW_ROUTE".equals(intent.getAction())) promptNewRoute(); }
     };
 
@@ -767,13 +842,13 @@ public class RouteFragment extends Fragment {
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        android.util.Log.d("DriveLog", "Iniciando onCreateView - " + System.currentTimeMillis());
+        Log.d("DriveLog", "Iniciando onCreateView - " + System.currentTimeMillis());
         View view = inflater.inflate(R.layout.fragment_route, container, false);
         // view.setBackgroundColor(Color.RED); // TESTE RADICAL: SE O FUNDO FICAR VERMELHO, O CÓDIGO NOVO ESTÁ RODANDO
         sharedPreferences = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
-        sensorManager = (android.hardware.SensorManager) requireContext().getSystemService(Context.SENSOR_SERVICE);
+        sensorManager = (SensorManager) requireContext().getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
-            rotationVectorSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR);
+            rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
         }
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
         
@@ -817,9 +892,9 @@ public class RouteFragment extends Fragment {
         setupLocationOverlay();
         refreshQuadraMarkers();
 
-        map.addMapListener(new org.osmdroid.events.MapListener() {
+        map.addMapListener(new MapListener() {
             @Override
-            public boolean onZoom(org.osmdroid.events.ZoomEvent event) {
+            public boolean onZoom(ZoomEvent event) {
                 if (map != null) {
                     map.post(() -> updateQuadraMarkerSizes());
                 }
@@ -827,22 +902,22 @@ public class RouteFragment extends Fragment {
             }
 
             @Override
-            public boolean onScroll(org.osmdroid.events.ScrollEvent event) {
+            public boolean onScroll(ScrollEvent event) {
                 return false;
             }
         });
         
         // Overlay para fechar busca ao clicar no mapa
-        map.getOverlays().add(new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
-            @Override public boolean singleTapConfirmedHelper(org.osmdroid.util.GeoPoint p) {
+        map.getOverlays().add(new MapEventsOverlay(new MapEventsReceiver() {
+            @Override public boolean singleTapConfirmedHelper(GeoPoint p) {
                 closeSearchUI();
                 return false; 
             }
-            @Override public boolean longPressHelper(org.osmdroid.util.GeoPoint p) { return false; }
+            @Override public boolean longPressHelper(GeoPoint p) { return false; }
         }));
 
         map.setOnTouchListener((v, event) -> {
-            if (event.getAction() == android.view.MotionEvent.ACTION_MOVE) {
+            if (event.getAction() == MotionEvent.ACTION_MOVE) {
                 if (isMapFocusedOnUser || isMapFollowingHeading) {
                     isMapFocusedOnUser = false;
                     isMapFollowingHeading = false;
@@ -889,8 +964,8 @@ public class RouteFragment extends Fragment {
                 // Oculta botão do drawer quando busca abre
                 if (layoutOpenDrawerInside != null) layoutOpenDrawerInside.setVisibility(View.GONE);
 
-                android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                imm.showSoftInput(editSearch, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+                InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                imm.showSoftInput(editSearch, InputMethodManager.SHOW_IMPLICIT);
             } else {
                 closeSearchUI();
             }
@@ -1094,14 +1169,14 @@ public class RouteFragment extends Fragment {
                     textSheetHeader.setVisibility(View.GONE);
                     btnToggleSearchStops.setImageResource(R.drawable.ic_close);
                     editSearchStops.requestFocus();
-                    android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                    imm.showSoftInput(editSearchStops, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+                    InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                    imm.showSoftInput(editSearchStops, InputMethodManager.SHOW_IMPLICIT);
                 } else {
                     editSearchStops.setVisibility(View.GONE);
                     textSheetHeader.setVisibility(View.VISIBLE);
                     btnToggleSearchStops.setImageResource(android.R.drawable.ic_menu_search);
                     editSearchStops.setText("");
-                    android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                    InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
                     imm.hideSoftInputFromWindow(editSearchStops.getWindowToken(), 0);
                 }
             });
@@ -1118,9 +1193,9 @@ public class RouteFragment extends Fragment {
         if (cardNavigationMode != null) cardNavigationMode.setOnClickListener(v -> showRouteInstructionsPopup());
         konfettiView = view.findViewById(R.id.konfettiView);
         if (konfettiView != null) {
-            android.util.Log.d("DriveLog", "KonfettiView encontrado com sucesso!");
+            Log.d("DriveLog", "KonfettiView encontrado com sucesso!");
         } else {
-            android.util.Log.e("DriveLog", "KonfettiView NÃO encontrado no layout!");
+            Log.e("DriveLog", "KonfettiView NÃO encontrado no layout!");
         }
         imageNavManeuver = view.findViewById(R.id.imageNavManeuver);
         textNavDistance = view.findViewById(R.id.textNavDistance);
@@ -1160,14 +1235,14 @@ public class RouteFragment extends Fragment {
                                 .translationX(-5f * getResources().getDisplayMetrics().density) // Projeta para a esquerda
                                 .alpha(1f)
                                 .setDuration(300)
-                                .setInterpolator(new android.transition.Explode().getInterpolator())
+                                .setInterpolator(new Explode().getInterpolator())
                                 .start();
                     } else {
                         textSwitchDistance.animate()
                                 .translationX(19f * getResources().getDisplayMetrics().density) // Volta para o centro exato
                                 .alpha(1f)
                                 .setDuration(250)
-                                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                                .setInterpolator(new AccelerateInterpolator())
                                 .withEndAction(() -> {
                                     textSwitchDistance.setVisibility(View.INVISIBLE);
                                     textSwitchDistance.setAlpha(0f);
@@ -1312,12 +1387,12 @@ public class RouteFragment extends Fragment {
 
     private void setupNetworkListener() {
         if (getContext() == null) return;
-        android.net.ConnectivityManager cm = (android.net.ConnectivityManager) requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        ConnectivityManager cm = (ConnectivityManager) requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
         if (cm == null) return;
         
-        networkCallback = new android.net.ConnectivityManager.NetworkCallback() {
+        networkCallback = new ConnectivityManager.NetworkCallback() {
             @Override
-            public void onLost(@NonNull android.net.Network network) {
+            public void onLost(@NonNull Network network) {
                 Activity activity = getActivity();
                 if (activity != null) activity.runOnUiThread(() -> {
                         if (switchTraceLine != null && switchTraceLine.isChecked()) {
@@ -1362,7 +1437,7 @@ public class RouteFragment extends Fragment {
         try {
             String[] sp = s.split(":"), ep = e.split(":");
             int st = Integer.parseInt(sp[0]) * 60 + Integer.parseInt(sp[1]), et = Integer.parseInt(ep[0]) * 60 + Integer.parseInt(ep[1]);
-            java.util.Calendar n = java.util.Calendar.getInstance(); int nt = n.get(java.util.Calendar.HOUR_OF_DAY) * 60 + n.get(java.util.Calendar.MINUTE);
+            Calendar n = Calendar.getInstance(); int nt = n.get(Calendar.HOUR_OF_DAY) * 60 + n.get(Calendar.MINUTE);
             return (st < et) ? (nt >= st && nt < et) : (nt >= st || nt < et);
         } catch (Exception ex) { return false; }
     }
@@ -1377,7 +1452,7 @@ public class RouteFragment extends Fragment {
         GpsMyLocationProvider provider = new GpsMyLocationProvider(requireContext());
         locationOverlay = new MyLocationNewOverlay(provider, map) {
             @Override
-            public void onLocationChanged(android.location.Location location, org.osmdroid.views.overlay.mylocation.IMyLocationProvider source) {
+            public void onLocationChanged(Location location, IMyLocationProvider source) {
                 super.onLocationChanged(location, source);
                 Activity activity = getActivity();
                 if (location != null && activity != null) {
@@ -1578,7 +1653,7 @@ public class RouteFragment extends Fragment {
 
     public void promptNewRoute() {
         View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_new_route_name, null);
-        EditText e = v.findViewById(R.id.editRouteName); String dstr = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(new java.util.Date());
+        EditText e = v.findViewById(R.id.editRouteName); String dstr = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(new Date());
         e.setText(dstr); e.selectAll(); AlertDialog d = new AlertDialog.Builder(requireContext()).setView(v).create();
         if (d.getWindow() != null) d.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         v.findViewById(R.id.btnCancelNewRoute).setOnClickListener(v2 -> d.dismiss());
@@ -1637,7 +1712,7 @@ public class RouteFragment extends Fragment {
             btnEditList.setEnabled(false);
             btnCreateGroup.setEnabled(false);
         } else {
-            java.util.Set<RouteStop> selected = stopsListAdapter.getSelectedStops();
+            Set<RouteStop> selected = stopsListAdapter.getSelectedStops();
             if (selected.size() > 1) {
                 confirmUnification(new ArrayList<>(selected));
             } else {
@@ -1673,7 +1748,7 @@ public class RouteFragment extends Fragment {
             StringBuilder combinedAddresses = new StringBuilder(master.allAddresses != null ? master.allAddresses : master.address);
             StringBuilder combinedSequences = new StringBuilder(master.allSequences != null ? master.allSequences : String.valueOf(master.sequence));
             int totalPackages = master.packageCount;
-            java.util.Set<String> uniqueBuyers = new java.util.HashSet<>();
+            Set<String> uniqueBuyers = new HashSet<>();
             if (master.allAddresses != null) {
                 for (String addr : master.allAddresses.split("\n")) uniqueBuyers.add(addr.trim());
             } else {
@@ -1731,7 +1806,7 @@ public class RouteFragment extends Fragment {
                 int to = t.getBindingAdapterPosition();
                 
                 // Swap no cache local do fragment
-                java.util.Collections.swap(currentStops, from, to); 
+                Collections.swap(currentStops, from, to);
                 
                 // Swap interno no adapter (para manter integridade visual e de dados)
                 stopsListAdapter.swap(from, to); 
@@ -1756,7 +1831,7 @@ public class RouteFragment extends Fragment {
 
     private void toggleMapFocus() { if (isMapFocusedOnUser) centerOnActiveStop(); else centerOnCurrentLocation(); }
 
-    private void shareCurrentRouteWithDevs() { new Thread(() -> { AppDao dao = AppDatabase.getInstance(requireContext()).appDao(); RouteHeader h = dao.getRouteById(currentRouteId); List<RouteStop> ss = dao.getStopsForRoute(currentRouteId); com.google.firebase.auth.FirebaseUser u = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser(); if (u != null && h != null && !ss.isEmpty()) FirebaseHelper.shareRouteWithDevelopers(u.getEmail(), u.getDisplayName(), h, ss, new FirebaseHelper.GlobalUploadCallback() { @Override public void onSuccess() { Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(() -> Toast.makeText(getContext(), "Sucesso!", Toast.LENGTH_SHORT).show()); } @Override public void onFailure(String m) {} }); }).start(); }
+    private void shareCurrentRouteWithDevs() { new Thread(() -> { AppDao dao = AppDatabase.getInstance(requireContext()).appDao(); RouteHeader h = dao.getRouteById(currentRouteId); List<RouteStop> ss = dao.getStopsForRoute(currentRouteId); FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser(); if (u != null && h != null && !ss.isEmpty()) FirebaseHelper.shareRouteWithDevelopers(u.getEmail(), u.getDisplayName(), h, ss, new FirebaseHelper.GlobalUploadCallback() { @Override public void onSuccess() { Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(() -> Toast.makeText(getContext(), "Sucesso!", Toast.LENGTH_SHORT).show()); } @Override public void onFailure(String m) {} }); }).start(); }
 
     private void showSharedDeveloperRoutes() { FirebaseHelper.fetchSharedDeveloperRoutes(new FirebaseHelper.SharedRoutesCallback() { @Override public void onResult(List<Map<String, Object>> rs) { Activity activity = getActivity(); if (activity == null) return; activity.runOnUiThread(() -> { String[] ns = new String[rs.size()]; for(int i=0; i<rs.size(); i++) ns[i] = (String) rs.get(i).get("name"); new AlertDialog.Builder(requireContext()).setTitle("Dev").setItems(ns, (d, w) -> importSharedDevRoute(rs.get(w))).show(); }); } @Override public void onError(String m) {} }); }
 
@@ -1838,7 +1913,7 @@ public class RouteFragment extends Fragment {
         }
 
         if (listBuilder.length() > 0) {
-            textStopsList.setText(android.text.Html.fromHtml(listBuilder.toString(), android.text.Html.FROM_HTML_MODE_COMPACT));
+            textStopsList.setText(Html.fromHtml(listBuilder.toString(), Html.FROM_HTML_MODE_COMPACT));
         } else {
             textStopsList.setText("Nenhuma parada nesta categoria.");
         }
@@ -1896,7 +1971,7 @@ public class RouteFragment extends Fragment {
     private void enterHomeSelectionMode() {
         Toast.makeText(getContext(), "Toque no mapa para definir sua CASA", Toast.LENGTH_LONG).show();
         
-        homeSelectionOverlay = new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
+        homeSelectionOverlay = new MapEventsOverlay(new MapEventsReceiver() {
             @Override
             public boolean singleTapConfirmedHelper(GeoPoint p) {
                 confirmHomeLocation(p);
@@ -1963,13 +2038,13 @@ public class RouteFragment extends Fragment {
             }
 
             // Remocao garantida de qualquer overlay antigo do raio de casa
-            map.getOverlays().removeIf(o -> o instanceof org.osmdroid.views.overlay.Polygon 
-                    && "HOME_RADIUS".equals(((org.osmdroid.views.overlay.Polygon) o).getTitle()));
+            map.getOverlays().removeIf(o -> o instanceof Polygon
+                    && "HOME_RADIUS".equals(((Polygon) o).getTitle()));
 
             int triggerRadius = sharedPreferences.getInt("home_trigger_radius", 100);
-            homeRadiusOverlay = new org.osmdroid.views.overlay.Polygon(map);
+            homeRadiusOverlay = new Polygon(map);
             homeRadiusOverlay.setTitle("HOME_RADIUS");
-            homeRadiusOverlay.setPoints(org.osmdroid.views.overlay.Polygon.pointsAsCircle(homePoint, triggerRadius));
+            homeRadiusOverlay.setPoints(Polygon.pointsAsCircle(homePoint, triggerRadius));
             homeRadiusOverlay.getFillPaint().setColor(Color.parseColor("#334CAF50"));
             homeRadiusOverlay.getOutlinePaint().setColor(Color.parseColor("#4CAF50"));
             homeRadiusOverlay.getOutlinePaint().setStrokeWidth(2f);
@@ -1990,7 +2065,7 @@ public class RouteFragment extends Fragment {
         if (getActivity() instanceof MainActivity && !((MainActivity) getActivity()).isMenuVisible("km")) {
             for (Marker m : loadingMarkers) map.getOverlays().remove(m);
             loadingMarkers.clear();
-            map.getOverlays().removeIf(overlay -> overlay instanceof org.osmdroid.views.overlay.Polygon && ((org.osmdroid.views.overlay.Polygon)overlay).getTitle() != null && ((org.osmdroid.views.overlay.Polygon)overlay).getTitle().startsWith("LoadingRadius:"));
+            map.getOverlays().removeIf(overlay -> overlay instanceof Polygon && ((Polygon)overlay).getTitle() != null && ((Polygon)overlay).getTitle().startsWith("LoadingRadius:"));
             map.invalidate();
             return;
         }
@@ -2003,8 +2078,8 @@ public class RouteFragment extends Fragment {
         loadingMarkers.clear();
 
         map.getOverlays().removeIf(overlay -> {
-            if (overlay instanceof org.osmdroid.views.overlay.Polygon) {
-                org.osmdroid.views.overlay.Polygon p = (org.osmdroid.views.overlay.Polygon) overlay;
+            if (overlay instanceof Polygon) {
+                Polygon p = (Polygon) overlay;
                 return p.getTitle() != null && p.getTitle().startsWith("LoadingRadius:");
             }
             return false;
@@ -2015,8 +2090,8 @@ public class RouteFragment extends Fragment {
         for (LoadingPoint lp : loadingPoints) {
             GeoPoint point = new GeoPoint(lp.latitude, lp.longitude);
             
-            org.osmdroid.views.overlay.Polygon circle = new org.osmdroid.views.overlay.Polygon(map);
-            circle.setPoints(org.osmdroid.views.overlay.Polygon.pointsAsCircle(point, loadingRadius));
+            Polygon circle = new Polygon(map);
+            circle.setPoints(Polygon.pointsAsCircle(point, loadingRadius));
             circle.getFillPaint().setColor(Color.parseColor("#33FF9800")); // Laranja semi-transparente
             circle.getOutlinePaint().setColor(Color.parseColor("#FF9800"));
             circle.getOutlinePaint().setStrokeWidth(2f);
@@ -2102,7 +2177,7 @@ public class RouteFragment extends Fragment {
             cardFixMode.setVisibility(View.VISIBLE);
         }
 
-        loadingSelectionOverlay = new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
+        loadingSelectionOverlay = new MapEventsOverlay(new MapEventsReceiver() {
             @Override
             public boolean singleTapConfirmedHelper(GeoPoint p) {
                 confirmLoadingLocation(p, index);
@@ -2145,7 +2220,7 @@ public class RouteFragment extends Fragment {
     }
 
     private void promptForLoadingPointName(double lat, double lon, int index) {
-        android.widget.EditText input = new android.widget.EditText(getContext());
+        EditText input = new EditText(getContext());
         if (index != -1) input.setText(loadingPoints.get(index).name);
         else input.setHint("Nome da Empresa");
 
@@ -2234,7 +2309,7 @@ public class RouteFragment extends Fragment {
             if (currentRouteHeader.lastPauseStartTime == 0) {
                 currentRouteHeader.lastPauseStartTime = now;
                 updated = true;
-                android.util.Log.d("DriveLog", "[Timer] Pausado automaticamente (Chegou em casa)");
+                Log.d("DriveLog", "[Timer] Pausado automaticamente (Chegou em casa)");
             }
         } else {
             if (currentRouteHeader.lastPauseStartTime > 0) {
@@ -2242,7 +2317,7 @@ public class RouteFragment extends Fragment {
                 currentRouteHeader.totalPausedMs += pauseDuration;
                 currentRouteHeader.lastPauseStartTime = 0;
                 updated = true;
-                android.util.Log.d("DriveLog", "[Timer] Retomado automaticamente (Saiu de casa)");
+                Log.d("DriveLog", "[Timer] Retomado automaticamente (Saiu de casa)");
             }
         }
         
@@ -2277,7 +2352,7 @@ public class RouteFragment extends Fragment {
     private void updateOrientationFabIcon() {
         if (fabMapOrientation != null) {
             fabMapOrientation.setImageResource(isMapFollowingHeading ? android.R.drawable.ic_menu_compass : android.R.drawable.ic_menu_directions);
-            fabMapOrientation.setSupportImageTintList(android.content.res.ColorStateList.valueOf(
+            fabMapOrientation.setSupportImageTintList(ColorStateList.valueOf(
                 isMapFollowingHeading ? Color.parseColor("#F44336") : ContextCompat.getColor(requireContext(), R.color.teal_700)
             ));
         }
@@ -2286,9 +2361,9 @@ public class RouteFragment extends Fragment {
     private void updateCenterFabIcon() { if (fabCenterMap!=null) fabCenterMap.setImageResource(isMapFocusedOnUser ? android.R.drawable.ic_menu_myplaces : R.drawable.ic_my_location); }
 
     private void fetchSuggestions(String q) { new Thread(() -> { try { 
-        String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+        String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
         String userAgent = "DriveLogApp_v141_" + uniqueId;
-        String u = String.format(Locale.US, "https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=5", URLEncoder.encode(q, java.nio.charset.StandardCharsets.UTF_8.name())); 
+        String u = String.format(Locale.US, "https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=5", URLEncoder.encode(q, StandardCharsets.UTF_8.name()));
         HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection(); 
         c.setRequestProperty("User-Agent", userAgent); 
         BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream())); StringBuilder res = new StringBuilder(); String l; while((l=r.readLine())!=null) res.append(l); JSONArray a = new JSONArray(res.toString()); List<Suggestion> sl = new ArrayList<>(); for(int i=0; i<a.length(); i++) { JSONObject o = a.getJSONObject(i); sl.add(new Suggestion(o.getString("display_name"), o.getDouble("lat"), o.getDouble("lon"))); } Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(() -> { suggestionsAdapter.setSuggestions(sl); recyclerSuggestions.setVisibility(sl.isEmpty() ? View.GONE : View.VISIBLE); }); } catch(Exception ignored){} }).start(); }
@@ -2309,6 +2384,7 @@ public class RouteFragment extends Fragment {
 
         View cardAddStop = dialogView.findViewById(R.id.cardOptionAddStop);
         View cardAddQuadra = dialogView.findViewById(R.id.cardOptionAddQuadra);
+        View cardAddBloco = dialogView.findViewById(R.id.cardOptionAddBloco);
         View btnCancel = dialogView.findViewById(R.id.btnCancelOptionAdd);
 
         if (cardAddStop != null) {
@@ -2321,7 +2397,14 @@ public class RouteFragment extends Fragment {
         if (cardAddQuadra != null) {
             cardAddQuadra.setOnClickListener(v -> {
                 dialog.dismiss();
-                startQuadraSelection();
+                startQuadraSelection("QUADRA");
+            });
+        }
+
+        if (cardAddBloco != null) {
+            cardAddBloco.setOnClickListener(v -> {
+                dialog.dismiss();
+                startQuadraSelection("BLOCO");
             });
         }
 
@@ -2332,29 +2415,30 @@ public class RouteFragment extends Fragment {
         dialog.show();
     }
 
-    private org.osmdroid.views.overlay.MapEventsOverlay quadraSelectionOverlay;
+    private MapEventsOverlay quadraSelectionOverlay;
 
-    private void startQuadraSelection() {
-        Toast.makeText(requireContext(), "Toque no local do mapa onde fica a Quadra", Toast.LENGTH_LONG).show();
+    private void startQuadraSelection(String itemType) {
+        String label = "BLOCO".equalsIgnoreCase(itemType) ? "Bloco" : "Quadra";
+        Toast.makeText(requireContext(), "Toque no local do mapa onde fica o(a) " + label, Toast.LENGTH_LONG).show();
 
         if (quadraSelectionOverlay != null && map != null) {
             map.getOverlays().remove(quadraSelectionOverlay);
         }
 
-        quadraSelectionOverlay = new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
+        quadraSelectionOverlay = new MapEventsOverlay(new MapEventsReceiver() {
             @Override
-            public boolean singleTapConfirmedHelper(org.osmdroid.util.GeoPoint p) {
+            public boolean singleTapConfirmedHelper(GeoPoint p) {
                 if (map != null && quadraSelectionOverlay != null) {
                     map.getOverlays().remove(quadraSelectionOverlay);
                     quadraSelectionOverlay = null;
                     map.invalidate();
                 }
-                promptAddQuadraDialog(p);
+                promptAddQuadraDialog(p, itemType);
                 return true;
             }
 
             @Override
-            public boolean longPressHelper(org.osmdroid.util.GeoPoint p) {
+            public boolean longPressHelper(GeoPoint p) {
                 return false;
             }
         });
@@ -2366,7 +2450,7 @@ public class RouteFragment extends Fragment {
     }
 
     private String getUserDisplayName() {
-        com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user != null && user.getDisplayName() != null && !user.getDisplayName().trim().isEmpty()) {
             return user.getDisplayName().trim();
         }
@@ -2381,17 +2465,26 @@ public class RouteFragment extends Fragment {
         return "Entregador";
     }
 
-    private void promptAddQuadraDialog(org.osmdroid.util.GeoPoint p) {
+    private void promptAddQuadraDialog(GeoPoint p, String itemType) {
         if (p == null || getContext() == null) return;
+        boolean isBloco = "BLOCO".equalsIgnoreCase(itemType);
 
         View v = getLayoutInflater().inflate(R.layout.dialog_add_quadra, null);
+        TextView textDialogTitle = v.findViewById(R.id.textDialogAddQuadraTitle);
         EditText editName = v.findViewById(R.id.editDialogQuadraName);
         EditText editNeighborhood = v.findViewById(R.id.editDialogQuadraNeighborhood);
         EditText editCity = v.findViewById(R.id.editDialogQuadraCity);
         EditText editNotes = v.findViewById(R.id.editDialogQuadraNotes);
 
-        com.google.android.material.button.MaterialButton btnSave = v.findViewById(R.id.btnSaveAddQuadra);
-        com.google.android.material.button.MaterialButton btnCancel = v.findViewById(R.id.btnCancelAddQuadra);
+        MaterialButton btnSave = v.findViewById(R.id.btnSaveAddQuadra);
+        MaterialButton btnCancel = v.findViewById(R.id.btnCancelAddQuadra);
+
+        if (textDialogTitle != null) {
+            textDialogTitle.setText(isBloco ? "🏢 Adicionar Bloco" : "🧱 Adicionar Quadra");
+        }
+        if (editName != null) {
+            editName.setHint(isBloco ? "Nome do Bloco (Ex: Bloco B, Ed. Solar)" : "Nome da Quadra (Ex: 104 Norte, QD 12)");
+        }
 
         AlertDialog dialog = new AlertDialog.Builder(requireContext())
                 .setView(v)
@@ -2405,14 +2498,14 @@ public class RouteFragment extends Fragment {
         if (editNeighborhood != null && editCity != null) {
             new Thread(() -> {
                 try {
-                    String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                    String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
                     String userAgent = "DriveLogApp_v141_" + uniqueId;
                     String urlStr = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=json", p.getLatitude(), p.getLongitude());
 
                     HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
                     c.setRequestProperty("User-Agent", userAgent);
                     if (c.getResponseCode() == 200) {
-                        BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+                        BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8));
                         StringBuilder res = new StringBuilder();
                         String l;
                         while ((l = r.readLine()) != null) res.append(l);
@@ -2451,7 +2544,7 @@ public class RouteFragment extends Fragment {
                 String notes = editNotes != null ? editNotes.getText().toString().trim() : "";
 
                 if (name.isEmpty()) {
-                    Toast.makeText(getContext(), "Digite o nome da Quadra", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), isBloco ? "Digite o nome do Bloco" : "Digite o nome da Quadra", Toast.LENGTH_SHORT).show();
                     return;
                 }
 
@@ -2466,6 +2559,7 @@ public class RouteFragment extends Fragment {
                     quadra.notes = notes;
                     quadra.creatorId = currentUserId;
                     quadra.creatorName = currentUserName;
+                    quadra.type = isBloco ? "BLOCO" : "QUADRA";
 
                     AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
                     dao.insertCorrectedQuadra(quadra);
@@ -2475,7 +2569,8 @@ public class RouteFragment extends Fragment {
                     Activity act = getActivity();
                     if (act != null) {
                         act.runOnUiThread(() -> {
-                            Toast.makeText(getContext(), "🧱 Quadra '" + name + "' cadastrada com sucesso!", Toast.LENGTH_LONG).show();
+                            String itemLabel = isBloco ? "🏢 Bloco '" : "🧱 Quadra '";
+                            Toast.makeText(getContext(), itemLabel + name + "' cadastrado(a) com sucesso!", Toast.LENGTH_LONG).show();
                             refreshQuadraMarkers();
                         });
                     }
@@ -2488,7 +2583,7 @@ public class RouteFragment extends Fragment {
 
     public void focusOnQuadra(double lat, double lon, String quadraName) {
         if (mapController != null && lat != 0 && lon != 0) {
-            org.osmdroid.util.GeoPoint gp = new org.osmdroid.util.GeoPoint(lat, lon);
+            GeoPoint gp = new GeoPoint(lat, lon);
             mapController.animateTo(gp);
             mapController.setZoom(18.5);
             Toast.makeText(getContext(), "📍 Exibindo Quadra: " + quadraName, Toast.LENGTH_SHORT).show();
@@ -2547,12 +2642,15 @@ public class RouteFragment extends Fragment {
                             for (CorrectedQuadra q : combined) {
                                 if (q.latitude == 0 || q.longitude == 0) continue;
 
+                                boolean isBloco = "BLOCO".equalsIgnoreCase(q.type);
+
                                 Marker m = new Marker(map);
                                 m.setRelatedObject(q);
-                                m.setPosition(new org.osmdroid.util.GeoPoint(q.latitude, q.longitude));
-                                m.setTitle("🧱 " + q.name + (q.neighborhood != null && !q.neighborhood.isEmpty() ? " (" + q.neighborhood + ")" : ""));
+                                m.setPosition(new GeoPoint(q.latitude, q.longitude));
+                                String prefix = isBloco ? "🏢 " : "🧱 ";
+                                m.setTitle(prefix + q.name + (q.neighborhood != null && !q.neighborhood.isEmpty() ? " (" + q.neighborhood + ")" : ""));
 
-                                Bitmap bmp = generateQuadraMarkerBitmap(q.name, tier);
+                                Bitmap bmp = generateQuadraMarkerBitmap(q.name, tier, q.likes, q.dislikes, isBloco);
                                 m.setIcon(new BitmapDrawable(getResources(), bmp));
 
                                 m.setOnMarkerClickListener((marker, mapView) -> {
@@ -2580,20 +2678,21 @@ public class RouteFragment extends Fragment {
         double zoom = map.getZoomLevelDouble();
         int tier;
         if (zoom < 14.0) {
-            tier = 0; // Muito longe: pontinho discreto (18dp)
+            tier = 0; // Muito longe: pontinho discreto
         } else if (zoom < 16.0) {
-            tier = 1; // Médio afastamento: badge compacto (32dp)
+            tier = 1; // Médio afastamento: badge compacto
         } else {
-            tier = 2; // Zoom próximo: badge completo com o nome da quadra (64dp)
+            tier = 2; // Zoom próximo: badge completo
         }
 
         if (tier != currentQuadraZoomTier) {
             currentQuadraZoomTier = tier;
-            for (org.osmdroid.views.overlay.Overlay o : map.getOverlays()) {
+            for (Overlay o : map.getOverlays()) {
                 if (o instanceof Marker && ((Marker) o).getRelatedObject() instanceof CorrectedQuadra) {
                     Marker m = (Marker) o;
                     CorrectedQuadra q = (CorrectedQuadra) m.getRelatedObject();
-                    Bitmap bmp = generateQuadraMarkerBitmap(q.name, tier);
+                    boolean isBloco = "BLOCO".equalsIgnoreCase(q.type);
+                    Bitmap bmp = generateQuadraMarkerBitmap(q.name, tier, q.likes, q.dislikes, isBloco);
                     m.setIcon(new BitmapDrawable(getResources(), bmp));
                 }
             }
@@ -2601,58 +2700,140 @@ public class RouteFragment extends Fragment {
         }
     }
 
-    private Bitmap generateQuadraMarkerBitmap(String name, int tier) {
-        // tier 0 = muito longe (pontinho compacto 18px)
-        // tier 1 = intermediário (quadradinho 32px)
-        // tier 2 = perto (badge completo 64px com nome)
-        int size = (tier == 0) ? 18 : (tier == 1 ? 32 : 64);
+    private void updateSingleQuadraMarkerIcon(CorrectedQuadra quadra) {
+        if (map == null || quadra == null) return;
+        int tier = currentQuadraZoomTier >= 0 ? currentQuadraZoomTier : 2;
+        for (Overlay o : map.getOverlays()) {
+            if (o instanceof Marker && ((Marker) o).getRelatedObject() instanceof CorrectedQuadra) {
+                Marker m = (Marker) o;
+                CorrectedQuadra q = (CorrectedQuadra) m.getRelatedObject();
+                if (q.name != null && q.name.equalsIgnoreCase(quadra.name)) {
+                    q.likes = quadra.likes;
+                    q.dislikes = quadra.dislikes;
+                    boolean isBloco = "BLOCO".equalsIgnoreCase(q.type);
+                    Bitmap bmp = generateQuadraMarkerBitmap(q.name, tier, q.likes, q.dislikes, isBloco);
+                    m.setIcon(new BitmapDrawable(getResources(), bmp));
+                    break;
+                }
+            }
+        }
+        map.invalidate();
+    }
+
+    private Bitmap generateQuadraMarkerBitmap(String name, int tier, int likes, int dislikes, boolean isBloco) {
+        // Ícone de Bloco deve ser menor que o da Quadra
+        int baseScale = isBloco ? 12 : 0;
+        int size = (tier == 0) ? (14 - (isBloco ? 2 : 0)) : (tier == 1 ? (28 - (isBloco ? 2 : 0)) : (56 - baseScale));
+        if (size < 10) size = 10;
+
         Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        p.setColor(Color.parseColor("#795548")); // Tom marrom da quadra
+        // Define a cor com base na confiabilidade
+        int mainColor;
+        int totalVotes = likes + dislikes;
+        if (totalVotes == 0) {
+            mainColor = Color.parseColor("#F57C00"); // Laranja/Âmbar (Em avaliação)
+        } else {
+            double ratio = (double) likes / totalVotes;
+            if (ratio >= 0.75) {
+                mainColor = Color.parseColor("#388E3C"); // Verde (Alta confiabilidade)
+            } else if (ratio >= 0.40) {
+                mainColor = Color.parseColor("#E65100"); // Laranja (Média confiabilidade)
+            } else {
+                mainColor = Color.parseColor("#D32F2F"); // Vermelho (Baixa confiabilidade)
+            }
+        }
+
+        p.setColor(mainColor);
         p.setStyle(Paint.Style.FILL);
 
+        float cx = size / 2f;
+        float cy = size / 2f;
+
         if (tier == 0) {
-            // Apenas uma bolinha discreta com borda branca
-            c.drawCircle(size / 2f, size / 2f, (size / 2f) - 1, p);
-            p.setColor(Color.WHITE);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(1.5f);
-            c.drawCircle(size / 2f, size / 2f, (size / 2f) - 1, p);
+            // Apenas uma forma discreta com borda branca
+            if (isBloco) {
+                Path hex = createHexagonPath(cx, cy, (size / 2f) - 1f);
+                c.drawPath(hex, p);
+                p.setColor(Color.WHITE);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(1.2f);
+                c.drawPath(hex, p);
+            } else {
+                c.drawCircle(cx, cy, (size / 2f) - 1f, p);
+                p.setColor(Color.WHITE);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(1.2f);
+                c.drawCircle(cx, cy, (size / 2f) - 1f, p);
+            }
         } else if (tier == 1) {
-            // Quadrado compacto arredondado com mini ponto central
-            float rx = 6f;
-            c.drawRoundRect(new RectF(1.5f, 1.5f, size - 1.5f, size - 1.5f), rx, rx, p);
-
-            p.setColor(Color.WHITE);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(2f);
-            c.drawRoundRect(new RectF(1.5f, 1.5f, size - 1.5f, size - 1.5f), rx, rx, p);
+            // Hexágono ou quadrado compacto arredondado com mini ponto central
+            if (isBloco) {
+                Path hex = createHexagonPath(cx, cy, (size / 2f) - 1.5f);
+                c.drawPath(hex, p);
+                p.setColor(Color.WHITE);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(1.5f);
+                c.drawPath(hex, p);
+            } else {
+                float rx = 5f;
+                c.drawRoundRect(new RectF(1.5f, 1.5f, size - 1.5f, size - 1.5f), rx, rx, p);
+                p.setColor(Color.WHITE);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(1.5f);
+                c.drawRoundRect(new RectF(1.5f, 1.5f, size - 1.5f, size - 1.5f), rx, rx, p);
+            }
 
             p.setStyle(Paint.Style.FILL);
-            c.drawCircle(size / 2f, size / 2f, 3.5f, p);
+            p.setColor(Color.WHITE);
+            c.drawCircle(cx, cy, 2.5f, p);
         } else {
-            // Zoom detalhado: badge completo com o nome da quadra
-            float rx = 12f;
-            c.drawRoundRect(new RectF(2, 2, size - 2, size - 2), rx, rx, p);
-
-            p.setColor(Color.WHITE);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(2.5f);
-            c.drawRoundRect(new RectF(2, 2, size - 2, size - 2), rx, rx, p);
+            // Zoom detalhado: Hexágono para Bloco ou Rounded Rect para Quadra
+            if (isBloco) {
+                Path hex = createHexagonPath(cx, cy, (size / 2f) - 2f);
+                c.drawPath(hex, p);
+                p.setColor(Color.WHITE);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(2f);
+                c.drawPath(hex, p);
+            } else {
+                float rx = 10f;
+                c.drawRoundRect(new RectF(2, 2, size - 2, size - 2), rx, rx, p);
+                p.setColor(Color.WHITE);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(2f);
+                c.drawRoundRect(new RectF(2, 2, size - 2, size - 2), rx, rx, p);
+            }
 
             p.setStyle(Paint.Style.FILL);
             p.setColor(Color.WHITE);
-            p.setTextSize(20f);
+            p.setTextSize(isBloco ? 15f : 18f);
             p.setTextAlign(Paint.Align.CENTER);
-            String text = (name != null && name.length() > 6) ? name.substring(0, 6) : (name != null ? name : "QD");
+            String text = (name != null && name.length() > 5) ? name.substring(0, 5) : (name != null ? name : "B");
             Paint.FontMetrics fm = p.getFontMetrics();
-            float textY = (size / 2f) - (fm.ascent + fm.descent) / 2f;
-            c.drawText(text, size / 2f, textY, p);
+            float textY = cy - (fm.ascent + fm.descent) / 2f;
+            c.drawText(text, cx, textY, p);
         }
 
         return b;
+    }
+
+    private Path createHexagonPath(float cx, float cy, float r) {
+        Path path = new Path();
+        for (int i = 0; i < 6; i++) {
+            double angleRad = Math.toRadians(30 + i * 60);
+            float x = (float) (cx + r * Math.cos(angleRad));
+            float y = (float) (cy + r * Math.sin(angleRad));
+            if (i == 0) {
+                path.moveTo(x, y);
+            } else {
+                path.lineTo(x, y);
+            }
+        }
+        path.close();
+        return path;
     }
 
     private void showQuadraDetailsDialog(CorrectedQuadra q) {
@@ -2664,16 +2845,17 @@ public class RouteFragment extends Fragment {
         TextView textNotes = v.findViewById(R.id.textQuadraNotes);
         TextView textCreatorDetail = v.findViewById(R.id.textQuadraCreatorDetail);
 
-        com.google.android.material.button.MaterialButton btnLike = v.findViewById(R.id.btnQuadraLike);
-        com.google.android.material.button.MaterialButton btnDislike = v.findViewById(R.id.btnQuadraDislike);
-        com.google.android.material.button.MaterialButton btnDelete = v.findViewById(R.id.btnDeleteQuadraDialog);
+        MaterialButton btnLike = v.findViewById(R.id.btnQuadraLike);
+        MaterialButton btnDislike = v.findViewById(R.id.btnQuadraDislike);
+        MaterialButton btnDelete = v.findViewById(R.id.btnDeleteQuadraDialog);
 
         RecyclerView recyclerComments = v.findViewById(R.id.recyclerQuadraComments);
         TextView textNoComments = v.findViewById(R.id.textNoQuadraComments);
         EditText editCommentInput = v.findViewById(R.id.editQuadraCommentInput);
         ImageButton btnSendComment = v.findViewById(R.id.btnSendQuadraComment);
 
-        if (textTitle != null) textTitle.setText("🧱 " + (q.name != null ? q.name : "Quadra"));
+        boolean isBloco = "BLOCO".equalsIgnoreCase(q.type);
+        if (textTitle != null) textTitle.setText((isBloco ? "🏢 " : "🧱 ") + (q.name != null ? q.name : (isBloco ? "Bloco" : "Quadra")));
 
         StringBuilder locBuilder = new StringBuilder();
         if (q.neighborhood != null && !q.neighborhood.isEmpty()) locBuilder.append(q.neighborhood);
@@ -2704,6 +2886,7 @@ public class RouteFragment extends Fragment {
 
         boolean isMine = (q.creatorId != null && q.creatorId.equals(currentUserId));
         if (btnDelete != null) {
+            btnDelete.setText(isBloco ? "🗑️ Excluir este Bloco" : "🗑️ Excluir esta Quadra");
             btnDelete.setVisibility(isMine ? View.VISIBLE : View.GONE);
         }
 
@@ -2711,8 +2894,38 @@ public class RouteFragment extends Fragment {
         final int[] dislikesCount = {q.dislikes};
         final Boolean[] userVote = {null};
 
+        TextView textReliability = v.findViewById(R.id.textQuadraReliability);
+        Runnable updateReliabilityBadge = () -> {
+            if (textReliability == null) return;
+            int likes = likesCount[0];
+            int dislikes = dislikesCount[0];
+            int totalVotes = likes + dislikes;
+
+            if (totalVotes == 0) {
+                textReliability.setText("⏳ Em avaliação");
+                textReliability.setTextColor(Color.parseColor("#F57C00"));
+                textReliability.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FFF8E1")));
+            } else {
+                double ratio = (double) likes / totalVotes;
+                if (ratio >= 0.75) {
+                    textReliability.setText("🛡️ Alta Confiabilidade (" + (int)(ratio * 100) + "%)");
+                    textReliability.setTextColor(Color.parseColor("#2E7D32"));
+                    textReliability.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#E8F5E9")));
+                } else if (ratio >= 0.40) {
+                    textReliability.setText("⚠️ Média Confiabilidade (" + (int)(ratio * 100) + "%)");
+                    textReliability.setTextColor(Color.parseColor("#E65100"));
+                    textReliability.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FFF3E0")));
+                } else {
+                    textReliability.setText("❌ Baixa Confiabilidade (" + (int)(ratio * 100) + "%)");
+                    textReliability.setTextColor(Color.parseColor("#C62828"));
+                    textReliability.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FFEBEE")));
+                }
+            }
+        };
+
         if (btnLike != null) btnLike.setText("👍 " + likesCount[0]);
         if (btnDislike != null) btnDislike.setText("👎 " + dislikesCount[0]);
+        updateReliabilityBadge.run();
 
         int defaultBgColor = Color.parseColor("#E0E0E0");
         int activeLikeColor = Color.parseColor("#4CAF50");
@@ -2727,6 +2940,8 @@ public class RouteFragment extends Fragment {
                 dislikesCount[0] = freshDislikes;
                 if (btnLike != null) btnLike.setText("👍 " + likesCount[0]);
                 if (btnDislike != null) btnDislike.setText("👎 " + dislikesCount[0]);
+                updateReliabilityBadge.run();
+                updateSingleQuadraMarkerIcon(q);
             }
         });
 
@@ -2735,10 +2950,10 @@ public class RouteFragment extends Fragment {
             if (isAdded()) {
                 userVote[0] = isLike;
                 if (Boolean.TRUE.equals(isLike) && btnLike != null) {
-                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeLikeColor));
+                    btnLike.setBackgroundTintList(ColorStateList.valueOf(activeLikeColor));
                     btnLike.setTextColor(Color.WHITE);
                 } else if (Boolean.FALSE.equals(isLike) && btnDislike != null) {
-                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeDislikeColor));
+                    btnDislike.setBackgroundTintList(ColorStateList.valueOf(activeDislikeColor));
                     btnDislike.setTextColor(Color.WHITE);
                 }
             }
@@ -2753,7 +2968,7 @@ public class RouteFragment extends Fragment {
                     q.likes = likesCount[0];
                     q.dislikes = dislikesCount[0];
                     btnLike.setText("👍 " + likesCount[0]);
-                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(defaultBgColor));
+                    btnLike.setBackgroundTintList(ColorStateList.valueOf(defaultBgColor));
                     btnLike.setTextColor(Color.parseColor("#333333"));
                     FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, true, null, currentUserName, currentUserId);
                 } else if (Boolean.FALSE.equals(userVote[0])) {
@@ -2764,9 +2979,9 @@ public class RouteFragment extends Fragment {
                     q.dislikes = dislikesCount[0];
                     btnLike.setText("👍 " + likesCount[0]);
                     btnDislike.setText("👎 " + dislikesCount[0]);
-                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeLikeColor));
+                    btnLike.setBackgroundTintList(ColorStateList.valueOf(activeLikeColor));
                     btnLike.setTextColor(Color.WHITE);
-                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(defaultBgColor));
+                    btnDislike.setBackgroundTintList(ColorStateList.valueOf(defaultBgColor));
                     btnDislike.setTextColor(Color.parseColor("#333333"));
                     FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, true, null, currentUserName, currentUserId);
                 } else {
@@ -2775,10 +2990,12 @@ public class RouteFragment extends Fragment {
                     q.likes = likesCount[0];
                     q.dislikes = dislikesCount[0];
                     btnLike.setText("👍 " + likesCount[0]);
-                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeLikeColor));
+                    btnLike.setBackgroundTintList(ColorStateList.valueOf(activeLikeColor));
                     btnLike.setTextColor(Color.WHITE);
                     FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, true, null, currentUserName, currentUserId);
                 }
+                updateReliabilityBadge.run();
+                updateSingleQuadraMarkerIcon(q);
             });
         }
 
@@ -2791,7 +3008,7 @@ public class RouteFragment extends Fragment {
                     q.likes = likesCount[0];
                     q.dislikes = dislikesCount[0];
                     btnDislike.setText("👎 " + dislikesCount[0]);
-                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(defaultBgColor));
+                    btnDislike.setBackgroundTintList(ColorStateList.valueOf(defaultBgColor));
                     btnDislike.setTextColor(Color.parseColor("#333333"));
                     FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, false, null, currentUserName, currentUserId);
                 } else if (Boolean.TRUE.equals(userVote[0])) {
@@ -2802,9 +3019,9 @@ public class RouteFragment extends Fragment {
                     q.dislikes = dislikesCount[0];
                     btnLike.setText("👍 " + likesCount[0]);
                     btnDislike.setText("👎 " + dislikesCount[0]);
-                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeDislikeColor));
+                    btnDislike.setBackgroundTintList(ColorStateList.valueOf(activeDislikeColor));
                     btnDislike.setTextColor(Color.WHITE);
-                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(defaultBgColor));
+                    btnLike.setBackgroundTintList(ColorStateList.valueOf(defaultBgColor));
                     btnLike.setTextColor(Color.parseColor("#333333"));
                     FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, false, null, currentUserName, currentUserId);
                 } else {
@@ -2813,10 +3030,12 @@ public class RouteFragment extends Fragment {
                     q.likes = likesCount[0];
                     q.dislikes = dislikesCount[0];
                     btnDislike.setText("👎 " + dislikesCount[0]);
-                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeDislikeColor));
+                    btnDislike.setBackgroundTintList(ColorStateList.valueOf(activeDislikeColor));
                     btnDislike.setTextColor(Color.WHITE);
                     FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, false, null, currentUserName, currentUserId);
                 }
+                updateReliabilityBadge.run();
+                updateSingleQuadraMarkerIcon(q);
             });
         }
 
@@ -2847,9 +3066,9 @@ public class RouteFragment extends Fragment {
                 
                 if (txtTime != null) {
                     Object dateObj = item.get("date");
-                    if (dateObj instanceof com.google.firebase.Timestamp) {
-                        long ts = ((com.google.firebase.Timestamp) dateObj).toDate().getTime();
-                        txtTime.setText(android.text.format.DateUtils.getRelativeTimeSpanString(ts, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS));
+                    if (dateObj instanceof Timestamp) {
+                        long ts = ((Timestamp) dateObj).toDate().getTime();
+                        txtTime.setText(DateUtils.getRelativeTimeSpanString(ts, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
                     } else {
                         txtTime.setText("agora");
                     }
@@ -2858,7 +3077,7 @@ public class RouteFragment extends Fragment {
                 String commentDocId = (String) item.get("docId");
                 String commentUserId = (String) item.get("userId");
 
-                com.google.firebase.auth.FirebaseUser fUser = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+                FirebaseUser fUser = FirebaseAuth.getInstance().getCurrentUser();
                 String myEmail = fUser != null ? fUser.getEmail() : "";
                 String myUid = fUser != null ? fUser.getUid() : "";
 
@@ -2886,7 +3105,7 @@ public class RouteFragment extends Fragment {
         }
 
         // Escuta comentários em tempo real da Quadra
-        com.google.firebase.firestore.ListenerRegistration commentsListener = FirebaseHelper.listenQuadraComments(q.name, q.neighborhood, list -> {
+        ListenerRegistration commentsListener = FirebaseHelper.listenQuadraComments(q.name, q.neighborhood, list -> {
             if (isAdded()) {
                 commentsList.clear();
                 if (list != null) commentsList.addAll(list);
@@ -2935,7 +3154,9 @@ public class RouteFragment extends Fragment {
         if (btnDelete != null) {
             btnDelete.setOnClickListener(view -> {
                 dialog.dismiss();
-                showModernConfirmDialog("Excluir Quadra", "Deseja realmente excluir a Quadra " + q.name + "?", "EXCLUIR", () -> {
+                boolean isBlocoItem = "BLOCO".equalsIgnoreCase(q.type);
+                String itemTypeLabel = isBlocoItem ? "Bloco" : "Quadra";
+                showModernConfirmDialog("Excluir " + itemTypeLabel, "Deseja realmente excluir o(a) " + itemTypeLabel + " " + q.name + "?", "EXCLUIR", () -> {
                     new Thread(() -> {
                         AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
                         dao.deleteCorrectedQuadraByNameAndNeighborhood(q.name, q.neighborhood);
@@ -2953,7 +3174,7 @@ public class RouteFragment extends Fragment {
                         Activity act = getActivity();
                         if (act != null) {
                             act.runOnUiThread(() -> {
-                                Toast.makeText(getContext(), "Quadra excluída", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(getContext(), itemTypeLabel + " excluído(a)", Toast.LENGTH_SHORT).show();
                                 refreshQuadraMarkers();
                             });
                         }
@@ -2970,8 +3191,8 @@ public class RouteFragment extends Fragment {
         View view = getLayoutInflater().inflate(R.layout.dialog_modern_confirm, null);
         TextView txtTitle = view.findViewById(R.id.textModernTitle);
         TextView txtMessage = view.findViewById(R.id.textModernMessage);
-        com.google.android.material.button.MaterialButton btnNegative = view.findViewById(R.id.btnModernNegative);
-        com.google.android.material.button.MaterialButton btnPositive = view.findViewById(R.id.btnModernPositive);
+        MaterialButton btnNegative = view.findViewById(R.id.btnModernNegative);
+        MaterialButton btnPositive = view.findViewById(R.id.btnModernPositive);
 
         if (txtTitle != null) txtTitle.setText(title);
         if (txtMessage != null) txtMessage.setText(message);
@@ -3049,7 +3270,7 @@ public class RouteFragment extends Fragment {
     private void geocodeAndSaveStop(String address, String neighborhood) {
         new Thread(() -> {
             try {
-                String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
                 String userAgent = "DriveLogApp_v141_" + uniqueId;
                 
                 String query = address + (neighborhood.isEmpty() ? "" : ", " + neighborhood);
@@ -3148,7 +3369,7 @@ public class RouteFragment extends Fragment {
 
         // Desenhar Triângulo de Fundo
         p.setColor(color);
-        android.graphics.Path path = new android.graphics.Path();
+        Path path = new Path();
         path.moveTo(size / 2f, 0); // Topo
         path.lineTo(size, size);    // Inferior Direito
         path.lineTo(0, size);       // Inferior Esquerdo
@@ -3200,7 +3421,7 @@ public class RouteFragment extends Fragment {
         p.setStyle(Paint.Style.FILL);
         p.setTextSize(size * 0.25f); // Aumentado o tamanho da fonte
         p.setTextAlign(Paint.Align.CENTER);
-        p.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        p.setTypeface(Typeface.DEFAULT_BOLD);
         
         Paint.FontMetrics fm = p.getFontMetrics();
         float baselineOffset = (fm.descent - fm.ascent) / 2 - fm.descent;
@@ -3255,12 +3476,12 @@ public class RouteFragment extends Fragment {
             }
             Toast.makeText(getContext(), "Toque no mapa onde está o perigo", Toast.LENGTH_LONG).show();
             
-            org.osmdroid.views.overlay.MapEventsOverlay pickOverlay = new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
+            MapEventsOverlay pickOverlay = new MapEventsOverlay(new MapEventsReceiver() {
                 @Override public boolean singleTapConfirmedHelper(GeoPoint p) {
                     Activity activity = getActivity();
                     if (activity != null) activity.runOnUiThread(() -> {
                             cardFixMode.setVisibility(View.GONE);
-                            map.getOverlays().removeIf(o -> o instanceof org.osmdroid.views.overlay.MapEventsOverlay && !(o == currentFixOverlay)); 
+                            map.getOverlays().removeIf(o -> o instanceof MapEventsOverlay && !(o == currentFixOverlay));
                             showHazardTypeSelection(p);
                         });
                     return true;
@@ -3288,9 +3509,9 @@ public class RouteFragment extends Fragment {
         btnOk.setVisibility(View.GONE); 
         
         LinearLayout container = (LinearLayout) messageType.getParent();
-        android.widget.ListView listView = new android.widget.ListView(requireContext());
+        ListView listView = new ListView(requireContext());
         listView.setDivider(null);
-        listView.setAdapter(new android.widget.ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, types));
+        listView.setAdapter(new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, types));
         container.addView(listView, container.indexOfChild(messageType) + 1);
         
         AlertDialog typeDialog = new AlertDialog.Builder(requireContext()).setView(vType).create();
@@ -3438,7 +3659,7 @@ public class RouteFragment extends Fragment {
     }
 
     private void showRouteOptionsMenu(View anchor) {
-        android.util.Log.d("DriveLog", "showRouteOptionsMenu chamado!");
+        Log.d("DriveLog", "showRouteOptionsMenu chamado!");
         if (currentRouteId == -1) return;
         PopupMenu p = new PopupMenu(requireContext(), anchor);
         
@@ -3459,14 +3680,14 @@ public class RouteFragment extends Fragment {
         p.getMenu().add("Importar Planilha");
         
         // --- Submenu de Alinhamento de Botões ---
-        android.view.SubMenu sub = p.getMenu().addSubMenu("Lado dos Botões Flutuantes");
+        SubMenu sub = p.getMenu().addSubMenu("Lado dos Botões Flutuantes");
         String currentAlign = sharedPreferences.getString("side_fabs_alignment", "auto");
         sub.add(2, 200, 0, "Automático (Padrão)").setCheckable(true).setChecked("auto".equals(currentAlign));
         sub.add(2, 201, 1, "Esquerdo").setCheckable(true).setChecked("left".equals(currentAlign));
         sub.add(2, 202, 2, "Direito").setCheckable(true).setChecked("right".equals(currentAlign));
         
         // --- NOVO: Submenu de Visibilidade dos Botões ---
-        android.view.SubMenu subVis = p.getMenu().addSubMenu("Visibilidade dos Botões");
+        SubMenu subVis = p.getMenu().addSubMenu("Visibilidade dos Botões");
         subVis.add(3, 301, 0, "Botão Atalho App").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_delivery_app", true));
         subVis.add(3, 307, 1, "Botão Bússola").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_compass", true));
         subVis.add(3, 302, 2, "Botão Reportar").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_report_hazard", true));
@@ -3483,7 +3704,7 @@ public class RouteFragment extends Fragment {
         boolean hideDelivered = sharedPreferences.getBoolean("hide_delivered_stops", false);
         p.getMenu().add(0, 102, 8, "Ocultar Entregas no Mapa").setCheckable(true).setChecked(hideDelivered);
         
-        com.google.firebase.auth.FirebaseUser u = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
         if (u != null && u.getEmail() != null) {
             FirebaseHelper.checkDeveloperAccess(u.getEmail(), isDev -> {
                 Activity activity = getActivity();
@@ -3499,7 +3720,7 @@ public class RouteFragment extends Fragment {
         }
         
         p.setOnMenuItemClickListener(item -> {
-            android.util.Log.d("DriveLog", "Menu clicado: " + item.getTitle());
+            Log.d("DriveLog", "Menu clicado: " + item.getTitle());
             if (item.getItemId() == 99) {
                 shareCurrentRouteWithDevs();
             } else if (item.getItemId() == 100) {
@@ -3627,8 +3848,8 @@ public class RouteFragment extends Fragment {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_modern_confirm, null);
         TextView title = dialogView.findViewById(R.id.textModernTitle);
         TextView message = dialogView.findViewById(R.id.textModernMessage);
-        com.google.android.material.button.MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
-        com.google.android.material.button.MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
+        MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
 
         title.setText("Limpar Rota");
         message.setText("Deseja remover todas as paradas desta rota?");
@@ -3670,7 +3891,7 @@ public class RouteFragment extends Fragment {
         map.invalidate();
     }
 
-    private class LassoOverlay extends org.osmdroid.views.overlay.Overlay {
+    private class LassoOverlay extends Overlay {
         private List<List<GeoPoint>> allPaths = new ArrayList<>();
         private List<GeoPoint> currentPath = new ArrayList<>();
         private Paint paint = new Paint();
@@ -3696,16 +3917,16 @@ public class RouteFragment extends Fragment {
         }
 
         @Override
-        public void draw(Canvas canvas, org.osmdroid.views.Projection projection) {
-            android.graphics.Path path = new android.graphics.Path();
+        public void draw(Canvas canvas, Projection projection) {
+            Path path = new Path();
             // Desenha caminhos finalizados
             for (List<GeoPoint> pts : allPaths) {
                 if (pts.size() < 2) continue;
                 path.reset();
-                android.graphics.Point p0 = projection.toPixels(pts.get(0), null);
+                Point p0 = projection.toPixels(pts.get(0), null);
                 path.moveTo(p0.x, p0.y);
                 for (int i = 1; i < pts.size(); i++) {
-                    android.graphics.Point p = projection.toPixels(pts.get(i), null);
+                    Point p = projection.toPixels(pts.get(i), null);
                     path.lineTo(p.x, p.y);
                 }
                 canvas.drawPath(path, paint);
@@ -3713,10 +3934,10 @@ public class RouteFragment extends Fragment {
             // Desenha caminho atual
             if (currentPath.size() >= 2) {
                 path.reset();
-                android.graphics.Point p0 = projection.toPixels(currentPath.get(0), null);
+                Point p0 = projection.toPixels(currentPath.get(0), null);
                 path.moveTo(p0.x, p0.y);
                 for (int i = 1; i < currentPath.size(); i++) {
-                    android.graphics.Point p = projection.toPixels(currentPath.get(i), null);
+                    Point p = projection.toPixels(currentPath.get(i), null);
                     path.lineTo(p.x, p.y);
                 }
                 canvas.drawPath(path, paint);
@@ -3724,20 +3945,20 @@ public class RouteFragment extends Fragment {
         }
 
         @Override
-        public boolean onTouchEvent(android.view.MotionEvent event, MapView mapView) {
+        public boolean onTouchEvent(MotionEvent event, MapView mapView) {
             if (!isLassoDrawingEnabled) return false;
 
             GeoPoint gp = (GeoPoint) mapView.getProjection().fromPixels((int) event.getX(), (int) event.getY());
 
             switch (event.getAction()) {
-                case android.view.MotionEvent.ACTION_DOWN:
+                case MotionEvent.ACTION_DOWN:
                     isDrawing = true;
                     currentPath.clear();
                     currentPath.add(gp);
                     mapView.invalidate();
                     return true;
 
-                case android.view.MotionEvent.ACTION_MOVE:
+                case MotionEvent.ACTION_MOVE:
                     if (isDrawing) {
                         currentPath.add(gp);
                         mapView.invalidate();
@@ -3745,7 +3966,7 @@ public class RouteFragment extends Fragment {
                     }
                     break;
 
-                case android.view.MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_UP:
                     if (isDrawing) {
                         isDrawing = false;
                         if (currentPath.size() > 5) {
@@ -3883,26 +4104,26 @@ public class RouteFragment extends Fragment {
             try {
                 // 1. Buscar Clima (Open-Meteo) - Agora incluindo HOURLY
                 String urlStr = String.format(Locale.US, "https://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current_weather=true&hourly=temperature_2m,weathercode", lat, lon);
-                java.net.URL url = new java.net.URL(urlStr);
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()));
+                URL url = new URL(urlStr);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                 StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) sb.append(line);
                 reader.close();
 
-                org.json.JSONObject json = new org.json.JSONObject(sb.toString());
+                JSONObject json = new JSONObject(sb.toString());
                 
                 // Dados Atuais
-                org.json.JSONObject current = json.getJSONObject("current_weather");
+                JSONObject current = json.getJSONObject("current_weather");
                 final double temp = current.getDouble("temperature");
                 final int code = current.getInt("weathercode");
 
                 // Dados Por Hora (Próximas 24 horas)
-                org.json.JSONObject hourly = json.getJSONObject("hourly");
-                org.json.JSONArray times = hourly.getJSONArray("time");
-                org.json.JSONArray temps = hourly.getJSONArray("temperature_2m");
-                org.json.JSONArray codes = hourly.getJSONArray("weathercode");
+                JSONObject hourly = json.getJSONObject("hourly");
+                JSONArray times = hourly.getJSONArray("time");
+                JSONArray temps = hourly.getJSONArray("temperature_2m");
+                JSONArray codes = hourly.getJSONArray("weathercode");
 
                 List<DayWeather> weekList = new ArrayList<>();
                 SimpleDateFormat inputFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US);
@@ -3932,7 +4153,7 @@ public class RouteFragment extends Fragment {
                             else if (d == 1) dayLabel = "Amanhã";
                             else {
                                 try {
-                                    java.util.Date date = inputFormat.parse(fullTime);
+                                    Date date = inputFormat.parse(fullTime);
                                     dayLabel = dayFormat.format(date).toUpperCase();
                                 } catch (Exception e) { dayLabel = "Dia " + (d+1); }
                             }
@@ -3959,20 +4180,20 @@ public class RouteFragment extends Fragment {
                 // 2. Buscar Nome da Cidade (Nominatim Reverse Geocoding)
                 String cityName = "";
                 try {
-                    String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                    String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
                     String userAgent = "DriveLogApp_v142_" + uniqueId;
                     String geoUrl = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=json&zoom=10", lat, lon);
-                    java.net.URL urlGeo = new java.net.URL(geoUrl);
-                    java.net.HttpURLConnection connGeo = (java.net.HttpURLConnection) urlGeo.openConnection();
+                    URL urlGeo = new URL(geoUrl);
+                    HttpURLConnection connGeo = (HttpURLConnection) urlGeo.openConnection();
                     connGeo.setRequestProperty("User-Agent", userAgent);
-                    java.io.BufferedReader readerGeo = new java.io.BufferedReader(new java.io.InputStreamReader(connGeo.getInputStream()));
+                    BufferedReader readerGeo = new BufferedReader(new InputStreamReader(connGeo.getInputStream()));
                     StringBuilder sbGeo = new StringBuilder();
                     while ((line = readerGeo.readLine()) != null) sbGeo.append(line);
                     readerGeo.close();
                     
-                    org.json.JSONObject jsonGeo = new org.json.JSONObject(sbGeo.toString());
+                    JSONObject jsonGeo = new JSONObject(sbGeo.toString());
                     if (jsonGeo.has("address")) {
-                        org.json.JSONObject addr = jsonGeo.getJSONObject("address");
+                        JSONObject addr = jsonGeo.getJSONObject("address");
                         if (addr.has("city")) cityName = addr.getString("city");
                         else if (addr.has("town")) cityName = addr.getString("town");
                         else if (addr.has("village")) cityName = addr.getString("village");
@@ -3987,7 +4208,7 @@ public class RouteFragment extends Fragment {
                 Activity activity = getActivity();
                 if (activity != null) activity.runOnUiThread(() -> updateWeatherUI(temp, code, finalCity));
             } catch (Exception e) {
-                android.util.Log.e("DriveLog", "Erro ao buscar clima: " + e.getMessage());
+                Log.e("DriveLog", "Erro ao buscar clima: " + e.getMessage());
             }
         }).start();
     }
@@ -4036,7 +4257,7 @@ public class RouteFragment extends Fragment {
             textCity.setVisibility(View.GONE);
         }
 
-        com.google.android.material.tabs.TabLayout tabLayout = v.findViewById(R.id.tabWeatherDays);
+        TabLayout tabLayout = v.findViewById(R.id.tabWeatherDays);
         RecyclerView rv = v.findViewById(R.id.recyclerWeatherHourly);
         rv.setLayoutManager(new LinearLayoutManager(getContext()));
         
@@ -4052,9 +4273,9 @@ public class RouteFragment extends Fragment {
 
         if (textTitle != null) textTitle.setText("Previsão " + lastWeekWeather.get(0).label);
 
-        tabLayout.addOnTabSelectedListener(new com.google.android.material.tabs.TabLayout.OnTabSelectedListener() {
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
-            public void onTabSelected(com.google.android.material.tabs.TabLayout.Tab tab) {
+            public void onTabSelected(TabLayout.Tab tab) {
                 int pos = tab.getPosition();
                 if (pos >= 0 && pos < lastWeekWeather.size()) {
                     adapter.setList(lastWeekWeather.get(pos).hourly);
@@ -4063,8 +4284,8 @@ public class RouteFragment extends Fragment {
                     }
                 }
             }
-            @Override public void onTabUnselected(com.google.android.material.tabs.TabLayout.Tab tab) {}
-            @Override public void onTabReselected(com.google.android.material.tabs.TabLayout.Tab tab) {}
+            @Override public void onTabUnselected(TabLayout.Tab tab) {}
+            @Override public void onTabReselected(TabLayout.Tab tab) {}
         });
 
         v.findViewById(R.id.btnWeatherPopupClose).setOnClickListener(v2 -> dialog.dismiss());
@@ -4075,7 +4296,7 @@ public class RouteFragment extends Fragment {
         new Thread(() -> { 
             AppDao dao = AppDatabase.getInstance(requireContext()).appDao(); 
             List<RouteStop> s = dao.getStopsForRoute(currentRouteId); 
-            java.util.Collections.reverse(s); 
+            Collections.reverse(s);
             for (int i=0; i<s.size(); i++) { 
                 s.get(i).sortOrder = i; 
                 s.get(i).stopNumber = i + 1; 
@@ -4108,8 +4329,8 @@ public class RouteFragment extends Fragment {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_modern_confirm, null);
         TextView title = dialogView.findViewById(R.id.textModernTitle);
         TextView message = dialogView.findViewById(R.id.textModernMessage);
-        com.google.android.material.button.MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
-        com.google.android.material.button.MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
+        MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
 
         title.setText("Confirmar Parada");
         message.setText(lastSearchedAddress);
@@ -4210,14 +4431,14 @@ public class RouteFragment extends Fragment {
             
             if (!stops.isEmpty() && pendStops == 0) {
                 if (!alreadyCelebrated) {
-                    android.util.Log.d("DriveLog", "Rota concluída! Disparando celebração para rota: " + currentRouteId);
+                    Log.d("DriveLog", "Rota concluída! Disparando celebração para rota: " + currentRouteId);
                     Toast.makeText(getContext(), "🎉 ROTA CONCLUÍDA!", Toast.LENGTH_LONG).show();
                     triggerCelebration();
                 }
             } else if (!stops.isEmpty() && pendStops > 0 && alreadyCelebrated) {
                 // Se voltou a ter paradas pendentes, permite celebrar de novo quando terminar
                 sharedPreferences.edit().remove(celebrationKey).apply();
-                android.util.Log.d("DriveLog", "Resetando flag de celebração pois há paradas pendentes na rota: " + currentRouteId);
+                Log.d("DriveLog", "Resetando flag de celebração pois há paradas pendentes na rota: " + currentRouteId);
             }
 
             boolean showStopsCard = sharedPreferences.getBoolean("show_bottom_sheet_stops", true);
@@ -4300,7 +4521,7 @@ public class RouteFragment extends Fragment {
                     if (other.latitude == 0 && other.longitude == 0) continue;
 
                     float[] res = new float[1];
-                    android.location.Location.distanceBetween(s.latitude, s.longitude, other.latitude, other.longitude, res);
+                    Location.distanceBetween(s.latitude, s.longitude, other.latitude, other.longitude, res);
                     if (res[0] < 2.5) { // Menos de 2.5m = ícones encostados/sobrepostos exatamente no mesmo ponto
                         sameLocList.add(other);
                     }
@@ -4339,7 +4560,7 @@ public class RouteFragment extends Fragment {
             if (activity != null) activity.runOnUiThread(() -> {
                 if (map == null || currentRouteId != targetRouteId || !isAdded()) return;
                 
-                List<org.osmdroid.views.overlay.Overlay> toAdd = new ArrayList<>();
+                List<Overlay> toAdd = new ArrayList<>();
                 for (int i = 0; i < stopsSnapshot.size(); i++) { 
                     Bitmap markerBmp = bitmaps.get(i);
                     if (markerBmp == null) continue;
@@ -4353,16 +4574,16 @@ public class RouteFragment extends Fragment {
                         private boolean isLongClickTriggered = false;
 
                         @Override
-                        public boolean onTouchEvent(android.view.MotionEvent event, MapView mapView) {
+                        public boolean onTouchEvent(MotionEvent event, MapView mapView) {
                             if (hitTest(event, mapView)) {
-                                if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                                if (event.getAction() == MotionEvent.ACTION_DOWN) {
                                     isLongClickTriggered = false;
                                     longClickRunnable = () -> {
                                         isLongClickTriggered = true;
                                         if (isAdded()) deleteStopDialog(s);
                                     };
                                     longClickHandler.postDelayed(longClickRunnable, 800);
-                                } else if (event.getAction() == android.view.MotionEvent.ACTION_UP || event.getAction() == android.view.MotionEvent.ACTION_CANCEL) {
+                                } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
                                     longClickHandler.removeCallbacks(longClickRunnable);
                                     if (isLongClickTriggered) return true;
                                 }
@@ -4404,9 +4625,9 @@ public class RouteFragment extends Fragment {
                 if (map == null) return;
 
                 // Otimização: Coleta os overlays que NÃO são paradas para reinserir
-                List<org.osmdroid.views.overlay.Overlay> currentOverlays = map.getOverlays();
-                List<org.osmdroid.views.overlay.Overlay> nonStopOverlays = new ArrayList<>();
-                for (org.osmdroid.views.overlay.Overlay o : currentOverlays) {
+                List<Overlay> currentOverlays = map.getOverlays();
+                List<Overlay> nonStopOverlays = new ArrayList<>();
+                for (Overlay o : currentOverlays) {
                     Object tag = (o instanceof Marker) ? ((Marker) o).getRelatedObject() : null;
                     if (!(tag instanceof String && ((String) tag).startsWith("STOP_INDEX_"))) {
                         nonStopOverlays.add(o);
@@ -4470,9 +4691,9 @@ public class RouteFragment extends Fragment {
         String targetTag = "STOP_INDEX_" + sel;
         
         // Otimização: Apenas um loop simples para achar o marcador certo
-        List<org.osmdroid.views.overlay.Overlay> overlays = map.getOverlays();
+        List<Overlay> overlays = map.getOverlays();
         for (int i = overlays.size() - 1; i >= 0; i--) {
-            org.osmdroid.views.overlay.Overlay o = overlays.get(i);
+            Overlay o = overlays.get(i);
             if (o instanceof Marker) {
                 Marker m = (Marker) o;
                 if (targetTag.equals(m.getRelatedObject())) {
@@ -4523,9 +4744,9 @@ public class RouteFragment extends Fragment {
             int[] colors = {stopColor, stopColor, Color.WHITE, stopColor, stopColor};
             float[] positions = {0.0f, 0.30f, 0.5f, 0.70f, 1.0f};
             
-            android.graphics.SweepGradient gradient = new android.graphics.SweepGradient(center, center, colors, positions);
+            SweepGradient gradient = new SweepGradient(center, center, colors, positions);
             
-            android.graphics.Matrix matrix = new android.graphics.Matrix();
+            Matrix matrix = new Matrix();
             matrix.postRotate(markerRotationAngle, center, center);
             gradient.setLocalMatrix(matrix);
             
@@ -4592,7 +4813,7 @@ public class RouteFragment extends Fragment {
 
         new Thread(() -> {
             try {
-                String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
                 String userAgent = "DriveLogApp_v141_" + uniqueId;
                 
                 String u = String.format(Locale.US, "https://router.project-osrm.org/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson&steps=true", currentLocation.getLongitude(), currentLocation.getLatitude(), stop.longitude, stop.latitude);
@@ -4799,7 +5020,7 @@ public class RouteFragment extends Fragment {
                     .scaleX(1f)
                     .scaleY(1f)
                     .setDuration(500)
-                    .setInterpolator(new android.view.animation.OvershootInterpolator(1.2f))
+                    .setInterpolator(new OvershootInterpolator(1.2f))
                     .start();
         } else {
             if (cardNavigationMode.getVisibility() != View.VISIBLE) return;
@@ -4810,7 +5031,7 @@ public class RouteFragment extends Fragment {
                     .scaleX(0.85f)
                     .scaleY(0.85f)
                     .setDuration(400)
-                    .setInterpolator(new android.view.animation.AnticipateInterpolator())
+                    .setInterpolator(new AnticipateInterpolator())
                     .withEndAction(() -> cardNavigationMode.setVisibility(View.GONE))
                     .start();
         }
@@ -4861,22 +5082,22 @@ public class RouteFragment extends Fragment {
     }
 
     @Override public void onResume() {         super.onResume(); 
-        if (getView() != null) androidx.core.view.ViewCompat.requestApplyInsets(getView());
+        if (getView() != null) ViewCompat.requestApplyInsets(getView());
         timerHandler.post(timerRunnable);
         animationHandler.post(markerAnimationRunnable);
         
         // Registrar receiver para nova rota
         if (getContext() != null) {
-            android.content.IntentFilter filter = new android.content.IntentFilter("com.example.entregas.ACTION_NEW_ROUTE");
+            IntentFilter filter = new IntentFilter("com.example.entregas.ACTION_NEW_ROUTE");
             ContextCompat.registerReceiver(requireContext(), newRouteReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         }
 
         if (sensorManager != null) {
-            android.hardware.Sensor accel = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER);
-            android.hardware.Sensor magnet = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_MAGNETIC_FIELD);
-            if (rotationVectorSensor != null) sensorManager.registerListener(compassListener, rotationVectorSensor, android.hardware.SensorManager.SENSOR_DELAY_UI);
-            if (accel != null) sensorManager.registerListener(compassListener, accel, android.hardware.SensorManager.SENSOR_DELAY_UI);
-            if (magnet != null) sensorManager.registerListener(compassListener, magnet, android.hardware.SensorManager.SENSOR_DELAY_UI);
+            Sensor accel = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            Sensor magnet = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+            if (rotationVectorSensor != null) sensorManager.registerListener(compassListener, rotationVectorSensor, SensorManager.SENSOR_DELAY_UI);
+            if (accel != null) sensorManager.registerListener(compassListener, accel, SensorManager.SENSOR_DELAY_UI);
+            if (magnet != null) sensorManager.registerListener(compassListener, magnet, SensorManager.SENSOR_DELAY_UI);
         }
         if (map != null) { 
             map.onResume(); 
@@ -4903,7 +5124,7 @@ public class RouteFragment extends Fragment {
 
         // Verifica se há foco pendente (ex: vindo de notificação de amigo)
         if (getContext() != null) {
-            SharedPreferences prefs = requireContext().getSharedPreferences("AppConfig", android.content.Context.MODE_PRIVATE);
+            SharedPreferences prefs = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
             String plat = prefs.getString("pending_map_focus_lat", "");
             String plon = prefs.getString("pending_map_focus_lon", "");
             if (!plat.isEmpty() && !plon.isEmpty()) {
@@ -4965,7 +5186,7 @@ public class RouteFragment extends Fragment {
         animationHandler.removeCallbacks(markerAnimationRunnable);
         if (sensorManager != null) sensorManager.unregisterListener(compassListener);
         if (networkCallback != null && getContext() != null) {
-            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            ConnectivityManager cm = (ConnectivityManager) requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
             if (cm != null) cm.unregisterNetworkCallback(networkCallback);
         }
         
@@ -4980,7 +5201,7 @@ public class RouteFragment extends Fragment {
     }
 
     private void startComboioListener() {
-        com.google.firebase.auth.FirebaseUser u = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser(); if (u == null || u.getEmail() == null) return;
+        FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser(); if (u == null || u.getEmail() == null) return;
         FirebaseHelper.checkDeveloperAccess(u.getEmail(), isDev -> {
             if (!isDev) { if (comboioListener != null) comboioListener.remove(); return; }
             Activity activity = getActivity();
@@ -5008,10 +5229,10 @@ public class RouteFragment extends Fragment {
             m.setPosition(new GeoPoint(fl.lat, fl.lon));
             m.setTitle(fl.name != null ? fl.name : fl.username);
             if (fl.avatar != null && !fl.avatar.isEmpty()) {
-                try { byte[] b = android.util.Base64.decode(fl.avatar, android.util.Base64.DEFAULT); Bitmap bmp = BitmapFactory.decodeByteArray(b, 0, b.length); if (bmp != null) m.setIcon(new BitmapDrawable(getResources(), getCircularBitmapWithBorder(bmp, size))); } catch (Exception e) { setDefaultFriendIcon(m); }
+                try { byte[] b = Base64.decode(fl.avatar, Base64.DEFAULT); Bitmap bmp = BitmapFactory.decodeByteArray(b, 0, b.length); if (bmp != null) m.setIcon(new BitmapDrawable(getResources(), getCircularBitmapWithBorder(bmp, size))); } catch (Exception e) { setDefaultFriendIcon(m); }
             } else setDefaultFriendIcon(m);
         }
-        java.util.Iterator<Map.Entry<String, Marker>> it = friendMarkers.entrySet().iterator();
+        Iterator<Map.Entry<String, Marker>> it = friendMarkers.entrySet().iterator();
         while (it.hasNext()) { Map.Entry<String, Marker> e = it.next(); if (!active.contains(e.getKey())) { map.getOverlays().remove(e.getValue()); it.remove(); } }
         map.invalidate();
     }
@@ -5020,7 +5241,7 @@ public class RouteFragment extends Fragment {
     private Bitmap getCircularBitmapWithBorder(Bitmap bmp, int size) {
         Bitmap out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888); Canvas c = new Canvas(out); Paint p = new Paint(); p.setAntiAlias(true); float r = size / 2f;
         p.setColor(Color.WHITE); c.drawCircle(r, r, r, p); p.setColor(Color.parseColor("#2196F3")); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(4f); c.drawCircle(r, r, r - 2, p);
-        p.setStyle(Paint.Style.FILL); p.setShader(new android.graphics.BitmapShader(Bitmap.createScaledBitmap(bmp, size, size, false), android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)); c.drawCircle(r, r, r - 6, p);
+        p.setStyle(Paint.Style.FILL); p.setShader(new BitmapShader(Bitmap.createScaledBitmap(bmp, size, size, false), Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)); c.drawCircle(r, r, r - 6, p);
         return out;
     }
 
@@ -5047,7 +5268,7 @@ public class RouteFragment extends Fragment {
         if (pkg.isEmpty()) {
             fabDeliveryApp.setImageResource(R.drawable.ic_map);
             fabDeliveryApp.setClipToOutline(false);
-            fabDeliveryApp.setSupportBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+            fabDeliveryApp.setSupportBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
         } else {
             try {
                 PackageManager pm = requireContext().getPackageManager();
@@ -5055,8 +5276,8 @@ public class RouteFragment extends Fragment {
                 Drawable icon = info.loadIcon(pm);
                 fabDeliveryApp.setImageDrawable(icon);
                 fabDeliveryApp.setClipToOutline(true);
-                fabDeliveryApp.setOutlineProvider(android.view.ViewOutlineProvider.BACKGROUND);
-                fabDeliveryApp.setSupportBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+                fabDeliveryApp.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+                fabDeliveryApp.setSupportBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
             } catch (Exception e) {
                 fabDeliveryApp.setImageResource(R.drawable.ic_map);
                 fabDeliveryApp.setClipToOutline(false);
@@ -5085,7 +5306,7 @@ public class RouteFragment extends Fragment {
             if (prefs.getBoolean("cpf_interval_enabled", false)) {
                 Intent intent = new Intent(getContext(), TrackingService.class);
                 intent.setAction("RESET_CPF_TIMER");
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     requireContext().startForegroundService(intent);
                 } else {
                     requireContext().startService(intent);
@@ -5103,7 +5324,7 @@ public class RouteFragment extends Fragment {
                 intent.addCategory(Intent.CATEGORY_LAUNCHER);
                 intent.setPackage(pkg);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                android.content.pm.ResolveInfo resolveInfo = pm.queryIntentActivities(intent, 0).stream().findFirst().orElse(null);
+                ResolveInfo resolveInfo = pm.queryIntentActivities(intent, 0).stream().findFirst().orElse(null);
                 if (resolveInfo != null) { intent.setClassName(pkg, resolveInfo.activityInfo.name); startActivity(intent); return; }
             } catch (Exception ignored) {}
             Toast.makeText(getContext(), "App não encontrado", Toast.LENGTH_SHORT).show();
@@ -5130,9 +5351,9 @@ public class RouteFragment extends Fragment {
     private double getNumericCellValue(Cell cell) {
         if (cell == null) return 0.0;
         try {
-            if (cell.getCellType() == org.apache.poi.ss.usermodel.CellType.NUMERIC) {
+            if (cell.getCellType() == CellType.NUMERIC) {
                 return cell.getNumericCellValue();
-            } else if (cell.getCellType() == org.apache.poi.ss.usermodel.CellType.STRING) {
+            } else if (cell.getCellType() == CellType.STRING) {
                 return parseSafeDouble(cell.getStringCellValue());
             }
         } catch (Exception ignored) {}
@@ -5144,7 +5365,7 @@ public class RouteFragment extends Fragment {
 
         // Popup de progresso com animação
         View dv = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_optimization_progress, null);
-        com.google.android.material.progressindicator.CircularProgressIndicator progress = dv.findViewById(R.id.progressOptimization);
+        CircularProgressIndicator progress = dv.findViewById(R.id.progressOptimization);
         TextView textStatus = dv.findViewById(R.id.textOptimizationStatus);
         TextView textPercent = dv.findViewById(R.id.textOptimizationPercent);
         
@@ -5206,8 +5427,8 @@ public class RouteFragment extends Fragment {
                             String[] parts = rawAddr.split(","); String street = parts[0].trim(); String numberPart = parts[1].trim().split(" ")[0];
                             baseAddress = street + ", " + numberPart;
                             String specificInfo = "";
-                            java.util.regex.Matcher mQ = java.util.regex.Pattern.compile("(?i)(QUADRA|QD\\.?|QU?AD\\.?|Q\\.?|QDR\\.?) ?(\\d+[A-Z]?)").matcher(rawAddr);
-                            java.util.regex.Matcher mB = java.util.regex.Pattern.compile("(?i)(BLOCO|BL\\.?|B\\.?|BLO?C\\.?) ?(\\d+[A-Z]?)").matcher(rawAddr);
+                            Matcher mQ = Pattern.compile("(?i)(QUADRA|QD\\.?|QU?AD\\.?|Q\\.?|QDR\\.?) ?(\\d+[A-Z]?)").matcher(rawAddr);
+                            Matcher mB = Pattern.compile("(?i)(BLOCO|BL\\.?|B\\.?|BLO?C\\.?) ?(\\d+[A-Z]?)").matcher(rawAddr);
                             if (mQ.find()) specificInfo += " QD " + mQ.group(2).toUpperCase();
                             if (mB.find()) specificInfo += " BL " + mB.group(2).toUpperCase();
                             unificationKey = Normalizer.normalize((street + " " + numberPart + specificInfo).toUpperCase(), Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", "").replaceAll("[.,\\-]", " ").replaceAll("\\s+", " ").trim();
@@ -5239,7 +5460,7 @@ public class RouteFragment extends Fragment {
                             if (existing.allSequences == null) existing.allSequences = String.valueOf(existing.sequence);
                             existing.allSequences += ", " + sequenceStr;
                             existing.allAddresses = (existing.allAddresses != null ? existing.allAddresses : "") + "\n" + rawAddr;
-                            java.util.Set<String> uniqueBuyers = new java.util.HashSet<>(java.util.Arrays.asList(existing.allAddresses.split("\n")));
+                            Set<String> uniqueBuyers = new HashSet<>(Arrays.asList(existing.allAddresses.split("\n")));
                             existing.buyerCount = uniqueBuyers.size();
                         } else {
                             RouteStop stop = new RouteStop(); stop.routeId = targetRouteId; stop.atId = getCellValue(row.getCell(0));
@@ -5343,15 +5564,15 @@ public class RouteFragment extends Fragment {
         boolean tracking = Boolean.TRUE.equals(TrackingService.isTracking.getValue());
         boolean paused = Boolean.TRUE.equals(TrackingService.isPaused.getValue());
 
-        fabKmTracking.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        fabKmTracking.setBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
 
         if (!tracking) {
-            fabKmTracking.setImageTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#2196F3"))); // Azul (Inativo)
+            fabKmTracking.setImageTintList(ColorStateList.valueOf(Color.parseColor("#2196F3"))); // Azul (Inativo)
         } else {
             if (paused) {
-                fabKmTracking.setImageTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#FFC107"))); // Amarelo (Pausado)
+                fabKmTracking.setImageTintList(ColorStateList.valueOf(Color.parseColor("#FFC107"))); // Amarelo (Pausado)
             } else {
-                fabKmTracking.setImageTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#F44336"))); // Vermelho (Ativo)
+                fabKmTracking.setImageTintList(ColorStateList.valueOf(Color.parseColor("#F44336"))); // Vermelho (Ativo)
             }
         }
     }
@@ -5373,7 +5594,7 @@ public class RouteFragment extends Fragment {
         TextView textStatus = customView.findViewById(R.id.textTrackingStatus);
         MaterialButton btnPlayPause = customView.findViewById(R.id.btnPlayPauseTracking);
         MaterialButton btnStop = customView.findViewById(R.id.btnStopTracking);
-        com.google.android.material.materialswitch.MaterialSwitch switchAuto = customView.findViewById(R.id.switchAutoTracking);
+        MaterialSwitch switchAuto = customView.findViewById(R.id.switchAutoTracking);
         MaterialButton btnManageHome = customView.findViewById(R.id.btnManageHome);
         MaterialButton btnLoadingPoints = customView.findViewById(R.id.btnManageLoadingPoints);
         MaterialButton btnTrackingHistory = customView.findViewById(R.id.btnTrackingHistory);
@@ -5389,15 +5610,15 @@ public class RouteFragment extends Fragment {
         MaterialButton btnSaveManual = customView.findViewById(R.id.btnSaveManualKm);
         ImageButton btnBack = customView.findViewById(R.id.btnBackToTracking);
 
-        java.util.Calendar manualCalendar = java.util.Calendar.getInstance();
+        Calendar manualCalendar = Calendar.getInstance();
         SimpleDateFormat manualSdf = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
         if (editManualDate != null) {
             editManualDate.setText(manualSdf.format(manualCalendar.getTime()));
             editManualDate.setOnClickListener(v -> {
-                new android.app.DatePickerDialog(requireContext(), (view, year, month, day) -> {
+                new DatePickerDialog(requireContext(), (view, year, month, day) -> {
                     manualCalendar.set(year, month, day);
                     editManualDate.setText(manualSdf.format(manualCalendar.getTime()));
-                }, manualCalendar.get(java.util.Calendar.YEAR), manualCalendar.get(java.util.Calendar.MONTH), manualCalendar.get(java.util.Calendar.DAY_OF_MONTH)).show();
+                }, manualCalendar.get(Calendar.YEAR), manualCalendar.get(Calendar.MONTH), manualCalendar.get(Calendar.DAY_OF_MONTH)).show();
             });
         }
 
@@ -5635,7 +5856,7 @@ public class RouteFragment extends Fragment {
                     if (currentDist < 0 && locationOverlay != null && locationOverlay.getMyLocation() != null) {
                         GeoPoint myLoc = locationOverlay.getMyLocation();
                         float[] res = new float[1];
-                        android.location.Location.distanceBetween(myLoc.getLatitude(), myLoc.getLongitude(), homeLat, homeLon, res);
+                        Location.distanceBetween(myLoc.getLatitude(), myLoc.getLongitude(), homeLat, homeLon, res);
                         currentDist = res[0];
                     }
 
@@ -5714,7 +5935,7 @@ public class RouteFragment extends Fragment {
     }
 
     private void startTrackingService(Intent intent) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             requireContext().startForegroundService(intent);
         } else {
             requireContext().startService(intent);
@@ -5837,7 +6058,7 @@ public class RouteFragment extends Fragment {
             String celebrationKey = "last_finished_route_" + currentRouteId;
             if (sharedPreferences.contains(celebrationKey)) {
                 sharedPreferences.edit().remove(celebrationKey).apply();
-                android.util.Log.d("DriveLog", "Resetando flag de celebração via onStopAction (Reset)");
+                Log.d("DriveLog", "Resetando flag de celebração via onStopAction (Reset)");
             }
         }
         else if (action == 7) showStopDetails(stop);
@@ -5854,25 +6075,25 @@ public class RouteFragment extends Fragment {
         // Evita disparar repetidamente se já estiver comemorando
         String lastFinishedRouteKey = "last_finished_route_" + currentRouteId;
         if (!force && sharedPreferences.getBoolean(lastFinishedRouteKey, false)) {
-            android.util.Log.d("DriveLog", "Celebração ignorada: já comemorou esta rota: " + currentRouteId);
+            Log.d("DriveLog", "Celebração ignorada: já comemorou esta rota: " + currentRouteId);
             return;
         }
         
         // Marca IMEDIATAMENTE como celebrado para evitar disparos múltiplos por mudanças rápidas no DB
         sharedPreferences.edit().putBoolean(lastFinishedRouteKey, true).apply();
         
-        android.util.Log.d("DriveLog", "Disparando Celebração Explosiva!");
+        Log.d("DriveLog", "Disparando Celebração Explosiva!");
         konfettiView.setVisibility(View.VISIBLE);
         konfettiView.bringToFront();
 
-        EmitterConfig emitterConfig = new Emitter(5, java.util.concurrent.TimeUnit.SECONDS).perSecond(30);
+        EmitterConfig emitterConfig = new Emitter(5, TimeUnit.SECONDS).perSecond(30);
         Party party = new PartyFactory(emitterConfig)
                 .angle(270)
                 .spread(90)
                 .setSpeedBetween(1f, 5f)
                 .position(new Position.Relative(0.5, 1.0)) // Do fundo ao centro
                 .sizes(new Size(12, 5f, 0.2f))
-                .colors(java.util.Arrays.asList(0xffffd700, 0xff32cd32, 0xff1e90ff, 0xffff4500, 0xffba55d3))
+                .colors(Arrays.asList(0xffffd700, 0xff32cd32, 0xff1e90ff, 0xffff4500, 0xffba55d3))
                 .shapes(Shape.Square.INSTANCE, Shape.Circle.INSTANCE)
                 .timeToLive(3000L)
                 .build();
@@ -5880,13 +6101,13 @@ public class RouteFragment extends Fragment {
         konfettiView.start(party);
         
         // Adiciona uma segunda explosão lateral para garantir visibilidade
-        konfettiView.start(new PartyFactory(new Emitter(2, java.util.concurrent.TimeUnit.SECONDS).perSecond(20))
+        konfettiView.start(new PartyFactory(new Emitter(2, TimeUnit.SECONDS).perSecond(20))
                 .angle(0) // Direita
                 .spread(60)
                 .position(new Position.Relative(0.0, 0.5))
                 .build());
         
-        konfettiView.start(new PartyFactory(new Emitter(2, java.util.concurrent.TimeUnit.SECONDS).perSecond(20))
+        konfettiView.start(new PartyFactory(new Emitter(2, TimeUnit.SECONDS).perSecond(20))
                 .angle(180) // Esquerda
                 .spread(60)
                 .position(new Position.Relative(1.0, 0.5))
@@ -5940,7 +6161,7 @@ public class RouteFragment extends Fragment {
 
                     String url = "https://router.project-osrm.org/table/v1/driving/" + coords.toString() + "?sources=0&annotations=distance";
                     HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-                    String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                    String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
                     conn.setRequestProperty("User-Agent", "DriveLogApp_v142_" + uniqueId);
                     
                     if (conn.getResponseCode() == 200) {
@@ -6029,8 +6250,8 @@ public class RouteFragment extends Fragment {
         View layoutNote = v.findViewById(R.id.layoutNoteInput);
         View btnShowAddNote = v.findViewById(R.id.btnShowAddNote);
         EditText editNotes = v.findViewById(R.id.editStopNotes);
-        android.widget.Spinner spinnerTarget = v.findViewById(R.id.spinnerNoteTarget);
-        com.google.android.material.materialswitch.MaterialSwitch switchPublic = v.findViewById(R.id.switchNotePublic);
+        Spinner spinnerTarget = v.findViewById(R.id.spinnerNoteTarget);
+        MaterialSwitch switchPublic = v.findViewById(R.id.switchNotePublic);
 
         textAddress.setText(stop.address);
         textNeighborhood.setText(stop.neighborhood != null && !stop.neighborhood.isEmpty() ? stop.neighborhood : "Bairro não informado");
@@ -6285,7 +6506,7 @@ public class RouteFragment extends Fragment {
 
                 // Lógica DEV: Forçar aplicação da correção na parada atual
                 if (corrected != null) {
-                    com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+                    FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
                     if (user != null && user.getEmail() != null) {
                         FirebaseHelper.checkDeveloperAccess(user.getEmail(), isDev -> {
                             if (isDev && getActivity() != null) {
@@ -6331,7 +6552,7 @@ public class RouteFragment extends Fragment {
         } else {
             recipients.add(stop.address);
         }
-        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, recipients);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, recipients);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerTarget.setAdapter(adapter);
 
@@ -6369,7 +6590,7 @@ public class RouteFragment extends Fragment {
                         dao.insertCorrectedAddress(corrected); // Insert or Update
 
                         if (isPublic && !noteText.isEmpty()) {
-                            com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+                            FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
                             String uName = (user != null) ? user.getDisplayName() : "Entregador";
                             String uId = (user != null) ? user.getUid() : "anon";
                             FirebaseHelper.addFeedback(stop.address, true, noteText, uName, uId);
@@ -6505,7 +6726,7 @@ public class RouteFragment extends Fragment {
             target.allSequences = (target.allSequences != null && !target.allSequences.isEmpty()) ? target.allSequences + ", " + seq : seq;
             
             // Recalcula compradores únicos no alvo
-            java.util.Set<String> targetBuyers = new java.util.HashSet<>(java.util.Arrays.asList(target.allAddresses.split("\n")));
+            Set<String> targetBuyers = new HashSet<>(Arrays.asList(target.allAddresses.split("\n")));
             target.buyerCount = targetBuyers.size();
             
             dao.updateRouteStop(target);
@@ -6552,7 +6773,7 @@ public class RouteFragment extends Fragment {
             if (!newSequencesList.isEmpty()) source.sequence = parseSafeInt(newSequencesList.get(0));
             
             // Recalcula compradores únicos na origem
-            java.util.Set<String> sourceBuyers = new java.util.HashSet<>(newPackagesList);
+            Set<String> sourceBuyers = new HashSet<>(newPackagesList);
             source.buyerCount = sourceBuyers.size();
             
             dao.updateRouteStop(source);
@@ -6566,8 +6787,8 @@ public class RouteFragment extends Fragment {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_modern_confirm, null);
         TextView title = dialogView.findViewById(R.id.textModernTitle);
         TextView message = dialogView.findViewById(R.id.textModernMessage);
-        com.google.android.material.button.MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
-        com.google.android.material.button.MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
+        MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
 
         title.setText("Excluir Parada");
         message.setText("Deseja remover esta parada da sua rota?");
@@ -6641,13 +6862,13 @@ public class RouteFragment extends Fragment {
         AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).create();
         if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
 
-        android.widget.LinearLayout layoutCommentsList = v.findViewById(R.id.layoutCommentsList);
+        LinearLayout layoutCommentsList = v.findViewById(R.id.layoutCommentsList);
         EditText editInput = v.findViewById(R.id.editCommentInput);
         String currentUserId = sharedPreferences.getString("current_user_id", "anon");
         String userName = sharedPreferences.getString("profile_name", "Entregador");
 
         FirebaseHelper.fetchComments(address, new FirebaseHelper.CommentsFetchCallback() {
-            @Override public void onSuccess(List<FirebaseHelper.CommentsFetchCallback.CommentModel> list) {
+            @Override public void onSuccess(List<CommentModel> list) {
                 Activity activity = getActivity();
                 if (activity != null) activity.runOnUiThread(() -> {
                     layoutCommentsList.removeAllViews();
@@ -6655,10 +6876,10 @@ public class RouteFragment extends Fragment {
                         TextView tv = new TextView(getContext());
                         tv.setText("Nenhum comentário ainda.");
                         tv.setPadding(10, 20, 10, 20);
-                        tv.setGravity(android.view.Gravity.CENTER);
+                        tv.setGravity(Gravity.CENTER);
                         layoutCommentsList.addView(tv);
                     } else {
-                        for (FirebaseHelper.CommentsFetchCallback.CommentModel c : list) {
+                        for (CommentModel c : list) {
                             TextView tv = new TextView(getContext());
                             tv.setText(c.user + ": " + c.text);
                             tv.setTextSize(13);
@@ -6689,7 +6910,7 @@ public class RouteFragment extends Fragment {
     private void promptCorrectLocation(RouteStop stop) {
         cardFixMode.setVisibility(View.VISIBLE);
         Toast.makeText(getContext(), "Toque no local correto", Toast.LENGTH_LONG).show();
-        currentFixOverlay = new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
+        currentFixOverlay = new MapEventsOverlay(new MapEventsReceiver() {
             @Override public boolean singleTapConfirmedHelper(GeoPoint p) {
                 new Thread(() -> {
                     AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
@@ -6831,7 +7052,7 @@ public class RouteFragment extends Fragment {
                 }
 
                 final List<RouteStop> availableCorrectionsStops = Collections.synchronizedList(new ArrayList<>());
-                final Map<Integer, CorrectedAddress> stopToCaMap = new java.util.concurrent.ConcurrentHashMap<>();
+                final Map<Integer, CorrectedAddress> stopToCaMap = new ConcurrentHashMap<>();
 
                 List<RouteStop> stopsNeedingGlobalCheck = new ArrayList<>();
 
@@ -6951,10 +7172,10 @@ public class RouteFragment extends Fragment {
         rootLayout.setPadding(p, p, p, p);
 
         // 🔥 Botão Destacado na Parte Superior para Baixar e Aplicar Todas as Correções da Comunidade
-        com.google.android.material.button.MaterialButton btnApplyAll = new com.google.android.material.button.MaterialButton(ctx);
+        MaterialButton btnApplyAll = new MaterialButton(ctx);
         btnApplyAll.setText("📥 Baixar e aplicar todas as correções da comunidade (" + stopsWithFixes.size() + ")");
         btnApplyAll.setTextSize(13f);
-        btnApplyAll.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        btnApplyAll.setTypeface(Typeface.DEFAULT_BOLD);
         btnApplyAll.setCornerRadius((int) (12 * getResources().getDisplayMetrics().density));
         LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -6979,8 +7200,8 @@ public class RouteFragment extends Fragment {
         }
         items[stopsWithFixes.size()] = "📍 Gerenciar Endereços Corrigidos";
 
-        android.widget.ListView listView = new android.widget.ListView(ctx);
-        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(
+        ListView listView = new ListView(ctx);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
                 ctx, android.R.layout.simple_list_item_1, items);
         listView.setAdapter(adapter);
 
@@ -7190,7 +7411,7 @@ public class RouteFragment extends Fragment {
                 return new RecyclerView.ViewHolder(tv) {};
             }
             @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder h, int pos) {
-                ((TextView)h.itemView).setText(android.text.Html.fromHtml(statsList.get(pos), android.text.Html.FROM_HTML_MODE_COMPACT));
+                ((TextView)h.itemView).setText(Html.fromHtml(statsList.get(pos), Html.FROM_HTML_MODE_COMPACT));
             }
             @Override public int getItemCount() { return statsList.size(); }
         });
@@ -7211,7 +7432,7 @@ public class RouteFragment extends Fragment {
         if (currentRouteId == -1 || getContext() == null) return;
         
         View dv = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_optimization_progress, null);
-        com.google.android.material.progressindicator.CircularProgressIndicator progress = dv.findViewById(R.id.progressOptimization);
+        CircularProgressIndicator progress = dv.findViewById(R.id.progressOptimization);
         TextView textStatus = dv.findViewById(R.id.textOptimizationStatus);
         TextView textPercent = dv.findViewById(R.id.textOptimizationPercent);
         
@@ -7288,7 +7509,7 @@ public class RouteFragment extends Fragment {
         if (currentRouteId == -1 || getContext() == null) return;
         
         View dv = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_optimization_progress, null);
-        com.google.android.material.progressindicator.CircularProgressIndicator progress = dv.findViewById(R.id.progressOptimization);
+        CircularProgressIndicator progress = dv.findViewById(R.id.progressOptimization);
         TextView textStatus = dv.findViewById(R.id.textOptimizationStatus);
         TextView textPercent = dv.findViewById(R.id.textOptimizationPercent);
         
@@ -7339,7 +7560,7 @@ public class RouteFragment extends Fragment {
                     String url = "https://router.project-osrm.org/table/v1/driving/" + coords.toString() + "?sources=0&annotations=distance";
                     HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
                     
-                    String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                    String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
                     String userAgent = "DriveLogApp_v141_" + uniqueId;
                     conn.setRequestProperty("User-Agent", userAgent);
                     
@@ -7414,12 +7635,12 @@ public class RouteFragment extends Fragment {
                 // 🔥 Reorganiza a ordem das paradas para garantir que o usuário fique por cima, 
                 // EXCETO da parada selecionada.
                 
-                org.osmdroid.views.overlay.Overlay selectedMarker = null;
-                List<org.osmdroid.views.overlay.Overlay> otherMarkers = new ArrayList<>();
+                Overlay selectedMarker = null;
+                List<Overlay> otherMarkers = new ArrayList<>();
                 
                 // Primeiro removemos todos os marcadores de paradas para reinserir na ordem correta
-                List<org.osmdroid.views.overlay.Overlay> stopsToRemove = new ArrayList<>();
-                for (org.osmdroid.views.overlay.Overlay o : map.getOverlays()) {
+                List<Overlay> stopsToRemove = new ArrayList<>();
+                for (Overlay o : map.getOverlays()) {
                     if (o instanceof Marker) {
                         Marker m = (Marker) o;
                         Object tag = m.getRelatedObject();
@@ -7706,7 +7927,7 @@ public class RouteFragment extends Fragment {
         private final OnItemLongClickListener longClick; 
         private final Map<Integer, String> groupColors = new HashMap<>();
         private boolean isUnifyMode = false;
-        private final java.util.Set<RouteStop> selectedStops = new java.util.HashSet<>();
+        private final Set<RouteStop> selectedStops = new HashSet<>();
 
         interface OnItemClickListener { void onItemClick(RouteStop s); } 
         interface OnItemLongClickListener { void onItemLongClick(RouteStop s); }
@@ -7724,7 +7945,7 @@ public class RouteFragment extends Fragment {
             notifyDataSetChanged(); 
         }
         
-        java.util.Set<RouteStop> getSelectedStops() { return selectedStops; }
+        Set<RouteStop> getSelectedStops() { return selectedStops; }
 
         void setStops(List<RouteStop> s) { 
             this.fullList = s; 
@@ -7734,7 +7955,7 @@ public class RouteFragment extends Fragment {
 
         void swap(int from, int to) {
             if (from < filteredList.size() && to < filteredList.size()) {
-                java.util.Collections.swap(filteredList, from, to);
+                Collections.swap(filteredList, from, to);
                 notifyItemMoved(from, to);
             }
         }
@@ -7794,7 +8015,7 @@ public class RouteFragment extends Fragment {
 
                     if (localFix != null) {
                         h.textDownloadedStatus.setVisibility(View.VISIBLE);
-                        String currentUserId = h.itemView.getContext().getSharedPreferences("AppConfig", android.content.Context.MODE_PRIVATE).getString("current_user_id", "anon");
+                        String currentUserId = h.itemView.getContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE).getString("current_user_id", "anon");
                         
                         boolean isMine = localFix.creatorId == null || (!currentUserId.equals("anon") && localFix.creatorId.equals(currentUserId));
                         if (isMine) {
@@ -7867,7 +8088,7 @@ public class RouteFragment extends Fragment {
         static class ViewHolder extends RecyclerView.ViewHolder { 
             TextView textNumber, textAddress, textRawAddress, textNeighborhood, textStatus, textDownloadedStatus, textGlobalStats; 
             ImageView imageStatus; 
-            android.widget.CheckBox checkBox;
+            CheckBox checkBox;
             MaterialCardView card; 
             View divider, layoutGlobalFeedback; 
             ViewHolder(View v) { 
@@ -8038,7 +8259,7 @@ public class RouteFragment extends Fragment {
 
     private void addHistoricalStopMarker(GeoPoint point, String title, int color) {
         Marker m = new Marker(map); m.setPosition(point); m.setTitle(title); m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER);
-        android.graphics.drawable.ShapeDrawable dot = new android.graphics.drawable.ShapeDrawable(new android.graphics.drawable.shapes.OvalShape());
+        ShapeDrawable dot = new ShapeDrawable(new OvalShape());
         dot.setIntrinsicWidth(20); dot.setIntrinsicHeight(20); dot.getPaint().setColor(color); dot.getPaint().setStyle(Paint.Style.FILL_AND_STROKE);
         m.setIcon(dot); map.getOverlays().add(m);
     }
@@ -8119,7 +8340,7 @@ public class RouteFragment extends Fragment {
         RoutePoint p = historicalPoints.get(index);
         GeoPoint gp = new GeoPoint(p.latitude, p.longitude);
         timelineMarker.setPosition(gp);
-        if (textTimelineTime != null) textTimelineTime.setText(timeFormat.format(new java.util.Date(p.timestamp)));
+        if (textTimelineTime != null) textTimelineTime.setText(timeFormat.format(new Date(p.timestamp)));
         mapController.animateTo(gp);
         map.invalidate();
     }

@@ -9,11 +9,22 @@ import androidx.room.RoomDatabase;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 
-@Database(entities = {Fuel.class, Earnings.class, DailyKm.class, Maintenance.class, Platform.class, GasStation.class, RoutePoint.class, RouteStop.class, CorrectedAddress.class, RouteHeader.class, RouteGroup.class, LoadingPoint.class, SettingEntry.class, CorrectedQuadra.class}, version = 43, exportSchema = false)
+import java.io.File;
+
+@Database(entities = {Fuel.class, Earnings.class, DailyKm.class, Maintenance.class, Platform.class, GasStation.class, RoutePoint.class, RouteStop.class, CorrectedAddress.class, RouteHeader.class, RouteGroup.class, LoadingPoint.class, SettingEntry.class, CorrectedQuadra.class}, version = 44, exportSchema = false)
 public abstract class AppDatabase extends RoomDatabase {
     private static AppDatabase instance;
 
     public abstract AppDao appDao();
+
+    static final Migration MIGRATION_43_44 = new Migration(43, 44) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            try {
+                database.execSQL("ALTER TABLE `corrected_quadras` ADD COLUMN `type` TEXT");
+            } catch (Exception ignored) {}
+        }
+    };
 
     static final Migration MIGRATION_42_43 = new Migration(42, 43) {
         @Override
@@ -274,13 +285,13 @@ public abstract class AppDatabase extends RoomDatabase {
 
         // --- Lógica de Migração de Nome de Arquivo Legado ---
         // Se o novo arquivo não existe, mas o antigo "entregas_db" existe, renomeia o antigo.
-        java.io.File oldFile = context.getDatabasePath("entregas_db");
-        java.io.File newFile = context.getDatabasePath(dbName);
+        File oldFile = context.getDatabasePath("entregas_db");
+        File newFile = context.getDatabasePath(dbName);
         if (oldFile.exists() && !newFile.exists()) {
             oldFile.renameTo(newFile);
             // Também renomeia arquivos auxiliares do SQLite se existirem (-shm e -wal)
-            new java.io.File(oldFile.getPath() + "-shm").renameTo(new java.io.File(newFile.getPath() + "-shm"));
-            new java.io.File(oldFile.getPath() + "-wal").renameTo(new java.io.File(newFile.getPath() + "-wal"));
+            new File(oldFile.getPath() + "-shm").renameTo(new File(newFile.getPath() + "-shm"));
+            new File(oldFile.getPath() + "-wal").renameTo(new File(newFile.getPath() + "-wal"));
         }
 
         // Se o usuário mudou, fechamos a instância antiga para abrir a nova
@@ -292,7 +303,7 @@ public abstract class AppDatabase extends RoomDatabase {
         if (instance == null) {
             instance = Room.databaseBuilder(context.getApplicationContext(),
                     AppDatabase.class, dbName)
-                    .addMigrations(MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43)
+                    .addMigrations(MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43, MIGRATION_43_44)
                     .fallbackToDestructiveMigration()
                     .addCallback(new Callback() {
                         @Override

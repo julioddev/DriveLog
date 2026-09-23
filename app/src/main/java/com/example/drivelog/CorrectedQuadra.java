@@ -19,6 +19,7 @@ public class CorrectedQuadra implements Serializable {
     public long updatedAt;
     public String creatorId; // ID do usuário criador
     public String creatorName;
+    public String type; // "QUADRA" ou "BLOCO"
 
     @Ignore
     public int likes;

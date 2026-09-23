@@ -23,6 +23,20 @@
             android:textStyle="bold"
             android:textColor="?attr/colorPrimary" />
 
+        <!-- Nível de Confiabilidade / Status -->
+        <TextView
+            android:id="@+id/textQuadraReliability"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⏳ Em avaliação"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:background="#FFF8E1"
+            android:textColor="#F57C00"
+            android:layout_marginTop="6dp" />
+
         <!-- Localização (Bairro, Cidade) -->
         <TextView
             android:id="@+id/textQuadraLocation"
