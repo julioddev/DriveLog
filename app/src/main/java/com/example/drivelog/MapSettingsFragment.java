@@ -3,16 +3,20 @@ package com.example.drivelog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.Voice;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -22,6 +26,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
+
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.materialswitch.MaterialSwitch;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,7 +40,7 @@ public class MapSettingsFragment extends Fragment {
     private View view1, view2, view3, view4;
     private ImageView imageSelectedApp;
     private TextView textSelectedAppName, textSelectedAppPackage, textSelectedVoiceName, textSelectedMapStyle;
-    private com.google.android.material.materialswitch.MaterialSwitch switchAutoShare;
+    private MaterialSwitch switchAutoShare;
     private TextToSpeech tts;
 
     private static final String PREF_COLOR_G1 = "color_group_1";
@@ -98,7 +105,7 @@ public class MapSettingsFragment extends Fragment {
         view.findViewById(R.id.layoutSelectVoice).setOnClickListener(v -> showVoicePicker());
         view.findViewById(R.id.layoutSelectMapStyle).setOnClickListener(v -> showMapStylePicker());
 
-        com.google.android.material.materialswitch.MaterialSwitch switchVoice = view.findViewById(R.id.switchVoiceCommands);
+        MaterialSwitch switchVoice = view.findViewById(R.id.switchVoiceCommands);
         if (switchVoice != null) {
             switchVoice.setChecked(sharedPreferences.getBoolean(PREF_VOICE_COMMANDS, false));
             switchVoice.setOnCheckedChangeListener((btn, isChecked) -> {
@@ -129,6 +136,10 @@ public class MapSettingsFragment extends Fragment {
             });
         }
 
+        setupScaleSeekBar(view, R.id.seekStopSize, R.id.textStopSizePercent, "stop_icon_size");
+        setupScaleSeekBar(view, R.id.seekQuadraSize, R.id.textQuadraSizePercent, "quadra_icon_size");
+        setupScaleSeekBar(view, R.id.seekBlocoSize, R.id.textBlocoSizePercent, "bloco_icon_size");
+
         view.findViewById(R.id.cardIconArrow).setOnClickListener(v -> selectUserIcon("arrow"));
         view.findViewById(R.id.cardIconCar).setOnClickListener(v -> selectUserIcon("car"));
         view.findViewById(R.id.cardIconMoto).setOnClickListener(v -> selectUserIcon("moto"));
@@ -148,15 +159,45 @@ public class MapSettingsFragment extends Fragment {
         if (root == null) return;
         String selected = sharedPreferences.getString(PREF_USER_ICON, "arrow");
         
-        com.google.android.material.card.MaterialCardView cardArrow = root.findViewById(R.id.cardIconArrow);
-        com.google.android.material.card.MaterialCardView cardCar = root.findViewById(R.id.cardIconCar);
-        com.google.android.material.card.MaterialCardView cardMoto = root.findViewById(R.id.cardIconMoto);
-        com.google.android.material.card.MaterialCardView cardTruck = root.findViewById(R.id.cardIconTruck);
+        MaterialCardView cardArrow = root.findViewById(R.id.cardIconArrow);
+        MaterialCardView cardCar = root.findViewById(R.id.cardIconCar);
+        MaterialCardView cardMoto = root.findViewById(R.id.cardIconMoto);
+        MaterialCardView cardTruck = root.findViewById(R.id.cardIconTruck);
 
         if (cardArrow != null) cardArrow.setStrokeWidth(selected.equals("arrow") ? (int)(2 * getResources().getDisplayMetrics().density) : 0);
         if (cardCar != null) cardCar.setStrokeWidth(selected.equals("car") ? (int)(2 * getResources().getDisplayMetrics().density) : 0);
         if (cardMoto != null) cardMoto.setStrokeWidth(selected.equals("moto") ? (int)(2 * getResources().getDisplayMetrics().density) : 0);
         if (cardTruck != null) cardTruck.setStrokeWidth(selected.equals("truck") ? (int)(2 * getResources().getDisplayMetrics().density) : 0);
+    }
+
+    private void setupScaleSeekBar(View root, int seekBarId, int textValueId, String prefKey) {
+        SeekBar seekBar = root.findViewById(seekBarId);
+        TextView textPercent = root.findViewById(textValueId);
+
+        if (seekBar != null && textPercent != null) {
+            int currentScale = sharedPreferences.getInt(prefKey, 100);
+            int progressValue = currentScale - 50;
+            if (progressValue < 0) progressValue = 0;
+            if (progressValue > 100) progressValue = 100;
+
+            seekBar.setProgress(progressValue);
+            textPercent.setText(currentScale + "%");
+
+            seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                    int realScale = 50 + progress;
+                    textPercent.setText(realScale + "%");
+                    if (fromUser) {
+                        sharedPreferences.edit().putInt(prefKey, realScale).apply();
+                        CloudSyncHelper.syncNow(requireContext(), "Ajuste Mapa");
+                    }
+                }
+
+                @Override public void onStartTrackingTouch(SeekBar sb) {}
+                @Override public void onStopTrackingTouch(SeekBar sb) {}
+            });
+        }
     }
 
     private void updateVoiceInfo() {
@@ -266,10 +307,10 @@ public class MapSettingsFragment extends Fragment {
     private void showAppPicker() {
         PackageManager pm = requireContext().getPackageManager();
         // Usamos getInstalledPackages para maior compatibilidade e garantia de ver todos
-        List<android.content.pm.PackageInfo> packages = pm.getInstalledPackages(0);
+        List<PackageInfo> packages = pm.getInstalledPackages(0);
         List<ApplicationInfo> allApps = new ArrayList<>();
         
-        for (android.content.pm.PackageInfo pkg : packages) {
+        for (PackageInfo pkg : packages) {
             allApps.add(pkg.applicationInfo);
         }
         
@@ -296,7 +337,7 @@ public class MapSettingsFragment extends Fragment {
     }
 
     private void showManualPackageEntry() {
-        android.widget.EditText input = new android.widget.EditText(getContext());
+        EditText input = new EditText(getContext());
         input.setHint("ex: com.shopee.spx.driver");
         
         new AlertDialog.Builder(requireContext())
@@ -364,7 +405,7 @@ public class MapSettingsFragment extends Fragment {
         SeekBar seekHue = dialogView.findViewById(R.id.seekHue);
         SeekBar seekSat = dialogView.findViewById(R.id.seekSaturation);
         SeekBar seekVal = dialogView.findViewById(R.id.seekValue);
-        android.widget.EditText editHex = dialogView.findViewById(R.id.editColorHex);
+        EditText editHex = dialogView.findViewById(R.id.editColorHex);
 
         String currentColor = sharedPreferences.getString(key, def);
         float[] hsv = new float[3];
@@ -394,10 +435,10 @@ public class MapSettingsFragment extends Fragment {
         seekSat.setOnSeekBarChangeListener(listener);
         seekVal.setOnSeekBarChangeListener(listener);
 
-        editHex.addTextChangedListener(new android.text.TextWatcher() {
+        editHex.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
-            @Override public void afterTextChanged(android.text.Editable s) {
+            @Override public void afterTextChanged(Editable s) {
                 if (s.length() == 7 && s.toString().startsWith("#")) {
                     try {
                         int color = Color.parseColor(s.toString());

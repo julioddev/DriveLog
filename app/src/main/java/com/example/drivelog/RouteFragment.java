@@ -476,6 +476,10 @@ public class RouteFragment extends Fragment {
             Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::setupLocationOverlay);
         } else if ("map_tile_style".equals(key)) {
             Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::applyMapStyle);
+        } else if ("bloco_icon_size".equals(key) || "quadra_icon_size".equals(key)) {
+            Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::refreshQuadraMarkers);
+        } else if ("stop_icon_size".equals(key)) {
+            Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::refreshMarkers);
         } else if ("home_trigger_radius".equals(key) || "home_arrival_radius".equals(key) || "home_lat".equals(key) || "home_lon".equals(key)) {
             Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(this::showHomeMarker);
         }
@@ -2362,7 +2366,7 @@ public class RouteFragment extends Fragment {
 
     private void fetchSuggestions(String q) { new Thread(() -> { try { 
         String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-        String userAgent = "DriveLogApp_v141_" + uniqueId;
+        String userAgent = "DriveLogApp_v1527_" + uniqueId;
         String u = String.format(Locale.US, "https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=5", URLEncoder.encode(q, StandardCharsets.UTF_8.name()));
         HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection(); 
         c.setRequestProperty("User-Agent", userAgent); 
@@ -2499,7 +2503,7 @@ public class RouteFragment extends Fragment {
             new Thread(() -> {
                 try {
                     String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                    String userAgent = "DriveLogApp_v141_" + uniqueId;
+                    String userAgent = "DriveLogApp_v1527_" + uniqueId;
                     String urlStr = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=json", p.getLatitude(), p.getLongitude());
 
                     HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
@@ -2724,6 +2728,14 @@ public class RouteFragment extends Fragment {
         // Ícone de Bloco deve ser menor que o da Quadra
         int baseScale = isBloco ? 12 : 0;
         int size = (tier == 0) ? (14 - (isBloco ? 2 : 0)) : (tier == 1 ? (28 - (isBloco ? 2 : 0)) : (56 - baseScale));
+
+        if (getContext() != null) {
+            String scaleKey = isBloco ? "bloco_icon_size" : "quadra_icon_size";
+            int scalePercent = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                    .getInt(scaleKey, 100);
+            size = Math.round(size * (scalePercent / 100f));
+        }
+
         if (size < 10) size = 10;
 
         Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
@@ -2836,6 +2848,18 @@ public class RouteFragment extends Fragment {
         return path;
     }
 
+    public void focusQuadraFromNotification(String name, String neighborhood, double lat, double lon, String type) {
+        if (mapController != null && lat != 0 && lon != 0) {
+            mapController.setZoom(17.5);
+            mapController.animateTo(new GeoPoint(lat, lon));
+            isMapFocusedOnUser = false;
+            updateCenterFabIcon();
+        }
+        CorrectedQuadra q = new CorrectedQuadra(name, neighborhood, "", lat, lon);
+        q.type = type;
+        showQuadraDetailsDialog(q);
+    }
+
     private void showQuadraDetailsDialog(CorrectedQuadra q) {
         if (q == null || getContext() == null) return;
 
@@ -2881,8 +2905,7 @@ public class RouteFragment extends Fragment {
 
         String currentUserId = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
                 .getString("current_user_id", "anon");
-        String currentUserName = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
-                .getString("user_display_name", "Entregador");
+        String currentUserName = getUserDisplayName();
 
         boolean isMine = (q.creatorId != null && q.creatorId.equals(currentUserId));
         if (btnDelete != null) {
@@ -3271,7 +3294,7 @@ public class RouteFragment extends Fragment {
         new Thread(() -> {
             try {
                 String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                String userAgent = "DriveLogApp_v141_" + uniqueId;
+                String userAgent = "DriveLogApp_v1527_" + uniqueId;
                 
                 String query = address + (neighborhood.isEmpty() ? "" : ", " + neighborhood);
                 String u = String.format(Locale.US, "https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=1", URLEncoder.encode(query, "UTF-8"));
@@ -3697,6 +3720,10 @@ public class RouteFragment extends Fragment {
         if (getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("km")) {
             subVis.add(3, 306, 4, "Botão Rastreio KM").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_km_tracking", true));
         }
+
+        if (getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("community_notifications")) {
+            subVis.add(3, 308, 5, "Botão Notificações").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_notifications", true));
+        }
         
         subVis.add(3, 305, 5, "Card de Paradas").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_bottom_sheet_stops", true));
 
@@ -3801,6 +3828,11 @@ public class RouteFragment extends Fragment {
                 boolean n = !item.isChecked();
                 item.setChecked(n);
                 sharedPreferences.edit().putBoolean("show_fab_km_tracking", n).apply();
+                updateFloatingButtonsVisibility();
+            } else if (item.getItemId() == 308) {
+                boolean n = !item.isChecked();
+                item.setChecked(n);
+                sharedPreferences.edit().putBoolean("show_fab_notifications", n).apply();
                 updateFloatingButtonsVisibility();
             } else if ("Otimizar Rota".equals(item.getTitle())) {
                 optimizeRoute();
@@ -4181,7 +4213,7 @@ public class RouteFragment extends Fragment {
                 String cityName = "";
                 try {
                     String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                    String userAgent = "DriveLogApp_v142_" + uniqueId;
+                    String userAgent = "DriveLogApp_v1527_" + uniqueId;
                     String geoUrl = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=json&zoom=10", lat, lon);
                     URL urlGeo = new URL(geoUrl);
                     HttpURLConnection connGeo = (HttpURLConnection) urlGeo.openConnection();
@@ -4715,7 +4747,16 @@ public class RouteFragment extends Fragment {
     }
 
     private Bitmap generateMarkerBitmap(int n, int status, boolean multi, boolean selected, String gColor, boolean hasOverlap) {
-        int size = selected ? 110 : 80;
+        int baseSize = selected ? 110 : 80;
+        float stopScaleMultiplier = 1.0f;
+        if (getContext() != null) {
+            int stopScalePercent = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                    .getInt("stop_icon_size", 100);
+            stopScaleMultiplier = stopScalePercent / 100f;
+        }
+        int size = Math.round(baseSize * stopScaleMultiplier);
+        if (size < 20) size = 20;
+
         Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b); 
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -4739,7 +4780,7 @@ public class RouteFragment extends Fragment {
         // 2. Desenhar Borda
         if (selected) {
             p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(8f);
+            p.setStrokeWidth(8f * stopScaleMultiplier);
             
             int[] colors = {stopColor, stopColor, Color.WHITE, stopColor, stopColor};
             float[] positions = {0.0f, 0.30f, 0.5f, 0.70f, 1.0f};
@@ -4754,20 +4795,20 @@ public class RouteFragment extends Fragment {
             c.drawCircle(center, center, radius, p);
             p.setShader(null);
             
-            p.setStrokeWidth(1f);
+            p.setStrokeWidth(1f * stopScaleMultiplier);
             p.setColor(Color.WHITE);
-            c.drawCircle(center, center, radius + 4f, p);
+            c.drawCircle(center, center, radius + 4f * stopScaleMultiplier, p);
         } else {
             p.setColor(Color.WHITE);
             p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(4f);
+            p.setStrokeWidth(4f * stopScaleMultiplier);
             p.setAlpha(alpha);
             c.drawCircle(center, center, radius, p);
         }
 
         // 3. Texto (Número da Parada)
         p.setStyle(Paint.Style.FILL);
-        p.setTextSize(selected ? 44 : 32);
+        p.setTextSize((selected ? 44f : 32f) * stopScaleMultiplier);
         p.setTextAlign(Paint.Align.CENTER);
         p.setAlpha(alpha);
         if (stopColor == Color.parseColor("#FF9800")) p.setColor(Color.BLACK); else p.setColor(Color.WHITE);
@@ -4782,11 +4823,11 @@ public class RouteFragment extends Fragment {
             p.setColor(Color.parseColor("#FF1744"));
             float badgeX = center + radius * 0.65f;
             float badgeY = center - radius * 0.65f;
-            float badgeR = selected ? 13f : 9f;
+            float badgeR = (selected ? 13f : 9f) * stopScaleMultiplier;
             c.drawCircle(badgeX, badgeY, badgeR, p);
             
             p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(2f);
+            p.setStrokeWidth(2f * stopScaleMultiplier);
             p.setColor(Color.WHITE);
             c.drawCircle(badgeX, badgeY, badgeR, p);
         }
@@ -4814,7 +4855,7 @@ public class RouteFragment extends Fragment {
         new Thread(() -> {
             try {
                 String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                String userAgent = "DriveLogApp_v141_" + uniqueId;
+                String userAgent = "DriveLogApp_v1527_" + uniqueId;
                 
                 String u = String.format(Locale.US, "https://router.project-osrm.org/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=geojson&steps=true", currentLocation.getLongitude(), currentLocation.getLatitude(), stop.longitude, stop.latitude);
                 HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection(); 
@@ -6162,7 +6203,7 @@ public class RouteFragment extends Fragment {
                     String url = "https://router.project-osrm.org/table/v1/driving/" + coords.toString() + "?sources=0&annotations=distance";
                     HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
                     String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                    conn.setRequestProperty("User-Agent", "DriveLogApp_v142_" + uniqueId);
+                    conn.setRequestProperty("User-Agent", "DriveLogApp_v1527_" + uniqueId);
                     
                     if (conn.getResponseCode() == 200) {
                         BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
@@ -7561,7 +7602,7 @@ public class RouteFragment extends Fragment {
                     HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
                     
                     String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                    String userAgent = "DriveLogApp_v141_" + uniqueId;
+                    String userAgent = "DriveLogApp_v1527_" + uniqueId;
                     conn.setRequestProperty("User-Agent", userAgent);
                     
                     if (conn.getResponseCode() == 200) {

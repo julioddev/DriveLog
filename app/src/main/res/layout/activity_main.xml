@@ -238,6 +238,33 @@
                         android:background="?attr/selectableItemBackground"
                         app:tint="?attr/colorPrimary"
                         android:contentDescription="Relatórios"/>
+
+                    <!-- Notificações da Comunidade -->
+                    <FrameLayout
+                        android:id="@+id/layoutLeftNotificationsContainer"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1">
+
+                        <ImageButton
+                            android:id="@+id/btnLeftNotifications"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:src="@drawable/ic_notifications"
+                            android:background="?attr/selectableItemBackground"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Notificações da Comunidade"/>
+
+                        <View
+                            android:id="@+id/badgeDrawerNotificationDot"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:layout_gravity="top|end"
+                            android:layout_marginTop="6dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/bg_circle_red"
+                            android:visibility="gone" />
+                    </FrameLayout>
                 </LinearLayout>
 
                 <View

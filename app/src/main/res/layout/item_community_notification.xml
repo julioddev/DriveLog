@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="12dp"
+    android:gravity="center_vertical"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true">
+
+    <TextView
+        android:id="@+id/textNotificationIcon"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:gravity="center"
+        android:text="👍"
+        android:textSize="20sp"
+        android:background="#F5F5F5"
+        android:layout_marginEnd="12dp"/>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/textNotificationMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="João curtiu sua Quadra 104 Norte"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface"/>
+
+        <TextView
+            android:id="@+id/textNotificationDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="&quot;Ótima localização!&quot;"
+            android:textSize="12sp"
+            android:textColor="#555555"
+            android:layout_marginTop="2dp"
+            android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/textNotificationTime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Há 5 minutos"
+            android:textSize="10sp"
+            android:textColor="#888888"
+            android:layout_marginTop="2dp"/>
+    </LinearLayout>
+
+    <View
+        android:id="@+id/viewUnreadDot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:background="@drawable/bg_circle_red"
+        android:layout_marginStart="8dp"/>
+
+</LinearLayout>

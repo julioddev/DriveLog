@@ -2,17 +2,26 @@ package com.example.drivelog;
 
 import android.util.Log;
 
+import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.SetOptions;
+import com.google.firebase.firestore.WriteBatch;
 import com.google.firebase.auth.FirebaseAuth;
 
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Map;
 
 public class FirebaseHelper {
@@ -143,7 +152,7 @@ public class FirebaseHelper {
                         String creatorName = doc.getString("creatorName");
                         String publicNote = doc.getString("publicNote");
                         Long commentCount = doc.getLong("commentCount");
-                        com.google.firebase.Timestamp ts = doc.getTimestamp("publicNoteDate");
+                        Timestamp ts = doc.getTimestamp("publicNoteDate");
                         if (ts == null) ts = doc.getTimestamp("lastUpdate");
                         long updateDate = ts != null ? ts.toDate().getTime() : 0;
 
@@ -173,8 +182,8 @@ public class FirebaseHelper {
 
         if (isLike != null) {
             db.runTransaction(transaction -> {
-                com.google.firebase.firestore.DocumentSnapshot addressDoc = transaction.get(docRef);
-                com.google.firebase.firestore.DocumentSnapshot voteDoc = transaction.get(userVoteRef);
+                DocumentSnapshot addressDoc = transaction.get(docRef);
+                DocumentSnapshot voteDoc = transaction.get(userVoteRef);
                 
                 long currentLikes = 0;
                 if (addressDoc.exists() && addressDoc.get("likes") != null) {
@@ -271,16 +280,16 @@ public class FirebaseHelper {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         String docId = sanitizeAddressId(address);
         db.collection(COLLECTION_GLOBAL_FIX).document(docId).collection("comments")
-                .orderBy("date", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .orderBy("date", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     List<CommentsFetchCallback.CommentModel> list = new ArrayList<>();
-                    for (com.google.firebase.firestore.DocumentSnapshot doc : queryDocumentSnapshots) {
+                    for (DocumentSnapshot doc : queryDocumentSnapshots) {
                         String id = doc.getId();
                         String user = doc.getString("user");
                         String userId = doc.getString("userId");
                         String text = doc.getString("text");
-                        com.google.firebase.Timestamp ts = doc.getTimestamp("date");
+                        Timestamp ts = doc.getTimestamp("date");
                         long date = ts != null ? ts.toDate().getTime() : 0;
                         if (user != null && text != null) {
                             list.add(new CommentsFetchCallback.CommentModel(id, user, userId, text, date));
@@ -312,7 +321,7 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onFailure(e.getMessage()));
     }
 
-    public static com.google.firebase.firestore.ListenerRegistration listenCommunityAddresses(CommunityFetchCallback callback) {
+    public static ListenerRegistration listenCommunityAddresses(CommunityFetchCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         return db.collection(COLLECTION_GLOBAL_FIX)
                 .addSnapshotListener((queryDocumentSnapshots, e) -> {
@@ -323,7 +332,7 @@ public class FirebaseHelper {
                     if (queryDocumentSnapshots != null) {
                         Log.d("FirebaseHelper", "Recebidos " + queryDocumentSnapshots.size() + " endereços da comunidade.");
                         List<CorrectedAddress> list = new ArrayList<>();
-                        for (com.google.firebase.firestore.DocumentSnapshot doc : queryDocumentSnapshots) {
+                        for (DocumentSnapshot doc : queryDocumentSnapshots) {
                             CorrectedAddress ca = new CorrectedAddress();
                             ca.address = doc.getString("address");
                             ca.neighborhood = doc.getString("neighborhood");
@@ -352,7 +361,7 @@ public class FirebaseHelper {
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     List<CorrectedAddress> list = new ArrayList<>();
-                    for (com.google.firebase.firestore.DocumentSnapshot doc : queryDocumentSnapshots) {
+                    for (DocumentSnapshot doc : queryDocumentSnapshots) {
                         CorrectedAddress ca = new CorrectedAddress();
                         ca.address = doc.getString("address");
                         ca.neighborhood = doc.getString("neighborhood");
@@ -534,11 +543,11 @@ public class FirebaseHelper {
     public static void fetchSharedDeveloperRoutes(SharedRoutesCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         db.collection(COLLECTION_DEV_ROUTES)
-                .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(querySnapshot -> {
                     List<Map<String, Object>> list = new ArrayList<>();
-                    for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot) {
+                    for (DocumentSnapshot doc : querySnapshot) {
                         Map<String, Object> data = doc.getData();
                         if (data != null) {
                             data.put("id", doc.getId());
@@ -578,17 +587,17 @@ public class FirebaseHelper {
     public static void fetchSharedDeveloperRecordings(SharedRoutesCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         db.collection(COLLECTION_DEV_RECORDINGS)
-                .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(querySnapshot -> {
                     List<Map<String, Object>> list = new ArrayList<>();
-                    for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot) {
+                    for (DocumentSnapshot doc : querySnapshot) {
                         Map<String, Object> data = doc.getData();
                         if (data != null) {
                             data.put("id", doc.getId());
                             // Reaproveitando o campo 'name' para data/km para exibir na lista
                             long dateLong = data.get("date") != null ? (long) data.get("date") : 0;
-                            String dateStr = new java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(new java.util.Date(dateLong));
+                            String dateStr = new SimpleDateFormat("dd/MM/yy HH:mm", Locale.getDefault()).format(new Date(dateLong));
                             double dist = data.get("gpsDistance") != null ? (double) data.get("gpsDistance") : 0;
                             data.put("name", "Grav: " + dateStr + " (" + String.format("%.1f", dist) + " KM)");
                             list.add(data);
@@ -632,7 +641,7 @@ public class FirebaseHelper {
         long now = System.currentTimeMillis();
         // Aumentamos o tempo de escuta para os últimos 60 minutos para garantir captura inicial
         return db.collection(COLLECTION_DEV_ALERTS)
-                .whereGreaterThan("timestamp", new com.google.firebase.Timestamp(new java.util.Date(now - 3600000)))
+                .whereGreaterThan("timestamp", new Timestamp(new Date(now - 3600000)))
                 .addSnapshotListener((snapshot, e) -> {
                     if (e != null) {
                         Log.e("FirebaseHelper", "Erro no listener global: " + e.getMessage());
@@ -640,8 +649,8 @@ public class FirebaseHelper {
                     }
                     if (snapshot == null) return;
                     
-                    for (com.google.firebase.firestore.DocumentChange dc : snapshot.getDocumentChanges()) {
-                        if (dc.getType() == com.google.firebase.firestore.DocumentChange.Type.ADDED) {
+                    for (DocumentChange dc : snapshot.getDocumentChanges()) {
+                        if (dc.getType() == DocumentChange.Type.ADDED) {
                             DocumentSnapshot doc = dc.getDocument();
                             String name = doc.getString("name");
                             String msg = doc.getString("message");
@@ -650,7 +659,7 @@ public class FirebaseHelper {
                             
                             // 🔥 OTIMIZAÇÃO: Verifica se o timestamp existe. Se não existir (novo doc sendo escrito), 
                             // o snapshot dispara duas vezes. Tratamos apenas o que tem tempo confirmado pelo servidor.
-                            com.google.firebase.Timestamp ts = doc.getTimestamp("timestamp");
+                            Timestamp ts = doc.getTimestamp("timestamp");
                             if (ts != null) {
                                 long alertTime = ts.toDate().getTime();
                                 // Só processamos alertas que aconteceram nos últimos 2 minutos 
@@ -731,13 +740,13 @@ public class FirebaseHelper {
             DocumentReference userRef = db.collection(COLLECTION_USERS).document(sanitizedEmail);
 
             // 1. Verifica se o novo nome já está ocupado
-            com.google.firebase.firestore.DocumentSnapshot newDoc = transaction.get(newRef);
+            DocumentSnapshot newDoc = transaction.get(newRef);
             if (newDoc.exists()) {
                 String ownerEmail = newDoc.getString("email");
                 if (ownerEmail != null && !ownerEmail.equalsIgnoreCase(sanitizedEmail)) {
-                    throw new com.google.firebase.firestore.FirebaseFirestoreException(
+                    throw new FirebaseFirestoreException(
                             "Username already taken", 
-                            com.google.firebase.firestore.FirebaseFirestoreException.Code.ALREADY_EXISTS);
+                            FirebaseFirestoreException.Code.ALREADY_EXISTS);
                 }
             }
 
@@ -794,7 +803,7 @@ public class FirebaseHelper {
         request.put("toId", toId);
         request.put("status", "pending"); // pending, accepted, rejected
         request.put("timestamp", FieldValue.serverTimestamp());
-        request.put("participants", java.util.Arrays.asList(fromId.toLowerCase(), toId.toLowerCase()));
+        request.put("participants", Arrays.asList(fromId.toLowerCase(), toId.toLowerCase()));
 
         db.collection(COLLECTION_FRIEND_REQUESTS)
                 .document(fromId.replace(".", "_") + "_" + toId.replace(".", "_")) 
@@ -837,16 +846,16 @@ public class FirebaseHelper {
     /**
      * Escuta convites pendentes e amigos em tempo real
      */
-    public static com.google.firebase.firestore.ListenerRegistration listenFriendRequests(String myEmail, FriendRequestCallback callback) {
+    public static ListenerRegistration listenFriendRequests(String myEmail, FriendRequestCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         // Escuta tanto convites que eu enviei quanto recebi
         return db.collection(COLLECTION_FRIEND_REQUESTS)
-                .whereArrayContainsAny("participants", java.util.Arrays.asList(myEmail.toLowerCase()))
+                .whereArrayContainsAny("participants", Arrays.asList(myEmail.toLowerCase()))
                 .addSnapshotListener((querySnapshot, e) -> {
                     if (e != null) { callback.onError(e.getMessage()); return; }
                     if (querySnapshot != null) {
                         List<Map<String, Object>> list = new ArrayList<>();
-                        for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshot) {
+                        for (DocumentSnapshot doc : querySnapshot) {
                             Map<String, Object> data = doc.getData();
                             if (data != null) {
                                 data.put("id", doc.getId());
@@ -887,7 +896,7 @@ public class FirebaseHelper {
                             
                             // Adiciona pedidos de amizade
                             if (requests != null) {
-                                for (com.google.firebase.firestore.DocumentSnapshot doc : requests) {
+                                for (DocumentSnapshot doc : requests) {
                                     Map<String, Object> data = doc.getData();
                                     if (data != null) {
                                         data.put("type", "friend_request");
@@ -899,7 +908,7 @@ public class FirebaseHelper {
                             // Adiciona compartilhamentos ativos
                             if (shares != null) {
                                 long now = System.currentTimeMillis();
-                                for (com.google.firebase.firestore.DocumentSnapshot doc : shares) {
+                                for (DocumentSnapshot doc : shares) {
                                     Map<String, Object> data = doc.getData();
                                     if (data != null) {
                                         Long expiry = doc.getLong("expiry");
@@ -1120,7 +1129,7 @@ public class FirebaseHelper {
         // Para simplificar e garantir funcionamento real-time, ouvimos a coleção de usuários
         // que tenham o modo comboio ativado ou localizações recentes.
         return db.collection(COL_USERS)
-            .whereGreaterThan("liveLocation.ts", new com.google.firebase.Timestamp(new java.util.Date(System.currentTimeMillis() - 3600000))) // Ultima hora
+            .whereGreaterThan("liveLocation.ts", new Timestamp(new Date(System.currentTimeMillis() - 3600000))) // Ultima hora
             .addSnapshotListener((users, e) -> {
                 if (e != null || users == null) return;
 
@@ -1128,20 +1137,20 @@ public class FirebaseHelper {
                 db.collection("active_shares").whereEqualTo("to", me).get().addOnSuccessListener(shares -> {
                     List<String> targeted = new ArrayList<>();
                     long now = System.currentTimeMillis();
-                    for (com.google.firebase.firestore.DocumentSnapshot s : shares) {
+                    for (DocumentSnapshot s : shares) {
                         Long exp = s.getLong("expiry");
                         if (exp == null || exp == -1 || exp > now) targeted.add(s.getString("from").toLowerCase());
                     }
 
                     db.collection(COLLECTION_FRIEND_REQUESTS).whereArrayContains("participants", me).whereEqualTo("status", "accepted").get().addOnSuccessListener(friends -> {
                         List<String> friendList = new ArrayList<>();
-                        for (com.google.firebase.firestore.DocumentSnapshot f : friends) {
+                        for (DocumentSnapshot f : friends) {
                             List<String> p = (List<String>) f.get("participants");
                             if (p != null) for (String mail : p) if (!mail.equalsIgnoreCase(me)) friendList.add(mail.toLowerCase());
                         }
 
                         List<FriendLocation> result = new ArrayList<>();
-                        for (com.google.firebase.firestore.DocumentSnapshot doc : users) {
+                        for (DocumentSnapshot doc : users) {
                             String email = doc.getString("email");
                             if (email == null) continue;
                             String lowEmail = email.toLowerCase();
@@ -1160,7 +1169,7 @@ public class FirebaseHelper {
                                     fl.lat = parseDoubleSafe(loc.get("lat"));
                                     fl.lon = parseDoubleSafe(loc.get("lon"));
                                     Object tsObj = loc.get("ts");
-                                    if (tsObj instanceof com.google.firebase.Timestamp) fl.timestamp = ((com.google.firebase.Timestamp) tsObj).toDate().getTime();
+                                    if (tsObj instanceof Timestamp) fl.timestamp = ((Timestamp) tsObj).toDate().getTime();
                                     result.add(fl);
                                 }
                             }
@@ -1253,7 +1262,7 @@ public class FirebaseHelper {
     public static void fetchAllUsers(UsersListCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         db.collection(COL_USERS)
-                .orderBy("lastSeen", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .orderBy("lastSeen", Query.Direction.DESCENDING)
                 .limit(200)
                 .get()
                 .addOnSuccessListener(querySnapshot -> {
@@ -1396,7 +1405,7 @@ public class FirebaseHelper {
     public static void getAllGlobalQuadras(GlobalQuadrasCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         db.collection(COLLECTION_GLOBAL_QUADRAS)
-                .orderBy("name", com.google.firebase.firestore.Query.Direction.ASCENDING)
+                .orderBy("name", Query.Direction.ASCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     List<CorrectedQuadra> result = new ArrayList<>();
@@ -1518,6 +1527,141 @@ public class FirebaseHelper {
             docRef.collection("comments").add(commentData)
                 .addOnSuccessListener(ref -> docRef.update("commentCount", FieldValue.increment(1)));
         }
+
+        // Notifica o criador da Quadra/Bloco em segundo plano
+        docRef.get().addOnSuccessListener(doc -> {
+            if (doc != null && doc.exists()) {
+                String creatorId = doc.getString("creatorId");
+                Double lat = doc.getDouble("latitude");
+                Double lon = doc.getDouble("longitude");
+                String qType = doc.getString("type");
+                double quadLat = lat != null ? lat : 0;
+                double quadLon = lon != null ? lon : 0;
+
+                if (isLike != null) {
+                    String action = isLike ? "LIKE" : "DISLIKE";
+                    sendCommunityNotification(creatorId, userId, userName, name, neighborhood, action, null, quadLat, quadLon, qType);
+                }
+                if (comment != null && !comment.trim().isEmpty()) {
+                    sendCommunityNotification(creatorId, userId, userName, name, neighborhood, "COMMENT", comment.trim(), quadLat, quadLon, qType);
+                }
+            }
+        });
+    }
+
+    public static void sendCommunityNotification(String targetUserId, String senderId, String senderName, String quadraName, String quadraNeighborhood, String actionType, String commentText, double lat, double lon, String quadraType) {
+        if (targetUserId == null || targetUserId.trim().isEmpty() || targetUserId.equals("anon")) {
+            return;
+        }
+        String target = targetUserId.trim().toLowerCase(Locale.ROOT);
+        String sender = senderId != null ? senderId.trim().toLowerCase(Locale.ROOT) : "anon";
+
+        String formattedName = senderName;
+        if (formattedName == null || formattedName.trim().isEmpty() || formattedName.equalsIgnoreCase("Entregador") || formattedName.equalsIgnoreCase("Um entregador")) {
+            if (sender.contains("@")) {
+                formattedName = sender.split("@")[0];
+            } else {
+                formattedName = "Um entregador";
+            }
+        }
+
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        Map<String, Object> notif = new HashMap<>();
+        notif.put("targetUserId", target);
+        notif.put("senderId", sender);
+        notif.put("senderName", formattedName);
+        notif.put("quadraName", quadraName != null ? quadraName : "Quadra");
+        notif.put("quadraNeighborhood", quadraNeighborhood != null ? quadraNeighborhood : "");
+        notif.put("actionType", actionType); // "LIKE", "DISLIKE", "COMMENT"
+        notif.put("commentText", commentText != null ? commentText : "");
+        notif.put("latitude", lat);
+        notif.put("longitude", lon);
+        notif.put("type", quadraType != null ? quadraType : "QUADRA");
+        notif.put("timestamp", FieldValue.serverTimestamp());
+        notif.put("isRead", false);
+
+        db.collection("community_notifications").add(notif)
+                .addOnSuccessListener(ref -> Log.d("FirebaseHelper", "Notificação gravada no Firestore para " + target))
+                .addOnFailureListener(e -> Log.e("FirebaseHelper", "Falha ao gravar notificação: " + e.getMessage()));
+    }
+
+    public interface CommunityNotificationCallback {
+        void onResult(List<Map<String, Object>> list, int unreadCount);
+    }
+
+    public static ListenerRegistration listenCommunityNotifications(String userId, CommunityNotificationCallback callback) {
+        if (userId == null || userId.trim().isEmpty() || userId.equals("anon")) {
+            if (callback != null) callback.onResult(new ArrayList<>(), 0);
+            return null;
+        }
+        String target = userId.trim().toLowerCase(Locale.ROOT);
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        return db.collection("community_notifications")
+                .whereEqualTo("targetUserId", target)
+                .addSnapshotListener((snapshot, e) -> {
+                    if (e != null) {
+                        Log.e("FirebaseHelper", "Erro ao escutar notificações de " + target + ": " + e.getMessage());
+                        if (callback != null) callback.onResult(new ArrayList<>(), 0);
+                        return;
+                    }
+                    if (snapshot == null) {
+                        if (callback != null) callback.onResult(new ArrayList<>(), 0);
+                        return;
+                    }
+                    List<Map<String, Object>> list = new ArrayList<>();
+                    int unread = 0;
+                    for (DocumentSnapshot doc : snapshot.getDocuments()) {
+                        Map<String, Object> data = doc.getData();
+                        if (data != null) {
+                            data.put("docId", doc.getId());
+                            Boolean isRead = doc.getBoolean("isRead");
+                            if (Boolean.FALSE.equals(isRead) || isRead == null) {
+                                unread++;
+                            }
+                            list.add(data);
+                        }
+                    }
+
+                    // Ordena em memória por timestamp decrescente (evita erro de índice composto no Firestore)
+                    list.sort((a, b) -> {
+                        Timestamp t1 = (Timestamp) a.get("timestamp");
+                        Timestamp t2 = (Timestamp) b.get("timestamp");
+                        if (t1 == null && t2 == null) return 0;
+                        if (t1 == null) return 1;
+                        if (t2 == null) return -1;
+                        return t2.compareTo(t1);
+                    });
+
+                    Log.d("FirebaseHelper", "Notificações recebidas para " + target + ": total=" + list.size() + ", unread=" + unread);
+                    if (callback != null) callback.onResult(list, unread);
+                });
+    }
+
+    public static void markCommunityNotificationsAsRead(List<String> docIds) {
+        if (docIds == null || docIds.isEmpty()) return;
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        WriteBatch batch = db.batch();
+        for (String id : docIds) {
+            batch.update(db.collection("community_notifications").document(id), "isRead", true);
+        }
+        batch.commit();
+    }
+
+    public static void clearCommunityNotifications(String userId) {
+        if (userId == null || userId.isEmpty()) return;
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        db.collection("community_notifications")
+                .whereEqualTo("targetUserId", userId)
+                .get()
+                .addOnSuccessListener(snapshot -> {
+                    if (snapshot != null) {
+                        WriteBatch batch = db.batch();
+                        for (DocumentSnapshot doc : snapshot.getDocuments()) {
+                            batch.delete(doc.getReference());
+                        }
+                        batch.commit();
+                    }
+                });
     }
 
     public interface SingleQuadraCallback {
@@ -1585,7 +1729,7 @@ public class FirebaseHelper {
 
         return db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId)
                 .collection("comments")
-                .orderBy("date", com.google.firebase.firestore.Query.Direction.ASCENDING)
+                .orderBy("date", Query.Direction.ASCENDING)
                 .addSnapshotListener((snapshot, e) -> {
                     if (e != null || snapshot == null) return;
                     List<Map<String, Object>> list = new ArrayList<>();

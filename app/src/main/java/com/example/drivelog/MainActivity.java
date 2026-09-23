@@ -1,10 +1,12 @@
 package com.example.drivelog;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,8 +18,11 @@ import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -25,6 +30,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -34,6 +40,7 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.graphics.Insets;
+import androidx.core.view.GravityCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
@@ -43,17 +50,29 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
+import com.google.android.gms.ads.AdError;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.AdSize;
+import com.google.android.gms.ads.AdView;
+import com.google.android.gms.ads.FullScreenContentCallback;
+import com.google.android.gms.ads.MobileAds;
 import com.google.android.material.badge.BadgeDrawable;
 import com.google.android.material.badge.BadgeUtils;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 import com.google.android.gms.ads.LoadAdError;
+
+import org.osmdroid.config.Configuration;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -62,9 +81,11 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -91,7 +112,7 @@ public class MainActivity extends AppCompatActivity {
     private double requestedMapLat = -1, requestedMapLon = -1;
     private boolean isSplashFinalizing = false;
     private int splashPhraseIndex = 0;
-    private com.google.android.material.button.MaterialButton btnDrawerSeeAllRoutes;
+    private MaterialButton btnDrawerSeeAllRoutes;
     private final String[] splashPhrases = {
             "Preparando seus ganhos...",
             "Calculando rotas...",
@@ -117,15 +138,15 @@ public class MainActivity extends AppCompatActivity {
     };
 
     @Override
-    public boolean dispatchTouchEvent(android.view.MotionEvent event) {
-        if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_DOWN) {
             View v = getCurrentFocus();
-            if (v instanceof android.widget.EditText) {
-                android.graphics.Rect outRect = new android.graphics.Rect();
+            if (v instanceof EditText) {
+                Rect outRect = new Rect();
                 v.getGlobalVisibleRect(outRect);
                 if (!outRect.contains((int)event.getRawX(), (int)event.getRawY())) {
                     v.clearFocus();
-                    android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                     if (imm != null) imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
                 }
             }
@@ -162,6 +183,8 @@ public class MainActivity extends AppCompatActivity {
         
         // Garante que o monitoramento automático esteja ativo se configurado
         TrackingHelper.updateAutoTracking(this);
+
+        startCommunityNotificationsListener();
     }
 
     @Override
@@ -182,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
         if (sharedPreferences != null && sharedPreferences.getBoolean("floating_icon_enabled", true)) {
             // Só iniciamos se tivermos a permissão de sobreposição
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (android.provider.Settings.canDrawOverlays(this)) {
+                if (Settings.canDrawOverlays(this)) {
                     Intent serviceIntent = new Intent(this, FloatingIconService.class);
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         startForegroundService(serviceIntent);
@@ -217,24 +240,24 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String uniqueId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-        org.osmdroid.config.Configuration.getInstance().load(this, sharedPreferences);
-        org.osmdroid.config.Configuration.getInstance().setUserAgentValue("DriveLogApp_v142_" + uniqueId);
+        Configuration.getInstance().load(this, sharedPreferences);
+        Configuration.getInstance().setUserAgentValue("DriveLogApp_v1527_" + uniqueId);
         
         // 🔥 MELHORIA DE PERFORMANCE NO MAPA
         // Aumenta o cache para 1GB (em vez do padrão menor) e aumenta o paralelismo
-        org.osmdroid.config.Configuration.getInstance().setTileFileSystemCacheMaxBytes(1024L * 1024L * 1024L); 
-        org.osmdroid.config.Configuration.getInstance().setTileDownloadThreads((short) 12); // Mais threads para baixar simultaneamente
-        org.osmdroid.config.Configuration.getInstance().setCacheMapTileCount((short) 60); // Mais tiles em memória RAM
+        Configuration.getInstance().setTileFileSystemCacheMaxBytes(1024L * 1024L * 1024L);
+        Configuration.getInstance().setTileDownloadThreads((short) 12); // Mais threads para baixar simultaneamente
+        Configuration.getInstance().setCacheMapTileCount((short) 60); // Mais tiles em memória RAM
         
         // Configurações de trim do cache (limpa quando chegar perto do limite)
-        org.osmdroid.config.Configuration.getInstance().setTileFileSystemCacheTrimBytes(800L * 1024L * 1024L);
+        Configuration.getInstance().setTileFileSystemCacheTrimBytes(800L * 1024L * 1024L);
 
         // 🔥 NOVO: Melhora a velocidade de resposta do disco
-        org.osmdroid.config.Configuration.getInstance().setTileDownloadMaxQueueSize((short) 100);
+        Configuration.getInstance().setTileDownloadMaxQueueSize((short) 100);
         
         File tileCache = new File(getCacheDir(), "osmdroid_tiles_v142");
         if (!tileCache.exists()) tileCache.mkdirs();
-        org.osmdroid.config.Configuration.getInstance().setOsmdroidTileCache(tileCache);
+        Configuration.getInstance().setOsmdroidTileCache(tileCache);
 
         if (!SecurityHelper.isAppSafe(this) && !BuildConfig.DEBUG) {
             Toast.makeText(this, "Esta cópia do DriveLog não é autêntica e será encerrada.", Toast.LENGTH_LONG).show();
@@ -394,11 +417,11 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                if (drawerLayout != null && (drawerLayout.isDrawerOpen(androidx.core.view.GravityCompat.START) || 
-                    drawerLayout.isDrawerOpen(androidx.core.view.GravityCompat.END))) {
+                if (drawerLayout != null && (drawerLayout.isDrawerOpen(GravityCompat.START) ||
+                    drawerLayout.isDrawerOpen(GravityCompat.END))) {
                     drawerLayout.closeDrawers();
                     return;
                 }
@@ -455,11 +478,17 @@ public class MainActivity extends AppCompatActivity {
             if (drawerLayout != null) drawerLayout.closeDrawers();
             openFragmentInSettings(new ReportsFragment(), "Relatórios");
         });
+
+        View btnNotif = findViewById(R.id.btnLeftNotifications);
+        if (btnNotif != null) btnNotif.setOnClickListener(v -> {
+            if (drawerLayout != null) drawerLayout.closeDrawers();
+            showCommunityNotificationsDialog();
+        });
     }
 
     private void setupAds() {
         new Thread(() -> {
-            com.google.android.gms.ads.MobileAds.initialize(this, initializationStatus -> {});
+            MobileAds.initialize(this, initializationStatus -> {});
             runOnUiThread(() -> {
                 int subType = sharedPreferences.getInt("sub_type", 0);
                 View adContainer = findViewById(R.id.adViewContainer);
@@ -477,12 +506,12 @@ public class MainActivity extends AppCompatActivity {
                         if (adContainer.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
                             ((ViewGroup.MarginLayoutParams) adContainer.getLayoutParams()).topMargin = (int) (-20 * getResources().getDisplayMetrics().density);
                         }
-                        com.google.android.gms.ads.AdView adView = new com.google.android.gms.ads.AdView(this);
+                        AdView adView = new AdView(this);
                         adView.setAdUnitId("ca-app-pub-3940256099942544/6300978111"); 
-                        adView.setAdSize(com.google.android.gms.ads.AdSize.BANNER);
+                        adView.setAdSize(AdSize.BANNER);
                         ((ViewGroup) adContainer).removeAllViews();
                         ((ViewGroup) adContainer).addView(adView);
-                        com.google.android.gms.ads.AdRequest adRequest = new com.google.android.gms.ads.AdRequest.Builder().build();
+                        AdRequest adRequest = new AdRequest.Builder().build();
                         adView.loadAd(adRequest);
                     }
                 } else {
@@ -494,7 +523,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadInterstitialAd() {
-        com.google.android.gms.ads.AdRequest adRequest = new com.google.android.gms.ads.AdRequest.Builder().build();
+        AdRequest adRequest = new AdRequest.Builder().build();
         InterstitialAd.load(this, "ca-app-pub-3940256099942544/1033173712", adRequest, new InterstitialAdLoadCallback() {
             @Override public void onAdLoaded(@NonNull InterstitialAd interstitialAd) { mInterstitialAd = interstitialAd; }
             @Override public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) { mInterstitialAd = null; }
@@ -503,9 +532,9 @@ public class MainActivity extends AppCompatActivity {
 
     public void showInterstitialThenAction(Runnable action) {
         if (mInterstitialAd != null) {
-            mInterstitialAd.setFullScreenContentCallback(new com.google.android.gms.ads.FullScreenContentCallback() {
+            mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override public void onAdDismissedFullScreenContent() { action.run(); loadInterstitialAd(); }
-                @Override public void onAdFailedToShowFullScreenContent(com.google.android.gms.ads.AdError adError) { action.run(); }
+                @Override public void onAdFailedToShowFullScreenContent(AdError adError) { action.run(); }
             });
             mInterstitialAd.show(this);
         } else {
@@ -514,7 +543,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startRemoteMenuListener() {
-        com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null || user.getEmail() == null) return;
 
         // 🔥 Sincroniza permissões e data de instalação do Firebase para o local
@@ -608,6 +637,9 @@ public class MainActivity extends AppCompatActivity {
         View btnReportsLeft = findViewById(R.id.btnLeftReports);
         if (btnReportsLeft != null) btnReportsLeft.setVisibility((!useRemote || currentRemoteMenus.contains("reports")) ? View.VISIBLE : View.GONE);
 
+        View containerNotif = findViewById(R.id.layoutLeftNotificationsContainer);
+        if (containerNotif != null) containerNotif.setVisibility((!useRemote || currentRemoteMenus.contains("community_notifications")) ? View.VISIBLE : View.GONE);
+
         int backStackCount = getSupportFragmentManager().getBackStackEntryCount();
         boolean isShowingSettings = backStackCount > 0;
         
@@ -689,7 +721,7 @@ public class MainActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == android.R.id.home) { 
             if (getSupportFragmentManager().getBackStackEntryCount() > 0) getSupportFragmentManager().popBackStack();
-            else if (drawerLayout != null) drawerLayout.openDrawer(androidx.core.view.GravityCompat.START);
+            else if (drawerLayout != null) drawerLayout.openDrawer(GravityCompat.START);
             return true;
         }
         int itemId = item.getItemId();
@@ -733,8 +765,8 @@ public class MainActivity extends AppCompatActivity {
     private void updateKeepScreenOn(int pos) {
         if (viewPager.getAdapter() == null) return;
         int id = ((ViewPagerAdapter) viewPager.getAdapter()).getIdForPosition(pos);
-        if (id == R.id.nav_maps) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if (id == R.id.nav_maps) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     private void syncBottomNav(int pos) {
@@ -819,10 +851,10 @@ public class MainActivity extends AppCompatActivity {
     
     private void promptEditRouteName(RouteHeader header) {
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_new_route_name, null);
-        com.google.android.material.textfield.TextInputEditText edit = dialogView.findViewById(R.id.editRouteName);
+        TextInputEditText edit = dialogView.findViewById(R.id.editRouteName);
         edit.setText(header.name);
         edit.selectAll();
-        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this).setView(dialogView).create();
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(dialogView).create();
         if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         dialogView.findViewById(R.id.btnCancelNewRoute).setOnClickListener(v -> dialog.dismiss());
         dialogView.findViewById(R.id.btnNextNewRoute).setOnClickListener(v -> {
@@ -837,12 +869,12 @@ public class MainActivity extends AppCompatActivity {
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_modern_confirm, null);
         TextView title = dialogView.findViewById(R.id.textModernTitle);
         TextView message = dialogView.findViewById(R.id.textModernMessage);
-        com.google.android.material.button.MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
-        com.google.android.material.button.MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
+        MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
         title.setText("Excluir Rota");
         message.setText("Deseja apagar permanentemente a rota:\n" + header.name + "?");
         btnConfirm.setText("EXCLUIR");
-        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this).setView(dialogView).create();
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(dialogView).create();
         if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         btnCancel.setOnClickListener(v -> dialog.dismiss());
         btnConfirm.setOnClickListener(v -> {
@@ -852,14 +884,227 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private ListenerRegistration communityNotifListener;
+    private List<Map<String, Object>> drawerCommunityNotifications = new ArrayList<>();
+
+    private void startCommunityNotificationsListener() {
+        if (communityNotifListener != null) communityNotifListener.remove();
+        String currentUserId = sharedPreferences.getString("current_user_id", "anon");
+        View badgeDot = findViewById(R.id.badgeDrawerNotificationDot);
+
+        communityNotifListener = FirebaseHelper.listenCommunityNotifications(currentUserId, (list, unreadCount) -> {
+            runOnUiThread(() -> {
+                drawerCommunityNotifications = list != null ? list : new ArrayList<>();
+                if (badgeDot != null) {
+                    badgeDot.setVisibility(unreadCount > 0 ? View.VISIBLE : View.GONE);
+                }
+            });
+        });
+    }
+
+    private void showCommunityNotificationsDialog() {
+        View v = getLayoutInflater().inflate(R.layout.dialog_community_notifications, null);
+        RecyclerView recycler = v.findViewById(R.id.recyclerCommunityNotifications);
+        TextView textNoNotifs = v.findViewById(R.id.textNoCommunityNotifications);
+        MaterialButton btnClear = v.findViewById(R.id.btnClearNotifications);
+        MaterialButton btnClose = v.findViewById(R.id.btnCloseNotificationsDialog);
+
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setView(v)
+                .create();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        String currentUserId = sharedPreferences.getString("current_user_id", "anon");
+
+        List<String> unreadIds = new ArrayList<>();
+        if (drawerCommunityNotifications != null) {
+            for (Map<String, Object> item : drawerCommunityNotifications) {
+                Boolean isRead = (Boolean) item.get("isRead");
+                String docId = (String) item.get("docId");
+                if ((Boolean.FALSE.equals(isRead) || isRead == null) && docId != null) {
+                    unreadIds.add(docId);
+                }
+            }
+        }
+        if (!unreadIds.isEmpty()) {
+            FirebaseHelper.markCommunityNotificationsAsRead(unreadIds);
+        }
+        View badgeDot = findViewById(R.id.badgeDrawerNotificationDot);
+        if (badgeDot != null) badgeDot.setVisibility(View.GONE);
+
+        if (recycler != null) {
+            recycler.setLayoutManager(new LinearLayoutManager(this));
+            CommunityNotificationsAdapter adapter = new CommunityNotificationsAdapter(drawerCommunityNotifications, notifMap -> {
+                dialog.dismiss();
+                Double latObj = (Double) notifMap.get("latitude");
+                Double lonObj = (Double) notifMap.get("longitude");
+                String qName = (String) notifMap.get("quadraName");
+                String qNeigh = (String) notifMap.get("quadraNeighborhood");
+                String qType = (String) notifMap.get("type");
+
+                if (latObj != null && lonObj != null && latObj != 0 && lonObj != 0) {
+                    double lat = latObj;
+                    double lon = lonObj;
+
+                    if (getSupportFragmentManager().getBackStackEntryCount() > 0) {
+                        getSupportFragmentManager().popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+                    }
+                    int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_maps);
+                    viewPager.setCurrentItem(pos, true);
+
+                    focusQuadraOnRouteFragment(qName, qNeigh, lat, lon, qType);
+                }
+            });
+            recycler.setAdapter(adapter);
+            if (textNoNotifs != null) {
+                textNoNotifs.setVisibility(drawerCommunityNotifications == null || drawerCommunityNotifications.isEmpty() ? View.VISIBLE : View.GONE);
+            }
+        }
+
+        if (btnClear != null) {
+            btnClear.setOnClickListener(view -> {
+                FirebaseHelper.clearCommunityNotifications(currentUserId);
+                drawerCommunityNotifications.clear();
+                if (recycler != null && recycler.getAdapter() != null) {
+                    recycler.getAdapter().notifyDataSetChanged();
+                }
+                if (textNoNotifs != null) textNoNotifs.setVisibility(View.VISIBLE);
+            });
+        }
+
+        if (btnClose != null) {
+            btnClose.setOnClickListener(view -> dialog.dismiss());
+        }
+
+        dialog.show();
+    }
+
+    private void focusQuadraOnRouteFragment(String qName, String qNeigh, double lat, double lon, String qType) {
+        List<Fragment> frags = getSupportFragmentManager().getFragments();
+        for (Fragment f : frags) {
+            if (f instanceof MapParentFragment) {
+                List<Fragment> childFrags = f.getChildFragmentManager().getFragments();
+                for (Fragment cf : childFrags) {
+                    if (cf instanceof RouteFragment) {
+                        ((RouteFragment) cf).focusQuadraFromNotification(qName, qNeigh, lat, lon, qType);
+                        return;
+                    }
+                }
+            } else if (f instanceof RouteFragment) {
+                ((RouteFragment) f).focusQuadraFromNotification(qName, qNeigh, lat, lon, qType);
+                return;
+            }
+        }
+    }
+
+    private static class CommunityNotificationsAdapter extends RecyclerView.Adapter<CommunityNotificationsAdapter.ViewHolder> {
+        private final List<Map<String, Object>> items;
+        private final OnNotificationClickListener clickListener;
+
+        public interface OnNotificationClickListener {
+            void onClick(Map<String, Object> item);
+        }
+
+        public CommunityNotificationsAdapter(List<Map<String, Object>> items, OnNotificationClickListener clickListener) {
+            this.items = items != null ? items : new ArrayList<>();
+            this.clickListener = clickListener;
+        }
+
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_community_notification, parent, false);
+            return new ViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+            Map<String, Object> item = items.get(position);
+            String action = (String) item.get("actionType");
+            String senderName = (String) item.get("senderName");
+            String qName = (String) item.get("quadraName");
+            String comment = (String) item.get("commentText");
+            String qType = (String) item.get("type");
+            Boolean isRead = (Boolean) item.get("isRead");
+            Timestamp ts = (Timestamp) item.get("timestamp");
+
+            boolean isBloco = "BLOCO".equalsIgnoreCase(qType);
+            String typeLabel = isBloco ? "seu bloco" : "sua quadra";
+
+            String icon = "🔔";
+            String msg = (senderName != null ? senderName : "Alguém") + " interagiu com " + typeLabel + " " + (qName != null ? qName : "");
+
+            if ("LIKE".equals(action)) {
+                icon = "👍";
+                msg = (senderName != null ? senderName : "Alguém") + " curtiu " + typeLabel + " " + (qName != null ? qName : "");
+            } else if ("DISLIKE".equals(action)) {
+                icon = "👎";
+                msg = (senderName != null ? senderName : "Alguém") + " deu deslike em " + typeLabel + " " + (qName != null ? qName : "");
+            } else if ("COMMENT".equals(action)) {
+                icon = "💬";
+                msg = (senderName != null ? senderName : "Alguém") + " comentou em " + typeLabel + " " + (qName != null ? qName : "");
+            }
+
+            holder.textIcon.setText(icon);
+            holder.textMessage.setText(msg);
+
+            if (comment != null && !comment.trim().isEmpty() && "COMMENT".equals(action)) {
+                holder.textDetail.setText("\"" + comment.trim() + "\"");
+                holder.textDetail.setVisibility(View.VISIBLE);
+            } else {
+                holder.textDetail.setVisibility(View.GONE);
+            }
+
+            String timeStr = "Agora há pouco";
+            if (ts != null) {
+                long diffMs = System.currentTimeMillis() - ts.toDate().getTime();
+                long mins = diffMs / (1000 * 60);
+                long hours = mins / 60;
+                long days = hours / 24;
+                if (days > 0) timeStr = "Há " + days + (days == 1 ? " dia" : " dias");
+                else if (hours > 0) timeStr = "Há " + hours + (hours == 1 ? " hora" : " horas");
+                else if (mins > 0) timeStr = "Há " + mins + (mins == 1 ? " minuto" : " minutos");
+            }
+            holder.textTime.setText(timeStr);
+
+            holder.viewDot.setVisibility(Boolean.FALSE.equals(isRead) || isRead == null ? View.VISIBLE : View.GONE);
+
+            holder.itemView.setOnClickListener(v -> {
+                if (clickListener != null) clickListener.onClick(item);
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return items.size();
+        }
+
+        static class ViewHolder extends RecyclerView.ViewHolder {
+            TextView textIcon, textMessage, textDetail, textTime;
+            View viewDot;
+
+            ViewHolder(@NonNull View itemView) {
+                super(itemView);
+                textIcon = itemView.findViewById(R.id.textNotificationIcon);
+                textMessage = itemView.findViewById(R.id.textNotificationMessage);
+                textDetail = itemView.findViewById(R.id.textNotificationDetail);
+                textTime = itemView.findViewById(R.id.textNotificationTime);
+                viewDot = itemView.findViewById(R.id.viewUnreadDot);
+            }
+        }
+    }
+
     private static class DrawerRouteAdapter extends RecyclerView.Adapter<DrawerRouteAdapter.ViewHolder> {
         private final List<RouteHeader> routes; private final OnRouteActionListener listener;
-        private final SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault());
+        private final SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yy HH:mm", Locale.getDefault());
         interface OnRouteActionListener { void onClick(RouteHeader header); void onEdit(RouteHeader header); void onDelete(RouteHeader header); }
         DrawerRouteAdapter(List<RouteHeader> routes, OnRouteActionListener listener) { this.routes = routes; this.listener = listener; }
         @NonNull @Override public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) { return new ViewHolder(LayoutInflater.from(parent.getContext()).inflate(R.layout.item_drawer_route, parent, false)); }
         @Override public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            RouteHeader r = routes.get(position); holder.textName.setText(r.name); holder.textDate.setText(sdf.format(new java.util.Date(r.date)));
+            RouteHeader r = routes.get(position); holder.textName.setText(r.name); holder.textDate.setText(sdf.format(new Date(r.date)));
             holder.itemView.setOnClickListener(v -> listener.onClick(r)); holder.btnEdit.setOnClickListener(v -> listener.onEdit(r)); holder.btnDelete.setOnClickListener(v -> listener.onDelete(r));
         }
         @Override public int getItemCount() { return routes.size(); }
@@ -867,7 +1112,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isUserAuthenticated() {
-        com.google.firebase.auth.FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null) return false;
         // Só consideramos autenticado se o setup inicial do splash/backup foi concluído
         return sharedPreferences.getBoolean("first_setup_splash_done", false);
@@ -996,14 +1241,14 @@ public class MainActivity extends AppCompatActivity {
     public void openRoutesDrawer() {
         if (drawerLayout != null) {
             // 🔥 Usamos explicitamente START para respeitar o layout e evitar erros de gravidade
-            drawerLayout.openDrawer(androidx.core.view.GravityCompat.START);
+            drawerLayout.openDrawer(GravityCompat.START);
         }
     }
 
     public void openTrackingHistory() {
         KmParentFragment fragment = new KmParentFragment();
         openFragmentInSettings(fragment, "KM Diário");
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
             fragment.switchToHistory();
         }, 200);
     }
@@ -1011,7 +1256,7 @@ public class MainActivity extends AppCompatActivity {
     public void openManualKmHistory() {
         KmParentFragment fragment = new KmParentFragment();
         openFragmentInSettings(fragment, "KM Diário");
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
             fragment.switchToManualHistory();
         }, 200);
     }
