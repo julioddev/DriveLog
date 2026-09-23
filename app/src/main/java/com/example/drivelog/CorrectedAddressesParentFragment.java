@@ -63,13 +63,16 @@ public class CorrectedAddressesParentFragment extends Fragment {
         viewPager.setAdapter(new FragmentStateAdapter(this) {
             @NonNull @Override public Fragment createFragment(int position) {
                 if (position == 0) return new CorrectedAddressesFragment();
-                return new CommunityAddressesFragment();
+                if (position == 1) return new CommunityAddressesFragment();
+                return new QuadrasFragment();
             }
-            @Override public int getItemCount() { return 2; }
+            @Override public int getItemCount() { return 3; }
         });
 
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
-            tab.setText(position == 0 ? "Meus Endereços" : "Comunidade");
+            if (position == 0) tab.setText("Meus Endereços");
+            else if (position == 1) tab.setText("Comunidade");
+            else tab.setText("Quadras");
         }).attach();
 
         return view;

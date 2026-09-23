@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="28dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="@android:color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Título da Quadra -->
+        <TextView
+            android:id="@+id/textQuadraTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🧱 Quadra 104 Norte"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorPrimary" />
+
+        <!-- Localização (Bairro, Cidade) -->
+        <TextView
+            android:id="@+id/textQuadraLocation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Plano Diretor Norte, Palmas"
+            android:textSize="13sp"
+            android:textColor="@android:color/darker_gray"
+            android:layout_marginTop="2dp" />
+
+        <!-- Observações -->
+        <TextView
+            android:id="@+id/textQuadraNotes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Observação: Próximo à feira coberta"
+            android:textSize="12sp"
+            android:textStyle="italic"
+            android:textColor="#555555"
+            android:layout_marginTop="6dp"
+            android:visibility="gone" />
+
+        <!-- Barra de Reações (Curtir / Descurtir) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="14dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnQuadraLike"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="👍 0"
+                android:textSize="13sp"
+                app:cornerRadius="12dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnQuadraDislike"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:text="👎 0"
+                android:textSize="13sp"
+                app:cornerRadius="12dp"/>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#EEEEEE"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Seção de Comentários Integrada -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="💬 Comentários da Comunidade"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_marginBottom="8dp"/>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerQuadraComments"
+            android:layout_width="match_parent"
+            android:layout_height="130dp"
+            android:scrollbars="vertical"/>
+
+        <TextView
+            android:id="@+id/textNoQuadraComments"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="Nenhum comentário ainda. Seja o primeiro!"
+            android:gravity="center"
+            android:textSize="12sp"
+            android:textColor="@android:color/darker_gray"/>
+
+        <!-- Input de Comentário Direto -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp">
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Escreva um comentário...">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editQuadraCommentInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textCapSentences"
+                    android:maxLines="2"
+                    android:textSize="13sp"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <ImageButton
+                android:id="@+id/btnSendQuadraComment"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_circle_dark"
+                android:src="@android:drawable/ic_menu_send"
+                android:padding="12dp"
+                app:tint="@android:color/white"
+                android:contentDescription="Enviar Comentário"/>
+        </LinearLayout>
+
+        <!-- Botão de Excluir (Apenas para o Criador) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDeleteQuadraDialog"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="🗑️ Excluir esta Quadra"
+            android:textColor="#F44336"
+            android:visibility="gone"/>
+
+        <!-- Detalhe do Criador na Parte Inferior (Pequeno) -->
+        <TextView
+            android:id="@+id/textQuadraCreatorDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Adicionado por: Comunidade"
+            android:textSize="10sp"
+            android:textColor="#999999"
+            android:gravity="center"
+            android:layout_marginTop="10dp" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

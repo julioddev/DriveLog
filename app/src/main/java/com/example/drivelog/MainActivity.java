@@ -953,6 +953,28 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public void showQuadraOnMap(double lat, double lon, String quadraName) {
+        if (viewPager != null && viewPager.getAdapter() instanceof ViewPagerAdapter) {
+            int pos = ((ViewPagerAdapter) viewPager.getAdapter()).getPositionForId(R.id.nav_maps);
+            if (viewPager.getCurrentItem() != pos) {
+                viewPager.setCurrentItem(pos, true);
+            }
+        }
+        notifyRouteFragmentsOfQuadra(getSupportFragmentManager(), lat, lon, quadraName);
+    }
+
+    private void notifyRouteFragmentsOfQuadra(FragmentManager fm, double lat, double lon, String quadraName) {
+        if (fm == null) return;
+        for (Fragment f : fm.getFragments()) {
+            if (f instanceof RouteFragment) {
+                ((RouteFragment) f).focusOnQuadra(lat, lon, quadraName);
+            }
+            if (f != null && f.getChildFragmentManager() != null) {
+                notifyRouteFragmentsOfQuadra(f.getChildFragmentManager(), lat, lon, quadraName);
+            }
+        }
+    }
+
     private void notifyRouteFragmentsOfRecording(FragmentManager fm, int routeId) {
         if (fm == null) return;
         for (Fragment f : fm.getFragments()) {

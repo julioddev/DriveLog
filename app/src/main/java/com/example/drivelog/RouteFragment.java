@@ -17,6 +17,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
@@ -814,6 +815,22 @@ public class RouteFragment extends Fragment {
         }
         sharedPreferences.registerOnSharedPreferenceChangeListener(prefListener);
         setupLocationOverlay();
+        refreshQuadraMarkers();
+
+        map.addMapListener(new org.osmdroid.events.MapListener() {
+            @Override
+            public boolean onZoom(org.osmdroid.events.ZoomEvent event) {
+                if (map != null) {
+                    map.post(() -> updateQuadraMarkerSizes());
+                }
+                return false;
+            }
+
+            @Override
+            public boolean onScroll(org.osmdroid.events.ScrollEvent event) {
+                return false;
+            }
+        });
         
         // Overlay para fechar busca ao clicar no mapa
         map.getOverlays().add(new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
@@ -925,7 +942,7 @@ public class RouteFragment extends Fragment {
         fabKmTracking = view.findViewById(R.id.fabKmTracking);
 
         if (fabNewRoute != null) { fabNewRoute.setOnClickListener(v -> promptNewRoute()); if (sharedPreferences.getInt("app_mode", 0) == 1) fabNewRoute.setVisibility(View.GONE); }
-        if (fabAddStop != null) fabAddStop.setOnClickListener(v -> confirmAddStop());
+        if (fabAddStop != null) fabAddStop.setOnClickListener(v -> showAddOptionDialog());
         if (fabCenterMap != null) fabCenterMap.setOnClickListener(v -> toggleMapFocus());
         fabMapOrientation = view.findViewById(R.id.fabMapOrientation);
         if (fabMapOrientation != null) {
@@ -969,7 +986,7 @@ public class RouteFragment extends Fragment {
         setupTimelineListener();
 
         if (btnSearch != null) btnSearch.setOnClickListener(v -> searchAddress(editSearch.getText().toString()));
-        if (btnAddStopManual != null) btnAddStopManual.setOnClickListener(v -> promptManualStop());
+        if (btnAddStopManual != null) btnAddStopManual.setOnClickListener(v -> showAddOptionDialog());
         if (btnRouteMenu != null) {
             btnRouteMenu.setOnClickListener(v -> showRouteOptionsMenu(v));
         }
@@ -2277,6 +2294,710 @@ public class RouteFragment extends Fragment {
         BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream())); StringBuilder res = new StringBuilder(); String l; while((l=r.readLine())!=null) res.append(l); JSONArray a = new JSONArray(res.toString()); List<Suggestion> sl = new ArrayList<>(); for(int i=0; i<a.length(); i++) { JSONObject o = a.getJSONObject(i); sl.add(new Suggestion(o.getString("display_name"), o.getDouble("lat"), o.getDouble("lon"))); } Activity activity = getActivity(); if (activity != null) activity.runOnUiThread(() -> { suggestionsAdapter.setSuggestions(sl); recyclerSuggestions.setVisibility(sl.isEmpty() ? View.GONE : View.VISIBLE); }); } catch(Exception ignored){} }).start(); }
 
     private void onSuggestionClicked(Suggestion s) { isSelectingSuggestion = true; recyclerSuggestions.setVisibility(View.GONE); editSearch.setText(s.displayName); lastSearchedPoint = new GeoPoint(s.lat, s.lon); lastSearchedAddress = s.displayName; if (mapController!=null) { mapController.animateTo(lastSearchedPoint); mapController.setZoom(18.0); } showTempMarker(lastSearchedPoint, lastSearchedAddress); new Handler(Looper.getMainLooper()).postDelayed(() -> { if (isAdded()) { confirmAddStop(); isSelectingSuggestion = false; } }, 600); }
+
+    private void showAddOptionDialog() {
+        if (getContext() == null) return;
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_add_option_selection, null);
+        
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .create();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        View cardAddStop = dialogView.findViewById(R.id.cardOptionAddStop);
+        View cardAddQuadra = dialogView.findViewById(R.id.cardOptionAddQuadra);
+        View btnCancel = dialogView.findViewById(R.id.btnCancelOptionAdd);
+
+        if (cardAddStop != null) {
+            cardAddStop.setOnClickListener(v -> {
+                dialog.dismiss();
+                promptManualStop();
+            });
+        }
+
+        if (cardAddQuadra != null) {
+            cardAddQuadra.setOnClickListener(v -> {
+                dialog.dismiss();
+                startQuadraSelection();
+            });
+        }
+
+        if (btnCancel != null) {
+            btnCancel.setOnClickListener(v -> dialog.dismiss());
+        }
+
+        dialog.show();
+    }
+
+    private org.osmdroid.views.overlay.MapEventsOverlay quadraSelectionOverlay;
+
+    private void startQuadraSelection() {
+        Toast.makeText(requireContext(), "Toque no local do mapa onde fica a Quadra", Toast.LENGTH_LONG).show();
+
+        if (quadraSelectionOverlay != null && map != null) {
+            map.getOverlays().remove(quadraSelectionOverlay);
+        }
+
+        quadraSelectionOverlay = new org.osmdroid.views.overlay.MapEventsOverlay(new org.osmdroid.events.MapEventsReceiver() {
+            @Override
+            public boolean singleTapConfirmedHelper(org.osmdroid.util.GeoPoint p) {
+                if (map != null && quadraSelectionOverlay != null) {
+                    map.getOverlays().remove(quadraSelectionOverlay);
+                    quadraSelectionOverlay = null;
+                    map.invalidate();
+                }
+                promptAddQuadraDialog(p);
+                return true;
+            }
+
+            @Override
+            public boolean longPressHelper(org.osmdroid.util.GeoPoint p) {
+                return false;
+            }
+        });
+
+        if (map != null) {
+            map.getOverlays().add(quadraSelectionOverlay);
+            map.invalidate();
+        }
+    }
+
+    private String getUserDisplayName() {
+        com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        if (user != null && user.getDisplayName() != null && !user.getDisplayName().trim().isEmpty()) {
+            return user.getDisplayName().trim();
+        }
+        if (getContext() != null) {
+            String prefName = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                    .getString("user_display_name", "");
+            if (!prefName.trim().isEmpty()) return prefName.trim();
+        }
+        if (user != null && user.getEmail() != null && !user.getEmail().isEmpty()) {
+            return user.getEmail().split("@")[0];
+        }
+        return "Entregador";
+    }
+
+    private void promptAddQuadraDialog(org.osmdroid.util.GeoPoint p) {
+        if (p == null || getContext() == null) return;
+
+        View v = getLayoutInflater().inflate(R.layout.dialog_add_quadra, null);
+        EditText editName = v.findViewById(R.id.editDialogQuadraName);
+        EditText editNeighborhood = v.findViewById(R.id.editDialogQuadraNeighborhood);
+        EditText editCity = v.findViewById(R.id.editDialogQuadraCity);
+        EditText editNotes = v.findViewById(R.id.editDialogQuadraNotes);
+
+        com.google.android.material.button.MaterialButton btnSave = v.findViewById(R.id.btnSaveAddQuadra);
+        com.google.android.material.button.MaterialButton btnCancel = v.findViewById(R.id.btnCancelAddQuadra);
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(v)
+                .create();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        // 🔥 Auto-preenchimento do Bairro e Cidade via Geocoding em segundo plano
+        if (editNeighborhood != null && editCity != null) {
+            new Thread(() -> {
+                try {
+                    String uniqueId = android.provider.Settings.Secure.getString(requireContext().getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+                    String userAgent = "DriveLogApp_v141_" + uniqueId;
+                    String urlStr = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=json", p.getLatitude(), p.getLongitude());
+
+                    HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
+                    c.setRequestProperty("User-Agent", userAgent);
+                    if (c.getResponseCode() == 200) {
+                        BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+                        StringBuilder res = new StringBuilder();
+                        String l;
+                        while ((l = r.readLine()) != null) res.append(l);
+                        JSONObject json = new JSONObject(res.toString());
+                        if (json.has("address")) {
+                            JSONObject addr = json.getJSONObject("address");
+                            String neigh = addr.optString("suburb", addr.optString("neighbourhood", addr.optString("district", "")));
+                            String city = addr.optString("city", addr.optString("town", addr.optString("municipality", "")));
+
+                            Activity act = getActivity();
+                            if (act != null) {
+                                act.runOnUiThread(() -> {
+                                    if (editNeighborhood != null && !neigh.isEmpty()) {
+                                        editNeighborhood.setText(neigh);
+                                    }
+                                    if (editCity != null && !city.isEmpty()) {
+                                        editCity.setText(city);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }).start();
+        }
+
+        if (btnCancel != null) {
+            btnCancel.setOnClickListener(view -> dialog.dismiss());
+        }
+
+        if (btnSave != null) {
+            btnSave.setOnClickListener(view -> {
+                String name = editName != null ? editName.getText().toString().trim() : "";
+                String neighborhood = editNeighborhood != null ? editNeighborhood.getText().toString().trim() : "";
+                String city = editCity != null ? editCity.getText().toString().trim() : "";
+                String notes = editNotes != null ? editNotes.getText().toString().trim() : "";
+
+                if (name.isEmpty()) {
+                    Toast.makeText(getContext(), "Digite o nome da Quadra", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                dialog.dismiss();
+
+                new Thread(() -> {
+                    String currentUserId = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                            .getString("current_user_id", "anon");
+                    String currentUserName = getUserDisplayName();
+
+                    CorrectedQuadra quadra = new CorrectedQuadra(name, neighborhood, city, p.getLatitude(), p.getLongitude());
+                    quadra.notes = notes;
+                    quadra.creatorId = currentUserId;
+                    quadra.creatorName = currentUserName;
+
+                    AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                    dao.insertCorrectedQuadra(quadra);
+
+                    FirebaseHelper.uploadQuadra(currentUserId, currentUserName, quadra, null);
+
+                    Activity act = getActivity();
+                    if (act != null) {
+                        act.runOnUiThread(() -> {
+                            Toast.makeText(getContext(), "🧱 Quadra '" + name + "' cadastrada com sucesso!", Toast.LENGTH_LONG).show();
+                            refreshQuadraMarkers();
+                        });
+                    }
+                }).start();
+            });
+        }
+
+        dialog.show();
+    }
+
+    public void focusOnQuadra(double lat, double lon, String quadraName) {
+        if (mapController != null && lat != 0 && lon != 0) {
+            org.osmdroid.util.GeoPoint gp = new org.osmdroid.util.GeoPoint(lat, lon);
+            mapController.animateTo(gp);
+            mapController.setZoom(18.5);
+            Toast.makeText(getContext(), "📍 Exibindo Quadra: " + quadraName, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void refreshQuadraMarkers() {
+        if (map == null || !isAdded()) return;
+
+        new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+            List<CorrectedQuadra> localQuadras = dao.getAllCorrectedQuadras();
+
+            FirebaseHelper.getAllGlobalQuadras(new FirebaseHelper.GlobalQuadrasCallback() {
+                @Override
+                public void onResult(List<CorrectedQuadra> globalQuadras) {
+                    List<CorrectedQuadra> combined = new ArrayList<>(localQuadras);
+                    if (globalQuadras != null) {
+                        for (CorrectedQuadra gq : globalQuadras) {
+                            boolean exists = false;
+                            for (CorrectedQuadra lq : localQuadras) {
+                                if (lq.name != null && lq.name.equalsIgnoreCase(gq.name) &&
+                                    (lq.neighborhood == null || gq.neighborhood == null || lq.neighborhood.equalsIgnoreCase(gq.neighborhood))) {
+                                    lq.likes = gq.likes;
+                                    lq.dislikes = gq.dislikes;
+                                    if (gq.docId != null) lq.docId = gq.docId;
+                                    if (gq.notes != null && !gq.notes.isEmpty()) lq.notes = gq.notes;
+                                    if (gq.creatorId != null) lq.creatorId = gq.creatorId;
+                                    if (gq.creatorName != null) lq.creatorName = gq.creatorName;
+                                    exists = true;
+                                    break;
+                                }
+                            }
+                            if (!exists) combined.add(gq);
+                        }
+                    }
+
+                    Activity act = getActivity();
+                    if (act != null) {
+                        act.runOnUiThread(() -> {
+                            if (map == null || !isAdded()) return;
+
+                            map.getOverlays().removeIf(o -> o instanceof Marker && ((Marker) o).getRelatedObject() instanceof CorrectedQuadra);
+
+                            double zoom = map.getZoomLevelDouble();
+                            int tier;
+                            if (zoom < 14.0) {
+                                tier = 0;
+                            } else if (zoom < 16.0) {
+                                tier = 1;
+                            } else {
+                                tier = 2;
+                            }
+                            currentQuadraZoomTier = tier;
+
+                            for (CorrectedQuadra q : combined) {
+                                if (q.latitude == 0 || q.longitude == 0) continue;
+
+                                Marker m = new Marker(map);
+                                m.setRelatedObject(q);
+                                m.setPosition(new org.osmdroid.util.GeoPoint(q.latitude, q.longitude));
+                                m.setTitle("🧱 " + q.name + (q.neighborhood != null && !q.neighborhood.isEmpty() ? " (" + q.neighborhood + ")" : ""));
+
+                                Bitmap bmp = generateQuadraMarkerBitmap(q.name, tier);
+                                m.setIcon(new BitmapDrawable(getResources(), bmp));
+
+                                m.setOnMarkerClickListener((marker, mapView) -> {
+                                    showQuadraDetailsDialog(q);
+                                    return true;
+                                });
+
+                                map.getOverlays().add(m);
+                            }
+                            map.invalidate();
+                        });
+                    }
+                }
+
+                @Override
+                public void onError(String message) {}
+            });
+        }).start();
+    }
+
+    private int currentQuadraZoomTier = -1;
+
+    private void updateQuadraMarkerSizes() {
+        if (map == null || !isAdded()) return;
+        double zoom = map.getZoomLevelDouble();
+        int tier;
+        if (zoom < 14.0) {
+            tier = 0; // Muito longe: pontinho discreto (18dp)
+        } else if (zoom < 16.0) {
+            tier = 1; // Médio afastamento: badge compacto (32dp)
+        } else {
+            tier = 2; // Zoom próximo: badge completo com o nome da quadra (64dp)
+        }
+
+        if (tier != currentQuadraZoomTier) {
+            currentQuadraZoomTier = tier;
+            for (org.osmdroid.views.overlay.Overlay o : map.getOverlays()) {
+                if (o instanceof Marker && ((Marker) o).getRelatedObject() instanceof CorrectedQuadra) {
+                    Marker m = (Marker) o;
+                    CorrectedQuadra q = (CorrectedQuadra) m.getRelatedObject();
+                    Bitmap bmp = generateQuadraMarkerBitmap(q.name, tier);
+                    m.setIcon(new BitmapDrawable(getResources(), bmp));
+                }
+            }
+            map.invalidate();
+        }
+    }
+
+    private Bitmap generateQuadraMarkerBitmap(String name, int tier) {
+        // tier 0 = muito longe (pontinho compacto 18px)
+        // tier 1 = intermediário (quadradinho 32px)
+        // tier 2 = perto (badge completo 64px com nome)
+        int size = (tier == 0) ? 18 : (tier == 1 ? 32 : 64);
+        Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        p.setColor(Color.parseColor("#795548")); // Tom marrom da quadra
+        p.setStyle(Paint.Style.FILL);
+
+        if (tier == 0) {
+            // Apenas uma bolinha discreta com borda branca
+            c.drawCircle(size / 2f, size / 2f, (size / 2f) - 1, p);
+            p.setColor(Color.WHITE);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(1.5f);
+            c.drawCircle(size / 2f, size / 2f, (size / 2f) - 1, p);
+        } else if (tier == 1) {
+            // Quadrado compacto arredondado com mini ponto central
+            float rx = 6f;
+            c.drawRoundRect(new RectF(1.5f, 1.5f, size - 1.5f, size - 1.5f), rx, rx, p);
+
+            p.setColor(Color.WHITE);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(2f);
+            c.drawRoundRect(new RectF(1.5f, 1.5f, size - 1.5f, size - 1.5f), rx, rx, p);
+
+            p.setStyle(Paint.Style.FILL);
+            c.drawCircle(size / 2f, size / 2f, 3.5f, p);
+        } else {
+            // Zoom detalhado: badge completo com o nome da quadra
+            float rx = 12f;
+            c.drawRoundRect(new RectF(2, 2, size - 2, size - 2), rx, rx, p);
+
+            p.setColor(Color.WHITE);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(2.5f);
+            c.drawRoundRect(new RectF(2, 2, size - 2, size - 2), rx, rx, p);
+
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.WHITE);
+            p.setTextSize(20f);
+            p.setTextAlign(Paint.Align.CENTER);
+            String text = (name != null && name.length() > 6) ? name.substring(0, 6) : (name != null ? name : "QD");
+            Paint.FontMetrics fm = p.getFontMetrics();
+            float textY = (size / 2f) - (fm.ascent + fm.descent) / 2f;
+            c.drawText(text, size / 2f, textY, p);
+        }
+
+        return b;
+    }
+
+    private void showQuadraDetailsDialog(CorrectedQuadra q) {
+        if (q == null || getContext() == null) return;
+
+        View v = getLayoutInflater().inflate(R.layout.dialog_quadra_details, null);
+        TextView textTitle = v.findViewById(R.id.textQuadraTitle);
+        TextView textLocation = v.findViewById(R.id.textQuadraLocation);
+        TextView textNotes = v.findViewById(R.id.textQuadraNotes);
+        TextView textCreatorDetail = v.findViewById(R.id.textQuadraCreatorDetail);
+
+        com.google.android.material.button.MaterialButton btnLike = v.findViewById(R.id.btnQuadraLike);
+        com.google.android.material.button.MaterialButton btnDislike = v.findViewById(R.id.btnQuadraDislike);
+        com.google.android.material.button.MaterialButton btnDelete = v.findViewById(R.id.btnDeleteQuadraDialog);
+
+        RecyclerView recyclerComments = v.findViewById(R.id.recyclerQuadraComments);
+        TextView textNoComments = v.findViewById(R.id.textNoQuadraComments);
+        EditText editCommentInput = v.findViewById(R.id.editQuadraCommentInput);
+        ImageButton btnSendComment = v.findViewById(R.id.btnSendQuadraComment);
+
+        if (textTitle != null) textTitle.setText("🧱 " + (q.name != null ? q.name : "Quadra"));
+
+        StringBuilder locBuilder = new StringBuilder();
+        if (q.neighborhood != null && !q.neighborhood.isEmpty()) locBuilder.append(q.neighborhood);
+        if (q.city != null && !q.city.isEmpty()) {
+            if (locBuilder.length() > 0) locBuilder.append(", ");
+            locBuilder.append(q.city);
+        }
+        if (textLocation != null) textLocation.setText(locBuilder.length() > 0 ? locBuilder.toString() : "Localização cadastrada");
+
+        if (textNotes != null) {
+            if (q.notes != null && !q.notes.isEmpty()) {
+                textNotes.setText("Observação: " + q.notes);
+                textNotes.setVisibility(View.VISIBLE);
+            } else {
+                textNotes.setVisibility(View.GONE);
+            }
+        }
+
+        String creatorName = (q.creatorName != null && !q.creatorName.isEmpty()) ? q.creatorName : "Comunidade";
+        if (textCreatorDetail != null) {
+            textCreatorDetail.setText("Adicionado por: " + creatorName);
+        }
+
+        String currentUserId = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                .getString("current_user_id", "anon");
+        String currentUserName = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                .getString("user_display_name", "Entregador");
+
+        boolean isMine = (q.creatorId != null && q.creatorId.equals(currentUserId));
+        if (btnDelete != null) {
+            btnDelete.setVisibility(isMine ? View.VISIBLE : View.GONE);
+        }
+
+        final int[] likesCount = {q.likes};
+        final int[] dislikesCount = {q.dislikes};
+        final Boolean[] userVote = {null};
+
+        if (btnLike != null) btnLike.setText("👍 " + likesCount[0]);
+        if (btnDislike != null) btnDislike.setText("👎 " + dislikesCount[0]);
+
+        int defaultBgColor = Color.parseColor("#E0E0E0");
+        int activeLikeColor = Color.parseColor("#4CAF50");
+        int activeDislikeColor = Color.parseColor("#F44336");
+
+        // Busca a contagem atualizada do Firebase para garantir precisão
+        FirebaseHelper.getQuadraDetails(q.name, q.neighborhood, (freshLikes, freshDislikes) -> {
+            if (isAdded()) {
+                q.likes = freshLikes;
+                q.dislikes = freshDislikes;
+                likesCount[0] = freshLikes;
+                dislikesCount[0] = freshDislikes;
+                if (btnLike != null) btnLike.setText("👍 " + likesCount[0]);
+                if (btnDislike != null) btnDislike.setText("👎 " + dislikesCount[0]);
+            }
+        });
+
+        // Busca o voto prévio do usuário
+        FirebaseHelper.getUserQuadraVote(q.name, q.neighborhood, currentUserId, isLike -> {
+            if (isAdded()) {
+                userVote[0] = isLike;
+                if (Boolean.TRUE.equals(isLike) && btnLike != null) {
+                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeLikeColor));
+                    btnLike.setTextColor(Color.WHITE);
+                } else if (Boolean.FALSE.equals(isLike) && btnDislike != null) {
+                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeDislikeColor));
+                    btnDislike.setTextColor(Color.WHITE);
+                }
+            }
+        });
+
+        // Configura Lógica de Voto Único / Alternância de Like
+        if (btnLike != null) {
+            btnLike.setOnClickListener(view -> {
+                if (Boolean.TRUE.equals(userVote[0])) {
+                    userVote[0] = null;
+                    likesCount[0] = Math.max(0, likesCount[0] - 1);
+                    q.likes = likesCount[0];
+                    q.dislikes = dislikesCount[0];
+                    btnLike.setText("👍 " + likesCount[0]);
+                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(defaultBgColor));
+                    btnLike.setTextColor(Color.parseColor("#333333"));
+                    FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, true, null, currentUserName, currentUserId);
+                } else if (Boolean.FALSE.equals(userVote[0])) {
+                    userVote[0] = true;
+                    dislikesCount[0] = Math.max(0, dislikesCount[0] - 1);
+                    likesCount[0]++;
+                    q.likes = likesCount[0];
+                    q.dislikes = dislikesCount[0];
+                    btnLike.setText("👍 " + likesCount[0]);
+                    btnDislike.setText("👎 " + dislikesCount[0]);
+                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeLikeColor));
+                    btnLike.setTextColor(Color.WHITE);
+                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(defaultBgColor));
+                    btnDislike.setTextColor(Color.parseColor("#333333"));
+                    FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, true, null, currentUserName, currentUserId);
+                } else {
+                    userVote[0] = true;
+                    likesCount[0]++;
+                    q.likes = likesCount[0];
+                    q.dislikes = dislikesCount[0];
+                    btnLike.setText("👍 " + likesCount[0]);
+                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeLikeColor));
+                    btnLike.setTextColor(Color.WHITE);
+                    FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, true, null, currentUserName, currentUserId);
+                }
+            });
+        }
+
+        // Configura Lógica de Voto Único / Alternância de Dislike
+        if (btnDislike != null) {
+            btnDislike.setOnClickListener(view -> {
+                if (Boolean.FALSE.equals(userVote[0])) {
+                    userVote[0] = null;
+                    dislikesCount[0] = Math.max(0, dislikesCount[0] - 1);
+                    q.likes = likesCount[0];
+                    q.dislikes = dislikesCount[0];
+                    btnDislike.setText("👎 " + dislikesCount[0]);
+                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(defaultBgColor));
+                    btnDislike.setTextColor(Color.parseColor("#333333"));
+                    FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, false, null, currentUserName, currentUserId);
+                } else if (Boolean.TRUE.equals(userVote[0])) {
+                    userVote[0] = false;
+                    likesCount[0] = Math.max(0, likesCount[0] - 1);
+                    dislikesCount[0]++;
+                    q.likes = likesCount[0];
+                    q.dislikes = dislikesCount[0];
+                    btnLike.setText("👍 " + likesCount[0]);
+                    btnDislike.setText("👎 " + dislikesCount[0]);
+                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeDislikeColor));
+                    btnDislike.setTextColor(Color.WHITE);
+                    btnLike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(defaultBgColor));
+                    btnLike.setTextColor(Color.parseColor("#333333"));
+                    FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, false, null, currentUserName, currentUserId);
+                } else {
+                    userVote[0] = false;
+                    dislikesCount[0]++;
+                    q.likes = likesCount[0];
+                    q.dislikes = dislikesCount[0];
+                    btnDislike.setText("👎 " + dislikesCount[0]);
+                    btnDislike.setBackgroundTintList(android.content.res.ColorStateList.valueOf(activeDislikeColor));
+                    btnDislike.setTextColor(Color.WHITE);
+                    FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, false, null, currentUserName, currentUserId);
+                }
+            });
+        }
+
+        // --- Configuração da Lista de Comentários Inline ---
+        if (recyclerComments != null) {
+            recyclerComments.setLayoutManager(new LinearLayoutManager(getContext()));
+        }
+
+        List<Map<String, Object>> commentsList = new ArrayList<>();
+        RecyclerView.Adapter<RecyclerView.ViewHolder> commentAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+            @NonNull
+            @Override
+            public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+                View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_quadra_comment, parent, false);
+                return new RecyclerView.ViewHolder(view) {};
+            }
+
+            @Override
+            public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+                Map<String, Object> item = commentsList.get(position);
+                TextView txtUser = holder.itemView.findViewById(R.id.textCommentUser);
+                TextView txtTime = holder.itemView.findViewById(R.id.textCommentTime);
+                TextView txtBody = holder.itemView.findViewById(R.id.textCommentBody);
+                ImageButton btnDelComment = holder.itemView.findViewById(R.id.btnDeleteComment);
+
+                if (txtUser != null) txtUser.setText((String) item.getOrDefault("user", "Anônimo"));
+                if (txtBody != null) txtBody.setText((String) item.getOrDefault("text", ""));
+                
+                if (txtTime != null) {
+                    Object dateObj = item.get("date");
+                    if (dateObj instanceof com.google.firebase.Timestamp) {
+                        long ts = ((com.google.firebase.Timestamp) dateObj).toDate().getTime();
+                        txtTime.setText(android.text.format.DateUtils.getRelativeTimeSpanString(ts, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS));
+                    } else {
+                        txtTime.setText("agora");
+                    }
+                }
+
+                String commentDocId = (String) item.get("docId");
+                String commentUserId = (String) item.get("userId");
+
+                com.google.firebase.auth.FirebaseUser fUser = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+                String myEmail = fUser != null ? fUser.getEmail() : "";
+                String myUid = fUser != null ? fUser.getUid() : "";
+
+                boolean isCommentMine = (commentUserId != null && (commentUserId.equals(currentUserId) || commentUserId.equals(myUid) || (myEmail != null && commentUserId.equalsIgnoreCase(myEmail))));
+
+                if (btnDelComment != null) {
+                    btnDelComment.setVisibility(isCommentMine ? View.VISIBLE : View.GONE);
+                    btnDelComment.setOnClickListener(vDel -> {
+                        showModernConfirmDialog("Excluir Comentário", "Deseja apagar o seu comentário?", "EXCLUIR", () -> {
+                            FirebaseHelper.deleteQuadraComment(q.name, q.neighborhood, commentDocId, null);
+                            Toast.makeText(getContext(), "Comentário excluído", Toast.LENGTH_SHORT).show();
+                        });
+                    });
+                }
+            }
+
+            @Override
+            public int getItemCount() {
+                return commentsList.size();
+            }
+        };
+
+        if (recyclerComments != null) {
+            recyclerComments.setAdapter(commentAdapter);
+        }
+
+        // Escuta comentários em tempo real da Quadra
+        com.google.firebase.firestore.ListenerRegistration commentsListener = FirebaseHelper.listenQuadraComments(q.name, q.neighborhood, list -> {
+            if (isAdded()) {
+                commentsList.clear();
+                if (list != null) commentsList.addAll(list);
+                commentAdapter.notifyDataSetChanged();
+
+                if (textNoComments != null) {
+                    textNoComments.setVisibility(commentsList.isEmpty() ? View.VISIBLE : View.GONE);
+                }
+                if (recyclerComments != null) {
+                    recyclerComments.setVisibility(commentsList.isEmpty() ? View.GONE : View.VISIBLE);
+                    if (!commentsList.isEmpty()) {
+                        recyclerComments.scrollToPosition(commentsList.size() - 1);
+                    }
+                }
+            }
+        });
+
+        // Envio Direto de Comentários no Mesmo Popup
+        if (btnSendComment != null) {
+            btnSendComment.setOnClickListener(view -> {
+                String commentText = editCommentInput != null ? editCommentInput.getText().toString().trim() : "";
+                if (commentText.isEmpty()) {
+                    Toast.makeText(getContext(), "Escreva um comentário antes de enviar", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                String myGoogleName = getUserDisplayName();
+                FirebaseHelper.addQuadraFeedback(q.name, q.neighborhood, q.city, q.latitude, q.longitude, null, commentText, myGoogleName, currentUserId);
+                if (editCommentInput != null) editCommentInput.setText("");
+                Toast.makeText(getContext(), "Comentário enviado!", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(v)
+                .create();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        dialog.setOnDismissListener(dialogInterface -> {
+            if (commentsListener != null) commentsListener.remove();
+        });
+
+        if (btnDelete != null) {
+            btnDelete.setOnClickListener(view -> {
+                dialog.dismiss();
+                showModernConfirmDialog("Excluir Quadra", "Deseja realmente excluir a Quadra " + q.name + "?", "EXCLUIR", () -> {
+                    new Thread(() -> {
+                        AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                        dao.deleteCorrectedQuadraByNameAndNeighborhood(q.name, q.neighborhood);
+                        
+                        String docIdToDel = q.docId;
+                        if (docIdToDel == null || docIdToDel.isEmpty()) {
+                            String namePart = q.name != null ? q.name : "quadra";
+                            String neighPart = q.neighborhood != null ? q.neighborhood : "";
+                            // Usa a mesma lógica de sanitização do FirebaseHelper
+                            docIdToDel = namePart.trim().toLowerCase().replace(" ", "_").replaceAll("[^a-z0-9_]", "") + "_" +
+                                         neighPart.trim().toLowerCase().replace(" ", "_").replaceAll("[^a-z0-9_]", "");
+                        }
+                        FirebaseHelper.deleteGlobalQuadra(docIdToDel, null);
+
+                        Activity act = getActivity();
+                        if (act != null) {
+                            act.runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Quadra excluída", Toast.LENGTH_SHORT).show();
+                                refreshQuadraMarkers();
+                            });
+                        }
+                    }).start();
+                });
+            });
+        }
+
+        dialog.show();
+    }
+
+    private void showModernConfirmDialog(String title, String message, String positiveText, Runnable onConfirm) {
+        if (getContext() == null) return;
+        View view = getLayoutInflater().inflate(R.layout.dialog_modern_confirm, null);
+        TextView txtTitle = view.findViewById(R.id.textModernTitle);
+        TextView txtMessage = view.findViewById(R.id.textModernMessage);
+        com.google.android.material.button.MaterialButton btnNegative = view.findViewById(R.id.btnModernNegative);
+        com.google.android.material.button.MaterialButton btnPositive = view.findViewById(R.id.btnModernPositive);
+
+        if (txtTitle != null) txtTitle.setText(title);
+        if (txtMessage != null) txtMessage.setText(message);
+        if (btnPositive != null) btnPositive.setText(positiveText);
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(view)
+                .create();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        if (btnNegative != null) {
+            btnNegative.setOnClickListener(v -> dialog.dismiss());
+        }
+
+        if (btnPositive != null) {
+            btnPositive.setOnClickListener(v -> {
+                dialog.dismiss();
+                if (onConfirm != null) onConfirm.run();
+            });
+        }
+
+        dialog.show();
+    }
 
     private void searchAddress(String q) { if (!q.isEmpty()) fetchSuggestions(q); }
 

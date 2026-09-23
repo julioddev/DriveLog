@@ -18,6 +18,7 @@ import java.util.Map;
 public class FirebaseHelper {
 
     private static final String COLLECTION_GLOBAL_FIX = "global_corrected_addresses";
+    private static final String COLLECTION_GLOBAL_QUADRAS = "global_quadras";
     private static final String COLLECTION_DELETION_REQUESTS = "deletion_requests";
     private static final String COLLECTION_USERS = "users";
     private static final String COLLECTION_USERNAMES = "usernames";
@@ -1346,5 +1347,272 @@ public class FirebaseHelper {
             for (String id : d2) if (!all.contains(id)) all.add(id);
         }
         cb.onUpdate(all);
+    }
+
+    // --- SISTEMA DE QUADRAS DA COMUNIDADE ---
+
+    public interface GlobalQuadrasCallback {
+        void onResult(List<CorrectedQuadra> quadras);
+        void onError(String message);
+    }
+
+    public static void uploadQuadra(String creatorId, String creatorName, CorrectedQuadra quadra, GlobalUploadCallback callback) {
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String namePart = quadra.name != null ? quadra.name : "quadra";
+        String neighPart = quadra.neighborhood != null ? quadra.neighborhood : "";
+        String docId = sanitizeAddressId(namePart + "_" + neighPart);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", quadra.name);
+        data.put("neighborhood", quadra.neighborhood != null ? quadra.neighborhood : "");
+        data.put("city", quadra.city != null ? quadra.city : "");
+        data.put("latitude", quadra.latitude);
+        data.put("longitude", quadra.longitude);
+        data.put("notes", quadra.notes != null ? quadra.notes : "");
+        data.put("creatorId", creatorId != null ? creatorId : "anon");
+        data.put("creatorName", creatorName != null ? creatorName : "Entregador");
+        data.put("updatedAt", FieldValue.serverTimestamp());
+
+        db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId).get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        data.put("lastUpdate", FieldValue.serverTimestamp());
+                        db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId).update(data)
+                                .addOnSuccessListener(aVoid -> { if (callback != null) callback.onSuccess(); })
+                                .addOnFailureListener(e -> { if (callback != null) callback.onFailure(e.getMessage()); });
+                    } else {
+                        data.put("likes", 0);
+                        data.put("dislikes", 0);
+                        data.put("lastUpdate", FieldValue.serverTimestamp());
+                        db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId).set(data)
+                                .addOnSuccessListener(aVoid -> { if (callback != null) callback.onSuccess(); })
+                                .addOnFailureListener(e -> { if (callback != null) callback.onFailure(e.getMessage()); });
+                    }
+                })
+                .addOnFailureListener(e -> { if (callback != null) callback.onFailure(e.getMessage()); });
+    }
+
+    public static void getAllGlobalQuadras(GlobalQuadrasCallback callback) {
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        db.collection(COLLECTION_GLOBAL_QUADRAS)
+                .orderBy("name", com.google.firebase.firestore.Query.Direction.ASCENDING)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    List<CorrectedQuadra> result = new ArrayList<>();
+                    for (DocumentSnapshot doc : queryDocumentSnapshots) {
+                        String name = doc.getString("name");
+                        Double lat = doc.getDouble("latitude");
+                        Double lon = doc.getDouble("longitude");
+
+                        if (name != null && lat != null && lon != null) {
+                            CorrectedQuadra q = new CorrectedQuadra(
+                                    name,
+                                    doc.getString("neighborhood"),
+                                    doc.getString("city"),
+                                    lat,
+                                    lon
+                            );
+                            q.notes = doc.getString("notes");
+                            q.creatorId = doc.getString("creatorId");
+                            q.creatorName = doc.getString("creatorName");
+                            q.docId = doc.getId();
+                            Long likes = doc.getLong("likes");
+                            Long dislikes = doc.getLong("dislikes");
+                            q.likes = likes != null ? likes.intValue() : 0;
+                            q.dislikes = dislikes != null ? dislikes.intValue() : 0;
+                            result.add(q);
+                        }
+                    }
+                    if (callback != null) callback.onResult(result);
+                })
+                .addOnFailureListener(e -> {
+                    if (callback != null) callback.onError(e.getMessage());
+                });
+    }
+
+    public static void deleteGlobalQuadra(String docId, GlobalUploadCallback callback) {
+        if (docId == null || docId.isEmpty()) return;
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId).delete()
+                .addOnSuccessListener(aVoid -> { if (callback != null) callback.onSuccess(); })
+                .addOnFailureListener(e -> { if (callback != null) callback.onFailure(e.getMessage()); });
+    }
+
+    public static void addQuadraFeedback(String name, String neighborhood, String city, double latitude, double longitude, Boolean isLike, String comment, String userName, String userId) {
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String namePart = name != null ? name : "quadra";
+        String neighPart = neighborhood != null ? neighborhood : "";
+        String docId = sanitizeAddressId(namePart + "_" + neighPart);
+
+        DocumentReference docRef = db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId);
+        DocumentReference userVoteRef = docRef.collection("user_votes").document(userId);
+
+        if (isLike != null) {
+            db.runTransaction(transaction -> {
+                DocumentSnapshot quadraDoc = transaction.get(docRef);
+                DocumentSnapshot voteDoc = transaction.get(userVoteRef);
+
+                long currentLikes = 0;
+                if (quadraDoc.exists() && quadraDoc.get("likes") != null) {
+                    Long l = quadraDoc.getLong("likes");
+                    if (l != null) currentLikes = l;
+                }
+                long currentDislikes = 0;
+                if (quadraDoc.exists() && quadraDoc.get("dislikes") != null) {
+                    Long d = quadraDoc.getLong("dislikes");
+                    if (d != null) currentDislikes = d;
+                }
+
+                int likeDelta = 0;
+                int dislikeDelta = 0;
+
+                if (voteDoc.exists()) {
+                    Boolean oldIsLike = voteDoc.getBoolean("isLike");
+                    if (oldIsLike != null) {
+                        if (oldIsLike.equals(isLike)) {
+                            if (isLike) likeDelta = -1; else dislikeDelta = -1;
+                            transaction.delete(userVoteRef);
+                        } else {
+                            if (isLike) { likeDelta = 1; dislikeDelta = -1; }
+                            else { likeDelta = -1; dislikeDelta = 1; }
+                            Map<String, Object> vData = new HashMap<>();
+                            vData.put("isLike", isLike);
+                            vData.put("timestamp", FieldValue.serverTimestamp());
+                            transaction.set(userVoteRef, vData);
+                        }
+                    }
+                } else {
+                    if (isLike) likeDelta = 1; else dislikeDelta = 1;
+                    Map<String, Object> vData = new HashMap<>();
+                    vData.put("isLike", isLike);
+                    vData.put("timestamp", FieldValue.serverTimestamp());
+                    transaction.set(userVoteRef, vData);
+                }
+
+                Map<String, Object> qData = new HashMap<>();
+                long newLikes = Math.max(0, currentLikes + likeDelta);
+                long newDislikes = Math.max(0, currentDislikes + dislikeDelta);
+
+                qData.put("likes", newLikes);
+                qData.put("dislikes", newDislikes);
+                if (name != null) qData.put("name", name);
+                if (neighborhood != null) qData.put("neighborhood", neighborhood);
+                if (city != null) qData.put("city", city);
+                if (latitude != 0) qData.put("latitude", latitude);
+                if (longitude != 0) qData.put("longitude", longitude);
+
+                transaction.set(docRef, qData, SetOptions.merge());
+                return null;
+            }).addOnSuccessListener(aVoid -> Log.d("FirebaseHelper", "Voto na quadra " + docId + " gravado com sucesso!"))
+              .addOnFailureListener(e -> Log.e("FirebaseHelper", "Voto na quadra falhou: " + e.getMessage()));
+        }
+
+        if (comment != null && !comment.trim().isEmpty()) {
+            Map<String, Object> commentData = new HashMap<>();
+            commentData.put("text", comment);
+            commentData.put("user", userName);
+            commentData.put("userId", userId);
+            commentData.put("date", FieldValue.serverTimestamp());
+            docRef.collection("comments").add(commentData)
+                .addOnSuccessListener(ref -> docRef.update("commentCount", FieldValue.increment(1)));
+        }
+    }
+
+    public interface SingleQuadraCallback {
+        void onResult(int likes, int dislikes);
+    }
+
+    public static void getQuadraDetails(String name, String neighborhood, SingleQuadraCallback callback) {
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String namePart = name != null ? name : "quadra";
+        String neighPart = neighborhood != null ? neighborhood : "";
+        String docId = sanitizeAddressId(namePart + "_" + neighPart);
+
+        db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId)
+                .get()
+                .addOnSuccessListener(doc -> {
+                    if (doc != null && doc.exists()) {
+                        Long l = doc.getLong("likes");
+                        Long d = doc.getLong("dislikes");
+                        int likes = l != null ? l.intValue() : 0;
+                        int dislikes = d != null ? d.intValue() : 0;
+                        if (callback != null) callback.onResult(likes, dislikes);
+                    }
+                });
+    }
+
+    public interface UserVoteCallback {
+        void onVote(Boolean isLike);
+    }
+
+    public static void getUserQuadraVote(String name, String neighborhood, String userId, UserVoteCallback callback) {
+        if (userId == null || userId.isEmpty()) {
+            if (callback != null) callback.onVote(null);
+            return;
+        }
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String namePart = name != null ? name : "quadra";
+        String neighPart = neighborhood != null ? neighborhood : "";
+        String docId = sanitizeAddressId(namePart + "_" + neighPart);
+
+        db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId)
+                .collection("user_votes").document(userId)
+                .get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        Boolean isLike = doc.getBoolean("isLike");
+                        if (callback != null) callback.onVote(isLike);
+                    } else {
+                        if (callback != null) callback.onVote(null);
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    if (callback != null) callback.onVote(null);
+                });
+    }
+
+    public interface QuadraCommentsCallback {
+        void onCommentsUpdated(List<Map<String, Object>> comments);
+    }
+
+    public static ListenerRegistration listenQuadraComments(String name, String neighborhood, QuadraCommentsCallback callback) {
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String namePart = name != null ? name : "quadra";
+        String neighPart = neighborhood != null ? neighborhood : "";
+        String docId = sanitizeAddressId(namePart + "_" + neighPart);
+
+        return db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId)
+                .collection("comments")
+                .orderBy("date", com.google.firebase.firestore.Query.Direction.ASCENDING)
+                .addSnapshotListener((snapshot, e) -> {
+                    if (e != null || snapshot == null) return;
+                    List<Map<String, Object>> list = new ArrayList<>();
+                    for (DocumentSnapshot doc : snapshot.getDocuments()) {
+                        Map<String, Object> data = doc.getData();
+                        if (data != null) {
+                            data.put("docId", doc.getId());
+                            list.add(data);
+                        }
+                    }
+                    if (callback != null) callback.onCommentsUpdated(list);
+                });
+    }
+
+    public static void deleteQuadraComment(String name, String neighborhood, String commentDocId, GlobalUploadCallback callback) {
+        if (commentDocId == null || commentDocId.isEmpty()) return;
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String namePart = name != null ? name : "quadra";
+        String neighPart = neighborhood != null ? neighborhood : "";
+        String docId = sanitizeAddressId(namePart + "_" + neighPart);
+
+        DocumentReference docRef = db.collection(COLLECTION_GLOBAL_QUADRAS).document(docId);
+        docRef.collection("comments").document(commentDocId).delete()
+                .addOnSuccessListener(aVoid -> {
+                    docRef.update("commentCount", FieldValue.increment(-1));
+                    if (callback != null) callback.onSuccess();
+                })
+                .addOnFailureListener(e -> {
+                    if (callback != null) callback.onFailure(e.getMessage());
+                });
     }
 }

@@ -288,6 +288,28 @@ public interface AppDao {
     @androidx.room.Delete
     void deleteCorrectedAddress(CorrectedAddress correctedAddress);
 
+    // Corrected Quadras
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    long insertCorrectedQuadra(CorrectedQuadra quadra);
+
+    @androidx.room.Update
+    void updateCorrectedQuadra(CorrectedQuadra quadra);
+
+    @androidx.room.Delete
+    void deleteCorrectedQuadra(CorrectedQuadra quadra);
+
+    @Query("DELETE FROM corrected_quadras WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) AND (:neighborhood IS NULL OR :neighborhood = '' OR LOWER(TRIM(neighborhood)) = LOWER(TRIM(:neighborhood)))")
+    void deleteCorrectedQuadraByNameAndNeighborhood(String name, String neighborhood);
+
+    @Query("SELECT * FROM corrected_quadras ORDER BY name ASC")
+    java.util.List<CorrectedQuadra> getAllCorrectedQuadras();
+
+    @Query("SELECT * FROM corrected_quadras ORDER BY name ASC")
+    androidx.lifecycle.LiveData<java.util.List<CorrectedQuadra>> getAllCorrectedQuadrasLive();
+
+    @Query("SELECT * FROM corrected_quadras WHERE id = :id LIMIT 1")
+    CorrectedQuadra getCorrectedQuadraById(int id);
+
     // Loading Points
     @Insert
     long insertLoadingPoint(LoadingPoint point);
