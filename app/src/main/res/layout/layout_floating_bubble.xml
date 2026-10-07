@@ -17,15 +17,34 @@
         app:cardCornerRadius="30dp"
         app:cardElevation="2dp"
         app:cardPreventCornerOverlap="false"
-        app:strokeWidth="1dp"
-        app:strokeColor="#EEEEEE">
+        app:strokeWidth="0dp"
+        app:strokeColor="@android:color/transparent">
 
-        <ImageView
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_margin="10dp"
-            android:src="@mipmap/ic_launcher_round"
-            android:scaleType="fitCenter" />
+            android:layout_height="match_parent">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/progressCpfTimer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                app:indicatorSize="58dp"
+                app:trackThickness="3.5dp"
+                app:trackColor="#E0E0E0"
+                app:indicatorColor="#2196F3"
+                android:max="100"
+                android:progress="0"
+                android:visibility="gone" />
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_margin="10dp"
+                android:src="@mipmap/ic_launcher_round"
+                android:scaleType="fitCenter" />
+
+        </FrameLayout>
 
     </com.google.android.material.card.MaterialCardView>
 

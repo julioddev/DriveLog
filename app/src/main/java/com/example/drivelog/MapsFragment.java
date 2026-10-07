@@ -12,10 +12,13 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
@@ -48,6 +51,7 @@ import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase;
 import org.osmdroid.tileprovider.tilesource.XYTileSource;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.util.MapTileIndex;
+import org.osmdroid.views.CustomZoomButtonsController;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.Polyline;
@@ -192,14 +196,16 @@ public class MapsFragment extends Fragment {
         btnS8 = view.findViewById(R.id.btnSpeed8x);
 
         sharedPreferences = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
-        sensorManager = (android.hardware.SensorManager) requireContext().getSystemService(Context.SENSOR_SERVICE);
+        sensorManager = (SensorManager) requireContext().getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
-            rotationVectorSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR);
+            rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
         }
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
 
         applyMapStyle();
         map.setMultiTouchControls(true);
+        map.setBuiltInZoomControls(false);
+        map.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.NEVER);
         mapController = map.getController();
         
         // 🔥 RESTAURAR ÚLTIMA POSIÇÃO
@@ -215,7 +221,7 @@ public class MapsFragment extends Fragment {
 
         map.setOnTouchListener((v, event) -> {
             int action = event.getActionMasked();
-            if (action == android.view.MotionEvent.ACTION_DOWN || action == android.view.MotionEvent.ACTION_POINTER_DOWN) {
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
                 if (isFollowingUser) {
                     isFollowingUser = false;
                 }

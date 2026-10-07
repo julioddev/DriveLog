@@ -1,7 +1,10 @@
 package com.example.drivelog;
 
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -26,6 +29,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -49,6 +53,8 @@ import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
+import org.osmdroid.util.GeoPoint;
+import com.google.android.material.card.MaterialCardView;
 
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdRequest;
@@ -97,6 +103,9 @@ public class MainActivity extends AppCompatActivity {
     private DrawerLayout drawerLayout;
     private RecyclerView recyclerDrawerRoutes, recyclerDrawerAllRoutes;
     private View layoutDrawerRoutes, layoutDrawerAllRoutes;
+    private TextView textDrawerActiveRouteName, textDrawerActiveRouteStops, textDrawerActiveRoutePackages, textDrawerActiveRouteKm, textDrawerActiveRouteTime;
+    private MaterialCardView cardDrawerActiveRoute;
+    private RouteHeader currentActiveRouteHeader = null;
     private View settingsContainer, layoutSplash;
     private TextView textSplashStatus, textSplashPercent;
     private LinearProgressIndicator progressSplashLinear;
@@ -171,12 +180,48 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private final Handler appCpfHandler = new Handler(Looper.getMainLooper());
+    private final Runnable appCpfRunnable = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                if (sharedPreferences != null) {
+                    boolean enabled = sharedPreferences.getBoolean("cpf_interval_enabled", false);
+
+                    if (enabled) {
+                        long now = System.currentTimeMillis();
+                        int minutes = sharedPreferences.getInt("cpf_interval_minutes", 2);
+                        if (minutes <= 0) minutes = 2;
+                        long intervalMs = minutes * 60000L;
+
+                        long lastGenTime = sharedPreferences.getLong("last_cpf_gen_time", 0);
+
+                        if (lastGenTime == 0) {
+                            lastGenTime = now;
+                            sharedPreferences.edit().putLong("last_cpf_gen_time", now).apply();
+                            Log.d("MainActivity", "CPF Timer iniciado no app aberto.");
+                        }
+
+                        if (now - lastGenTime >= intervalMs) {
+                            sharedPreferences.edit().putLong("last_cpf_gen_time", now).apply();
+                            Log.d("MainActivity", "⏲️ Gerando CPF por tempo (App Aberto)...");
+                            CpfHelper.generateAndCopyCpf(MainActivity.this);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            appCpfHandler.postDelayed(this, 3000);
+        }
+    };
+
     @Override
     protected void onResume() {
         super.onResume();
         // Marca que o usuário está ativo no app
         sharedPreferences.edit().putLong("last_drivelog_interaction", System.currentTimeMillis()).apply();
         interactionHandler.post(interactionRunnable);
+        appCpfHandler.post(appCpfRunnable);
 
         // Remove o ícone flutuante se ele estiver ativo ao voltar para o app
         stopService(new Intent(this, FloatingIconService.class));
@@ -193,6 +238,7 @@ public class MainActivity extends AppCompatActivity {
         // Atualiza o timestamp ao sair ou pausar o app
         sharedPreferences.edit().putLong("last_drivelog_interaction", System.currentTimeMillis()).apply();
         interactionHandler.removeCallbacks(interactionRunnable);
+        appCpfHandler.removeCallbacks(appCpfRunnable);
     }
 
     @Override
@@ -326,8 +372,16 @@ public class MainActivity extends AppCompatActivity {
             // 🔥 Ajuste de padding para o conteúdo do Drawer (Menu Lateral)
             View drawerContent = findViewById(R.id.layoutDrawerRoutes);
             View drawerAllContent = findViewById(R.id.layoutDrawerAllRoutes);
-            if (drawerContent != null) drawerContent.setPadding(0, systemBars.top, 0, 0);
-            if (drawerAllContent != null) drawerAllContent.setPadding(0, systemBars.top, 0, 0);
+            
+            // Queremos preservar o padding horizontal (16dp = ~48px)
+            int paddingHoriz = (int) (16 * getResources().getDisplayMetrics().density);
+            
+            if (drawerContent != null) {
+                drawerContent.setPadding(paddingHoriz, systemBars.top, paddingHoriz, systemBars.bottom + (int)(100 * getResources().getDisplayMetrics().density));
+            }
+            if (drawerAllContent != null) {
+                drawerAllContent.setPadding(paddingHoriz, systemBars.top, paddingHoriz, systemBars.bottom + (int)(48 * getResources().getDisplayMetrics().density));
+            }
             
             return insets;
         });
@@ -399,7 +453,16 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        View btnDonate = findViewById(R.id.btnDrawerDonate);
+        if (btnDonate != null) {
+            btnDonate.setOnClickListener(v -> {
+                if (drawerLayout != null) drawerLayout.closeDrawers();
+                showDonationDialog();
+            });
+        }
+
         setupQuickAccessDrawer();
+        setupDrawerActiveRoute();
         setupAds();
         startRemoteMenuListener();
         setupDrawerRoutes();
@@ -477,12 +540,6 @@ public class MainActivity extends AppCompatActivity {
         if (btnReports != null) btnReports.setOnClickListener(v -> {
             if (drawerLayout != null) drawerLayout.closeDrawers();
             openFragmentInSettings(new ReportsFragment(), "Relatórios");
-        });
-
-        View btnNotif = findViewById(R.id.btnLeftNotifications);
-        if (btnNotif != null) btnNotif.setOnClickListener(v -> {
-            if (drawerLayout != null) drawerLayout.closeDrawers();
-            showCommunityNotificationsDialog();
         });
     }
 
@@ -637,9 +694,6 @@ public class MainActivity extends AppCompatActivity {
         View btnReportsLeft = findViewById(R.id.btnLeftReports);
         if (btnReportsLeft != null) btnReportsLeft.setVisibility((!useRemote || currentRemoteMenus.contains("reports")) ? View.VISIBLE : View.GONE);
 
-        View containerNotif = findViewById(R.id.layoutLeftNotificationsContainer);
-        if (containerNotif != null) containerNotif.setVisibility((!useRemote || currentRemoteMenus.contains("community_notifications")) ? View.VISIBLE : View.GONE);
-
         int backStackCount = getSupportFragmentManager().getBackStackEntryCount();
         boolean isShowingSettings = backStackCount > 0;
         
@@ -660,6 +714,11 @@ public class MainActivity extends AppCompatActivity {
         View btnSettings = findViewById(R.id.btnDrawerSettings);
         if (btnSettings != null) {
             btnSettings.setVisibility((!useRemote || currentRemoteMenus.contains("settings")) ? View.VISIBLE : View.GONE);
+        }
+
+        View btnDonate = findViewById(R.id.btnDrawerDonate);
+        if (btnDonate != null) {
+            btnDonate.setVisibility((!useRemote || currentRemoteMenus.contains("donate_button")) ? View.VISIBLE : View.GONE);
         }
 
         View btnFixados = findViewById(R.id.btnDrawerFixados);
@@ -695,6 +754,11 @@ public class MainActivity extends AppCompatActivity {
                         updateKeepScreenOn(viewPager.getCurrentItem());
                     }
                     
+                    // 🔥 Exibição do Tutorial de Onboarding
+                    if (!sharedPreferences.getBoolean("tutorial_seen", false)) {
+                        showAppTutorial();
+                    }
+
                     // 🔥 Verificação Automática de Atualização (Silenciosa se não houver)
                     if (sharedPreferences.getBoolean("auto_check_updates", true)) {
                         UpdateHelper.checkForUpdates(this, false, null);
@@ -702,6 +766,76 @@ public class MainActivity extends AppCompatActivity {
                 }).start();
             }
         }, delay);
+    }
+
+    public void showAppTutorial() {
+        View view = getLayoutInflater().inflate(R.layout.dialog_tutorial, null);
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(view).setCancelable(false).create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        ViewPager2 viewPagerTutorial = view.findViewById(R.id.viewPagerTutorial);
+        LinearLayout layoutDots = view.findViewById(R.id.layoutTutorialDots);
+        MaterialButton btnSkip = view.findViewById(R.id.btnTutorialSkip);
+        MaterialButton btnNext = view.findViewById(R.id.btnTutorialNext);
+
+        List<TutorialAdapter.TutorialSlide> slides = new ArrayList<>();
+        slides.add(new TutorialAdapter.TutorialSlide(R.mipmap.ic_launcher_round, "Bem-vindo ao DriveLog", "Seu assistente pessoal e inteligente para controle e roteirização das suas entregas."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_map, "Roteirização Inteligente", "Otimize suas paradas focando em menos tempo no trânsito ou maior economia de combustível, organizando tudo na melhor ordem."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_menu_white, "Menu Lateral Rápido", "Acesse facilmente seu mapa, painel de ganhos, rastreamento de quilometragem, histórico de abastecimentos e as configurações do app."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_package, "Gerenciamento Simplificado", "Adicione pacotes manualmente, por voz, escaneando o código de barras, ou importando as planilhas das transportadoras em um clique."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_nav_3d, "Navegação Integrada", "Utilize a navegação diretamente no mapa do app com alertas e linhas visuais, sem a necessidade de alternar entre aplicativos o tempo todo."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_friends, "Comunidade Colaborativa", "Corrija coordenadas de endereços imprecisos no mapa, compartilhe com outros motoristas e ajude a comunidade de entregadores do seu bairro."));
+
+        TutorialAdapter adapter = new TutorialAdapter(slides);
+        viewPagerTutorial.setAdapter(adapter);
+
+        // Criar pontos indicadores (dots)
+        ImageView[] dots = new ImageView[slides.size()];
+        for (int i = 0; i < slides.size(); i++) {
+            dots[i] = new ImageView(this);
+            dots[i].setImageResource(R.drawable.bg_circle_dark);
+            dots[i].setAlpha(i == 0 ? 1.0f : 0.3f);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    (int) (8 * getResources().getDisplayMetrics().density),
+                    (int) (8 * getResources().getDisplayMetrics().density)
+            );
+            params.setMargins(8, 0, 8, 0);
+            layoutDots.addView(dots[i], params);
+        }
+
+        viewPagerTutorial.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                for (int i = 0; i < slides.size(); i++) {
+                    dots[i].setAlpha(i == position ? 1.0f : 0.3f);
+                }
+                if (position == slides.size() - 1) {
+                    btnNext.setText("Começar");
+                    btnNext.setIconResource(0);
+                } else {
+                    btnNext.setText("Próximo");
+                }
+            }
+        });
+
+        btnSkip.setOnClickListener(v -> {
+            sharedPreferences.edit().putBoolean("tutorial_seen", true).apply();
+            dialog.dismiss();
+        });
+
+        btnNext.setOnClickListener(v -> {
+            int current = viewPagerTutorial.getCurrentItem();
+            if (current < slides.size() - 1) {
+                viewPagerTutorial.setCurrentItem(current + 1);
+            } else {
+                sharedPreferences.edit().putBoolean("tutorial_seen", true).apply();
+                dialog.dismiss();
+            }
+        });
+
+        dialog.show();
     }
 
     private boolean getBoolSafe(String key, boolean def) {
@@ -819,8 +953,8 @@ public class MainActivity extends AppCompatActivity {
         recyclerDrawerRoutes.setLayoutManager(new LinearLayoutManager(this));
         AppDatabase.getInstance(this).appDao().getAllRoutesLive().observe(this, list -> {
             List<RouteHeader> displayList = list;
-            if (list != null && list.size() > 3) {
-                displayList = list.subList(0, 3);
+            if (list != null && list.size() > 2) {
+                displayList = list.subList(0, 2);
                 if (btnDrawerSeeAllRoutes != null) btnDrawerSeeAllRoutes.setVisibility(View.VISIBLE);
             } else {
                 if (btnDrawerSeeAllRoutes != null) btnDrawerSeeAllRoutes.setVisibility(View.GONE);
@@ -847,7 +981,177 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void switchRoute(int id) { sharedPreferences.edit().putInt("last_opened_route_id", id).apply(); }
+    private void setupDrawerActiveRoute() {
+        textDrawerActiveRouteName = findViewById(R.id.textDrawerActiveRouteName);
+        textDrawerActiveRouteStops = findViewById(R.id.textDrawerActiveRouteStops);
+        textDrawerActiveRoutePackages = findViewById(R.id.textDrawerActiveRoutePackages);
+        textDrawerActiveRouteKm = findViewById(R.id.textDrawerActiveRouteKm);
+        textDrawerActiveRouteTime = findViewById(R.id.textDrawerActiveRouteTime);
+        cardDrawerActiveRoute = findViewById(R.id.cardDrawerActiveRoute);
+
+        if (cardDrawerActiveRoute != null) {
+            cardDrawerActiveRoute.setOnClickListener(v -> {
+                if (drawerLayout != null) drawerLayout.closeDrawers();
+            });
+        }
+
+        updateActiveRouteDrawerUI();
+    }
+
+    private void updateActiveRouteDrawerUI() {
+        int activeRouteId = sharedPreferences != null ? sharedPreferences.getInt("last_opened_route_id", -1) : -1;
+        if (activeRouteId == -1) {
+            currentActiveRouteHeader = null;
+            if (textDrawerActiveRouteName != null) textDrawerActiveRouteName.setText("Nenhuma Rota Ativa");
+            if (textDrawerActiveRouteStops != null) textDrawerActiveRouteStops.setText("📦 0 paradas");
+            if (textDrawerActiveRoutePackages != null) textDrawerActiveRoutePackages.setText("✉️ 0 pacotes");
+            if (textDrawerActiveRouteKm != null) textDrawerActiveRouteKm.setText("📍 Distância: -- km");
+            if (textDrawerActiveRouteTime != null) textDrawerActiveRouteTime.setText("⏱️ Tempo: -- min");
+            return;
+        }
+
+        AppDatabase.getInstance(this).appDao().getRouteByIdLive(activeRouteId).observe(this, header -> {
+            this.currentActiveRouteHeader = header;
+            if (header != null && textDrawerActiveRouteName != null) {
+                textDrawerActiveRouteName.setText(header.name);
+            }
+        });
+
+        AppDatabase.getInstance(this).appDao().getStopsForRouteLive(activeRouteId).observe(this, stops -> {
+            if (stops == null || stops.isEmpty()) {
+                if (textDrawerActiveRouteStops != null) textDrawerActiveRouteStops.setText("📦 0 paradas");
+                if (textDrawerActiveRoutePackages != null) textDrawerActiveRoutePackages.setText("✉️ 0 pacotes");
+                if (textDrawerActiveRouteKm != null) textDrawerActiveRouteKm.setText("📍 Distância: -- km");
+                if (textDrawerActiveRouteTime != null) textDrawerActiveRouteTime.setText("⏱️ Tempo: -- min");
+                return;
+            }
+
+            int totalStops = stops.size();
+            int totalPackages = 0;
+            double totalKmMeters = 0.0;
+            GeoPoint prevPoint = null;
+
+            for (int i = 0; i < stops.size(); i++) {
+                RouteStop s = stops.get(i);
+                totalPackages += s.packageCount;
+
+                if (s.latitude != 0 && s.longitude != 0) {
+                    GeoPoint currPoint = new GeoPoint(s.latitude, s.longitude);
+                    if (prevPoint != null) {
+                        totalKmMeters += prevPoint.distanceToAsDouble(currPoint);
+                    }
+                    prevPoint = currPoint;
+                }
+            }
+
+            if (textDrawerActiveRouteStops != null) {
+                textDrawerActiveRouteStops.setText("📦 " + totalStops + (totalStops == 1 ? " parada" : " paradas"));
+            }
+            if (textDrawerActiveRoutePackages != null) {
+                textDrawerActiveRoutePackages.setText("✉️ " + totalPackages + (totalPackages == 1 ? " pacote" : " pacotes"));
+            }
+
+            if (textDrawerActiveRouteKm != null) {
+                if (totalKmMeters > 0) {
+                    double km = totalKmMeters / 1000.0;
+                    textDrawerActiveRouteKm.setText(String.format(Locale.getDefault(), "📍 Distância: %.1f km", km));
+                } else {
+                    textDrawerActiveRouteKm.setText("📍 Distância: -- km");
+                }
+            }
+
+            if (textDrawerActiveRouteTime != null) {
+                if (currentActiveRouteHeader != null && currentActiveRouteHeader.startTime > 0) {
+                    long now = System.currentTimeMillis();
+                    long currentPausedMs = currentActiveRouteHeader.totalPausedMs + 
+                            (currentActiveRouteHeader.lastPauseStartTime > 0 ? (now - currentActiveRouteHeader.lastPauseStartTime) : 0);
+                    long elapsed = (currentActiveRouteHeader.endTime > 0 ? currentActiveRouteHeader.endTime : now) - currentActiveRouteHeader.startTime - currentPausedMs;
+                    if (elapsed < 0) elapsed = 0;
+
+                    long s = elapsed / 1000;
+                    long m = s / 60;
+                    long h = m / 60;
+
+                    String timeStr;
+                    if (h > 0) {
+                        timeStr = String.format(Locale.getDefault(), "⏱️ Tempo: %dh %02dmin", h, m % 60);
+                    } else {
+                        timeStr = String.format(Locale.getDefault(), "⏱️ Tempo: %d min", m);
+                    }
+                    if (currentActiveRouteHeader.lastPauseStartTime > 0 && currentActiveRouteHeader.endTime == 0) {
+                        timeStr += " ⏸️";
+                    }
+                    textDrawerActiveRouteTime.setText(timeStr);
+                } else if (totalKmMeters > 0) {
+                    double km = totalKmMeters / 1000.0;
+                    int drivingMins = (int) Math.round((km / 30.0) * 60.0) + (totalStops * 2);
+                    if (drivingMins < 1) drivingMins = 1;
+
+                    String timeStr;
+                    if (drivingMins >= 60) {
+                        int h = drivingMins / 60;
+                        int m = drivingMins % 60;
+                        timeStr = String.format(Locale.getDefault(), "⏱️ Tempo: %dh %dmin", h, m);
+                    } else {
+                        timeStr = String.format(Locale.getDefault(), "⏱️ Tempo: %d min", drivingMins);
+                    }
+                    textDrawerActiveRouteTime.setText(timeStr);
+                } else {
+                    textDrawerActiveRouteTime.setText("⏱️ Tempo: -- min");
+                }
+            }
+        });
+    }
+
+    private void switchRoute(int id) { 
+        sharedPreferences.edit().putInt("last_opened_route_id", id).apply(); 
+        updateActiveRouteDrawerUI();
+    }
+
+    private void showDonationDialog() {
+        View v = LayoutInflater.from(this).inflate(R.layout.dialog_modern_confirm, null);
+        TextView title = v.findViewById(R.id.textModernTitle);
+        TextView message = v.findViewById(R.id.textModernMessage);
+        MaterialButton btnCancel = v.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = v.findViewById(R.id.btnModernPositive);
+
+        String currentPixKey = sharedPreferences != null 
+                ? sharedPreferences.getString("dev_pix_key", "pix@drivelog.app") 
+                : "pix@drivelog.app";
+
+        if (title != null) title.setText("☕ Apoiar o DriveLog");
+        if (message != null) {
+            message.setText("Sua contribuição ajuda a manter os servidores OSRM de alta velocidade online e o aplicativo sempre gratuito e atualizado para todos os entregadores!\n\n" +
+                    "Chave Pix:\n" +
+                    currentPixKey);
+        }
+
+        if (btnCancel != null) btnCancel.setText("FECHAR");
+        if (btnConfirm != null) {
+            btnConfirm.setText("COPIAR CHAVE PIX");
+            btnConfirm.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#2E7D32")));
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(v).create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v2 -> dialog.dismiss());
+        if (btnConfirm != null) {
+            btnConfirm.setOnClickListener(v2 -> {
+                dialog.dismiss();
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("Chave Pix DriveLog", currentPixKey);
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(clip);
+                    Toast.makeText(this, "📋 Chave Pix copiada para a área de transferência!", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
+        dialog.show();
+    }
     
     private void promptEditRouteName(RouteHeader header) {
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_new_route_name, null);
@@ -890,7 +1194,7 @@ public class MainActivity extends AppCompatActivity {
     private void startCommunityNotificationsListener() {
         if (communityNotifListener != null) communityNotifListener.remove();
         String currentUserId = sharedPreferences.getString("current_user_id", "anon");
-        View badgeDot = findViewById(R.id.badgeDrawerNotificationDot);
+        View badgeDot = findViewById(R.id.badgeNotificationDot);
 
         communityNotifListener = FirebaseHelper.listenCommunityNotifications(currentUserId, (list, unreadCount) -> {
             runOnUiThread(() -> {
@@ -902,7 +1206,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void showCommunityNotificationsDialog() {
+    public void showCommunityNotificationsDialog() {
         View v = getLayoutInflater().inflate(R.layout.dialog_community_notifications, null);
         RecyclerView recycler = v.findViewById(R.id.recyclerCommunityNotifications);
         TextView textNoNotifs = v.findViewById(R.id.textNoCommunityNotifications);
@@ -932,7 +1236,7 @@ public class MainActivity extends AppCompatActivity {
         if (!unreadIds.isEmpty()) {
             FirebaseHelper.markCommunityNotificationsAsRead(unreadIds);
         }
-        View badgeDot = findViewById(R.id.badgeDrawerNotificationDot);
+        View badgeDot = findViewById(R.id.badgeNotificationDot);
         if (badgeDot != null) badgeDot.setVisibility(View.GONE);
 
         if (recycler != null) {

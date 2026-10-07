@@ -92,20 +92,29 @@
             android:textColor="#999999"
             android:layout_marginBottom="8dp" />
 
-        <ScrollView
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:layout_marginBottom="16dp">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerStatsStopsList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
             <TextView
-                android:id="@+id/textStatsStopsList"
+                android:id="@+id/textStatsStopsListEmpty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Nenhuma parada"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:text="Nenhuma parada nesta categoria."
                 android:textSize="13sp"
-                android:textColor="#555555"
-                android:lineSpacingExtra="4dp" />
-        </ScrollView>
+                android:textColor="#888888"
+                android:visibility="gone" />
+        </FrameLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStatsClose"

@@ -3,6 +3,7 @@ package com.example.drivelog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.util.Log;
 import android.widget.Toast;
 import java.util.Random;
 
@@ -12,7 +13,15 @@ public class CpfHelper {
      */
     public static void generateAndCopyCpf(Context context) {
         String cpf = generateFakeCpf();
-        android.util.Log.d("CpfHelper", "CPF Gerado: " + cpf);
+        Log.d("CpfHelper", "CPF Gerado: " + cpf);
+
+        try {
+            context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                    .edit()
+                    .putLong("last_cpf_gen_time", System.currentTimeMillis())
+                    .apply();
+        } catch (Exception ignored) {}
+
         ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard != null) {
             ClipData clip = ClipData.newPlainText("CPF fictício", cpf);

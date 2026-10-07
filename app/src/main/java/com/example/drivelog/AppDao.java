@@ -1,8 +1,13 @@
 package com.example.drivelog;
 
+import androidx.lifecycle.LiveData;
 import androidx.room.Dao;
+import androidx.room.Delete;
 import androidx.room.Insert;
+import androidx.room.OnConflictStrategy;
 import androidx.room.Query;
+import androidx.room.Update;
+
 import java.util.List;
 
 @Dao
@@ -10,10 +15,10 @@ public interface AppDao {
     @Insert
     void insertFuel(Fuel fuel);
 
-    @androidx.room.Update
+    @Update
     void updateFuel(Fuel fuel);
 
-    @androidx.room.Delete
+    @Delete
     void deleteFuel(Fuel fuel);
 
     @Query("SELECT * FROM earnings WHERE platforms = :platformName AND date >= :startOfDay AND date <= :endOfDay LIMIT 1")
@@ -35,15 +40,15 @@ public interface AppDao {
     List<Fuel> getAllFuel();
 
     @Query("SELECT * FROM fuel ORDER BY date DESC")
-    androidx.lifecycle.LiveData<List<Fuel>> getAllFuelLive();
+    LiveData<List<Fuel>> getAllFuelLive();
 
     @Insert
     void insertEarnings(Earnings earnings);
 
-    @androidx.room.Update
+    @Update
     void updateEarnings(Earnings earnings);
 
-    @androidx.room.Delete
+    @Delete
     void deleteEarnings(Earnings earnings);
 
     @Query("SELECT * FROM earnings ORDER BY date DESC LIMIT 10")
@@ -53,15 +58,15 @@ public interface AppDao {
     List<Earnings> getAllEarnings();
 
     @Query("SELECT * FROM earnings ORDER BY date DESC")
-    androidx.lifecycle.LiveData<List<Earnings>> getAllEarningsLive();
+    LiveData<List<Earnings>> getAllEarningsLive();
 
-    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     long insertDailyKm(DailyKm dailyKm);
 
-    @androidx.room.Update
+    @Update
     void updateDailyKm(DailyKm dailyKm);
 
-    @androidx.room.Delete
+    @Delete
     void deleteDailyKm(DailyKm dailyKm);
 
     @Query("SELECT * FROM daily_km ORDER BY date DESC LIMIT 1")
@@ -77,19 +82,19 @@ public interface AppDao {
     List<DailyKm> getAllPendingDailyKm();
 
     @Query("SELECT * FROM daily_km WHERE isCompleted = 0 AND isAutomatic = 0 ORDER BY date DESC")
-    androidx.lifecycle.LiveData<List<DailyKm>> getAllPendingDailyKmLive();
+    LiveData<List<DailyKm>> getAllPendingDailyKmLive();
 
     @Query("SELECT * FROM daily_km WHERE isAutomatic = 0 ORDER BY date DESC")
     List<DailyKm> getAllDailyKm();
 
     @Query("SELECT * FROM daily_km WHERE isAutomatic = 0 ORDER BY date DESC")
-    androidx.lifecycle.LiveData<List<DailyKm>> getAllDailyKmLive();
+    LiveData<List<DailyKm>> getAllDailyKmLive();
 
     @Query("SELECT * FROM daily_km ORDER BY date DESC")
-    androidx.lifecycle.LiveData<List<DailyKm>> getAllKmAnyLive();
+    LiveData<List<DailyKm>> getAllKmAnyLive();
 
     @Query("SELECT * FROM daily_km WHERE isAutomatic = 1 ORDER BY date DESC")
-    androidx.lifecycle.LiveData<List<DailyKm>> getAllAutomaticRoutesLive();
+    LiveData<List<DailyKm>> getAllAutomaticRoutesLive();
 
     @Query("SELECT * FROM daily_km WHERE id = :id LIMIT 1")
     DailyKm getDailyKmById(int id);
@@ -100,29 +105,29 @@ public interface AppDao {
     @Insert
     void insertMaintenance(Maintenance maintenance);
 
-    @androidx.room.Update
+    @Update
     void updateMaintenance(Maintenance maintenance);
 
-    @androidx.room.Delete
+    @Delete
     void deleteMaintenance(Maintenance maintenance);
 
     @Query("SELECT * FROM maintenance ORDER BY date DESC")
     List<Maintenance> getAllMaintenance();
 
     @Query("SELECT * FROM maintenance ORDER BY date DESC")
-    androidx.lifecycle.LiveData<List<Maintenance>> getAllMaintenanceLive();
+    LiveData<List<Maintenance>> getAllMaintenanceLive();
 
     @Query("SELECT COUNT(*) FROM earnings WHERE date >= :start AND date <= :end")
-    androidx.lifecycle.LiveData<Integer> getEarningsCountToday(long start, long end);
+    LiveData<Integer> getEarningsCountToday(long start, long end);
 
     @Query("SELECT COUNT(*) FROM daily_km WHERE date >= :start AND date <= :end")
-    androidx.lifecycle.LiveData<Integer> getKmCountToday(long start, long end);
+    LiveData<Integer> getKmCountToday(long start, long end);
 
     @Query("SELECT * FROM earnings WHERE date >= :start AND date <= :end")
-    androidx.lifecycle.LiveData<List<Earnings>> getTodayEarningsEntriesLive(long start, long end);
+    LiveData<List<Earnings>> getTodayEarningsEntriesLive(long start, long end);
 
     @Query("SELECT * FROM daily_km WHERE date >= :start AND date <= :end")
-    androidx.lifecycle.LiveData<List<DailyKm>> getTodayKmEntriesLive(long start, long end);
+    LiveData<List<DailyKm>> getTodayKmEntriesLive(long start, long end);
 
     @Query("DELETE FROM earnings")
     void clearEarnings();
@@ -142,51 +147,51 @@ public interface AppDao {
     @Query("DELETE FROM gas_stations")
     void clearGasStations();
 
-    @Insert(onConflict = androidx.room.OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     void insertPlatform(Platform platform);
 
-    @androidx.room.Update
+    @Update
     void updatePlatform(Platform platform);
 
-    @androidx.room.Delete
+    @Delete
     void deletePlatform(Platform platform);
 
     @Query("SELECT * FROM platforms ORDER BY orderIndex ASC")
-    java.util.List<Platform> getAllPlatforms();
+    List<Platform> getAllPlatforms();
 
     @Query("SELECT * FROM platforms ORDER BY orderIndex ASC")
-    androidx.lifecycle.LiveData<java.util.List<Platform>> getAllPlatformsLive();
+    LiveData<List<Platform>> getAllPlatformsLive();
 
     @Query("SELECT COUNT(*) FROM platforms")
     int getPlatformCount();
 
-    @Insert(onConflict = androidx.room.OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     void insertGasStation(GasStation station);
 
-    @androidx.room.Update
+    @Update
     void updateGasStation(GasStation station);
 
-    @androidx.room.Delete
+    @Delete
     void deleteGasStation(GasStation station);
 
     @Query("SELECT * FROM gas_stations ORDER BY orderIndex ASC")
-    java.util.List<GasStation> getAllGasStations();
+    List<GasStation> getAllGasStations();
 
     @Query("SELECT * FROM gas_stations ORDER BY orderIndex ASC")
-    androidx.lifecycle.LiveData<java.util.List<GasStation>> getAllGasStationsLive();
+    LiveData<List<GasStation>> getAllGasStationsLive();
 
     // Route Points
     @Insert
     void insertRoutePoint(RoutePoint point);
 
     @Insert
-    void insertRoutePoints(java.util.List<RoutePoint> points);
+    void insertRoutePoints(List<RoutePoint> points);
 
     @Query("SELECT * FROM route_points WHERE dailyKmId = :kmId ORDER BY timestamp ASC")
-    java.util.List<RoutePoint> getRoutePointsForKm(int kmId);
+    List<RoutePoint> getRoutePointsForKm(int kmId);
 
     @Query("SELECT * FROM route_points ORDER BY dailyKmId, timestamp ASC")
-    java.util.List<RoutePoint> getAllRoutePoints();
+    List<RoutePoint> getAllRoutePoints();
 
     @Query("DELETE FROM route_points WHERE dailyKmId = :kmId")
     void deleteRoutePointsForKm(int kmId);
@@ -199,22 +204,25 @@ public interface AppDao {
     void insertRouteStop(RouteStop stop);
 
     @Insert
-    void insertRouteStops(java.util.List<RouteStop> stops);
+    void insertRouteStops(List<RouteStop> stops);
 
-    @androidx.room.Update
+    @Update
     void updateRouteStop(RouteStop stop);
 
-    @androidx.room.Update
-    void updateRouteStops(java.util.List<RouteStop> stops);
+    @Update
+    void updateRouteStops(List<RouteStop> stops);
 
-    @androidx.room.Delete
+    @Delete
     void deleteRouteStop(RouteStop stop);
 
     @Query("SELECT * FROM route_stops WHERE routeId = :routeId ORDER BY sortOrder ASC, id ASC")
-    androidx.lifecycle.LiveData<java.util.List<RouteStop>> getStopsForRouteLive(int routeId);
+    LiveData<List<RouteStop>> getStopsForRouteLive(int routeId);
 
     @Query("SELECT * FROM route_stops WHERE routeId = :routeId ORDER BY sortOrder ASC, id ASC")
-    java.util.List<RouteStop> getStopsForRoute(int routeId);
+    List<RouteStop> getStopsForRoute(int routeId);
+
+    @Query("SELECT * FROM route_stops")
+    List<RouteStop> getAllRouteStops();
 
     @Query("SELECT COALESCE(MAX(stopNumber), 0) + 1 FROM route_stops WHERE routeId = :routeId")
     int getNextStopNumber(int routeId);
@@ -235,77 +243,77 @@ public interface AppDao {
     @Insert
     long insertRouteGroup(RouteGroup group);
 
-    @androidx.room.Update
+    @Update
     void updateRouteGroup(RouteGroup group);
 
-    @androidx.room.Delete
+    @Delete
     void deleteRouteGroup(RouteGroup group);
 
     @Query("SELECT * FROM route_groups WHERE routeId = :routeId")
-    java.util.List<RouteGroup> getGroupsForRoute(int routeId);
+    List<RouteGroup> getGroupsForRoute(int routeId);
 
     @Query("SELECT * FROM route_groups WHERE routeId = :routeId")
-    androidx.lifecycle.LiveData<java.util.List<RouteGroup>> getGroupsForRouteLive(int routeId);
+    LiveData<List<RouteGroup>> getGroupsForRouteLive(int routeId);
 
     // Route Headers
     @Insert
     long insertRouteHeader(RouteHeader header);
 
-    @androidx.room.Update
+    @Update
     void updateRouteHeader(RouteHeader header);
 
-    @androidx.room.Delete
+    @Delete
     void deleteRouteHeader(RouteHeader header);
 
     @Query("SELECT * FROM route_headers ORDER BY date DESC")
-    java.util.List<RouteHeader> getAllRoutes();
+    List<RouteHeader> getAllRoutes();
 
     @Query("SELECT * FROM route_headers ORDER BY date DESC")
-    androidx.lifecycle.LiveData<java.util.List<RouteHeader>> getAllRoutesLive();
+    LiveData<List<RouteHeader>> getAllRoutesLive();
 
     @Query("SELECT * FROM route_headers WHERE id = :id LIMIT 1")
     RouteHeader getRouteById(int id);
 
     @Query("SELECT * FROM route_headers WHERE id = :id LIMIT 1")
-    androidx.lifecycle.LiveData<RouteHeader> getRouteByIdLive(int id);
+    LiveData<RouteHeader> getRouteByIdLive(int id);
 
     // Corrected Addresses
-    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     long insertCorrectedAddress(CorrectedAddress correctedAddress);
     
-    @androidx.room.Update
+    @Update
     void updateCorrectedAddress(CorrectedAddress correctedAddress);
 
     @Query("SELECT * FROM corrected_addresses WHERE address = :addressText LIMIT 1")
     CorrectedAddress getCorrectedAddress(String addressText);
 
     @Query("SELECT * FROM corrected_addresses ORDER BY updatedAt DESC")
-    java.util.List<CorrectedAddress> getAllCorrectedAddresses();
+    List<CorrectedAddress> getAllCorrectedAddresses();
 
     @Query("SELECT * FROM corrected_addresses ORDER BY updatedAt DESC")
-    androidx.lifecycle.LiveData<java.util.List<CorrectedAddress>> getAllCorrectedAddressesLive();
+    LiveData<List<CorrectedAddress>> getAllCorrectedAddressesLive();
 
-    @androidx.room.Delete
+    @Delete
     void deleteCorrectedAddress(CorrectedAddress correctedAddress);
 
     // Corrected Quadras
-    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     long insertCorrectedQuadra(CorrectedQuadra quadra);
 
-    @androidx.room.Update
+    @Update
     void updateCorrectedQuadra(CorrectedQuadra quadra);
 
-    @androidx.room.Delete
+    @Delete
     void deleteCorrectedQuadra(CorrectedQuadra quadra);
 
     @Query("DELETE FROM corrected_quadras WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) AND (:neighborhood IS NULL OR :neighborhood = '' OR LOWER(TRIM(neighborhood)) = LOWER(TRIM(:neighborhood)))")
     void deleteCorrectedQuadraByNameAndNeighborhood(String name, String neighborhood);
 
     @Query("SELECT * FROM corrected_quadras ORDER BY name ASC")
-    java.util.List<CorrectedQuadra> getAllCorrectedQuadras();
+    List<CorrectedQuadra> getAllCorrectedQuadras();
 
     @Query("SELECT * FROM corrected_quadras ORDER BY name ASC")
-    androidx.lifecycle.LiveData<java.util.List<CorrectedQuadra>> getAllCorrectedQuadrasLive();
+    LiveData<List<CorrectedQuadra>> getAllCorrectedQuadrasLive();
 
     @Query("SELECT * FROM corrected_quadras WHERE id = :id LIMIT 1")
     CorrectedQuadra getCorrectedQuadraById(int id);
@@ -314,10 +322,10 @@ public interface AppDao {
     @Insert
     long insertLoadingPoint(LoadingPoint point);
 
-    @androidx.room.Update
+    @Update
     void updateLoadingPoint(LoadingPoint point);
 
-    @androidx.room.Delete
+    @Delete
     void deleteLoadingPoint(LoadingPoint point);
 
     @Query("DELETE FROM loading_points")
@@ -327,13 +335,13 @@ public interface AppDao {
     List<LoadingPoint> getAllLoadingPoints();
 
     @Query("SELECT * FROM loading_points ORDER BY id ASC")
-    androidx.lifecycle.LiveData<List<LoadingPoint>> getAllLoadingPointsLive();
+    LiveData<List<LoadingPoint>> getAllLoadingPointsLive();
 
     // Settings
-    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     void insertSetting(SettingEntry setting);
 
-    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     void insertSettings(List<SettingEntry> settings);
 
     @Query("SELECT * FROM settings")

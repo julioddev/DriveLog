@@ -12,7 +12,7 @@ android {
         }
     }
 
-    val vCode = 27
+    val vCode = 62
 
     defaultConfig {
         applicationId = "com.example.drivelog"
@@ -152,6 +152,9 @@ dependencies {
     // Excel (XLSX) Import
     implementation("org.apache.poi:poi-ooxml:5.2.5")
     implementation("com.fasterxml.woodstox:woodstox-core:6.6.0")
+
+    // ML Kit Text Recognition (OCR para Leitura de Etiquetas/Fotos)
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
 
     // Efeitos Visuais
     implementation("nl.dionsegijn:konfetti-xml:2.0.4")

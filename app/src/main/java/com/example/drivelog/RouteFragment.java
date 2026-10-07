@@ -26,24 +26,27 @@ import android.graphics.Point;
 import android.graphics.Shader;
 import android.graphics.SweepGradient;
 import android.graphics.Typeface;
+import android.graphics.drawable.AnimatedVectorDrawable;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PathMeasure;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.ShapeDrawable;
-import android.graphics.drawable.shapes.OvalShape;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
-import android.location.Location;
-import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.Uri;
-import android.os.Build;
-import android.os.Bundle;
-import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.provider.Settings;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.Text;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import java.util.TreeSet;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.Voice;
 import android.text.Editable;
@@ -55,6 +58,7 @@ import android.util.Base64;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.SubMenu;
@@ -62,11 +66,15 @@ import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.AnticipateInterpolator;
+import android.view.Gravity;
 import android.view.animation.OvershootInterpolator;
+import android.widget.ScrollView;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -75,6 +83,8 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
@@ -92,6 +102,8 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.LiveData;
+import androidx.transition.AutoTransition;
+import androidx.transition.TransitionManager;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -114,7 +126,9 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -130,6 +144,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.osmdroid.api.IMapController;
 import org.osmdroid.events.MapEventsReceiver;
+import androidx.activity.OnBackPressedCallback;
 import org.osmdroid.events.MapListener;
 import org.osmdroid.events.ScrollEvent;
 import org.osmdroid.events.ZoomEvent;
@@ -138,6 +153,7 @@ import org.osmdroid.tileprovider.tilesource.XYTileSource;
 import org.osmdroid.util.BoundingBox;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.util.MapTileIndex;
+import org.osmdroid.views.CustomZoomButtonsController;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.Projection;
 import org.osmdroid.views.overlay.MapEventsOverlay;
@@ -171,6 +187,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -183,7 +200,8 @@ public class RouteFragment extends Fragment {
     private IMapController mapController;
     private EditText editSearch, editSearchStops;
     private View cardSearch, layoutSearchBalloonOuter, layoutSearchBalloonInner, layoutSearchContainer;
-    private ImageButton btnToggleSearch, btnSearch, btnAddStopManual, btnRouteMenu, btnToggleSearchStops;
+    private ImageButton btnToggleSearch, btnSearch, btnAddStopManual, btnPackageOrganization, btnRouteMenu, btnToggleSearchStops, btnNotifications, btnNavMapIcon;
+    private View layoutNotificationsContainer, badgeNotificationDot, layoutNavMapIconContainer;
     private View layoutOpenDrawerInside;
     private View fabCompass;
     private ImageView imageCompassInner;
@@ -289,17 +307,28 @@ public class RouteFragment extends Fragment {
     private ViewPager2 viewPagerStops;
     private StopsCardAdapter stopsCardAdapter;
     private MaterialCardView cardNavigationMode;
+    private BorderProgressDrawable borderProgressDrawable;
+    private double initialStepDistance = 200.0;
     private ImageView imageNavManeuver;
     private TextView textNavDistance, textNavInstruction, textNavTotalTime;
     private RecyclerView recyclerAllStops;
     private StopsListAdapter stopsListAdapter;
     private TextView textSuccessCount, textFailedCount, textPendingCount, textSuccessPackageCount, textPendingPackageCount;
-    private TextView textWeatherTemp, textWeatherCity, textRouteTotalTime, textRouteCorrections, textSheetHeader;
+    private TextView textWeatherTemp, textWeatherCity, textRouteTotalTime, textRouteCorrections, textSheetHeader, textPendingManualListTitle, textPendingManualListSubtitle;
     private View cardWeatherSummary, cardRouteTotalTime, cardRouteCorrections, cardSuccessSummary, cardFailedSummary, cardPendingSummary, layoutStatsGroup, btnToggleStatsSummary;
+    private MaterialCardView cardPendingOptimization, cardPendingManualList, cardUndoCorrection, cardSearchNavDistance;
+    private MaterialButton btnFinishOptimizationNow, btnContinueManualListEditing, btnCancelAndDeleteManualRoute, btnCancelAndDeleteOptimizationRoute, btnUndoCorrectionAction;
+    private TextView textUndoCorrectionMessage, textSearchNavDistance;
+    private final Handler undoHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingUndoRunnable;
     private ImageView imageWeatherIcon, imageHomeWarning, imageToggleStatsSummary;
     private boolean isStopDeleteDialogShowing = false;
+    private boolean isSubMenuOpen = false;
+    private boolean isMenuItemClicked = false;
     private final Handler autoHideHandler = new Handler(Looper.getMainLooper());
     private Runnable autoHideRunnable;
+    private final Handler menuAnimHandler = new Handler(Looper.getMainLooper());
+    private Runnable menuAnimRunnable;
     private List<LoadingPoint> loadingPoints = new ArrayList<>();
     private final List<Marker> loadingMarkers = new ArrayList<>();
     private MapEventsOverlay loadingSelectionOverlay;
@@ -307,6 +336,79 @@ public class RouteFragment extends Fragment {
     private GeoPoint lastWeatherLocation = null;
     private long lastWeatherUpdate = 0;
     private List<DayWeather> lastWeekWeather = new ArrayList<>();
+
+    public static class BorderProgressDrawable extends Drawable {
+        private final Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path borderPath = new Path();
+        private final Path segmentPath = new Path();
+        private final PathMeasure pathMeasure = new PathMeasure();
+        private final RectF rectF = new RectF();
+        private float cornerRadius;
+        private float strokeWidth;
+        private float progressPercent = 100f;
+
+        public BorderProgressDrawable(float strokeWidthDp, float cornerRadiusDp, int trackColor, int progressColor, Context context) {
+            float density = context.getResources().getDisplayMetrics().density;
+            this.strokeWidth = strokeWidthDp * density;
+            this.cornerRadius = cornerRadiusDp * density;
+
+            trackPaint.setStyle(Paint.Style.STROKE);
+            trackPaint.setStrokeWidth(this.strokeWidth);
+            trackPaint.setColor(trackColor);
+
+            progressPaint.setStyle(Paint.Style.STROKE);
+            progressPaint.setStrokeWidth(this.strokeWidth);
+            progressPaint.setColor(progressColor);
+            progressPaint.setStrokeCap(Paint.Cap.ROUND);
+        }
+
+        public void setProgress(float percent) {
+            this.progressPercent = Math.max(0f, Math.min(100f, percent));
+            invalidateSelf();
+        }
+
+        @Override
+        protected void onBoundsChange(Rect bounds) {
+            super.onBoundsChange(bounds);
+            float inset = strokeWidth / 2f;
+            rectF.set(bounds.left + inset, bounds.top + inset, bounds.right - inset, bounds.bottom - inset);
+
+            borderPath.reset();
+            borderPath.addRoundRect(rectF, cornerRadius, cornerRadius, Path.Direction.CW);
+            pathMeasure.setPath(borderPath, false);
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            canvas.drawPath(borderPath, trackPaint);
+
+            float totalLength = pathMeasure.getLength();
+            if (totalLength > 0 && progressPercent > 0) {
+                float drawLength = (progressPercent / 100f) * totalLength;
+                segmentPath.reset();
+                pathMeasure.getSegment(0, drawLength, segmentPath, true);
+                canvas.drawPath(segmentPath, progressPaint);
+            }
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            trackPaint.setAlpha(alpha);
+            progressPaint.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            trackPaint.setColorFilter(colorFilter);
+            progressPaint.setColorFilter(colorFilter);
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+    }
 
     private static class DayWeather {
         String label;
@@ -336,7 +438,7 @@ public class RouteFragment extends Fragment {
     private Marker homeMarker, userDirectionMarker;
     private Polygon homeRadiusOverlay;
     private Polyline selectionTracePolyline;
-    private MapEventsOverlay currentFixOverlay, homeSelectionOverlay;
+    private MapEventsOverlay currentFixOverlay, homeSelectionOverlay, searchMapEventsOverlay;
     private LassoOverlay lassoOverlay;
     private View cardFixMode, cardLassoMode, layoutSideFabs;
     private View layoutSummary, layoutLeftSummary, layoutSwitchContainer;
@@ -346,8 +448,107 @@ public class RouteFragment extends Fragment {
     private View btnDisableRestInRoute;
     private List<NavInstruction> lastRouteInstructions = new ArrayList<>();
     
+    private ImageButton btnMuteVoiceNav;
     private TextToSpeech tts;
+    private String lastSpokenInstruction = "";
+    private long lastSpokenTime = 0;
+    private int lastAnnouncedStopId = -1;
+    private boolean is100mAnnounced = false;
+    private boolean isArrivedAnnounced = false;
     private KonfettiView konfettiView;
+
+    private boolean isVoiceNavigationEnabled() {
+        if (sharedPreferences == null) return true;
+        boolean isMuted = sharedPreferences.getBoolean("voice_navigation_muted", false);
+        boolean isEnabled = sharedPreferences.getBoolean("voice_navigation_enabled", true)
+                && sharedPreferences.getBoolean("voice_commands_enabled", true);
+        return !isMuted && isEnabled;
+    }
+
+    private void setVoiceNavigationEnabled(boolean enabled, boolean showToast) {
+        if (sharedPreferences == null) return;
+
+        boolean isMuted = !enabled;
+        sharedPreferences.edit()
+                .putBoolean("voice_navigation_muted", isMuted)
+                .putBoolean("voice_navigation_enabled", enabled)
+                .putBoolean("voice_commands_enabled", enabled)
+                .apply();
+
+        updateMuteButtonIcon();
+
+        if (enabled) {
+            if (showToast) Toast.makeText(getContext(), "🔊 Voz na Navegação Ativada", Toast.LENGTH_SHORT).show();
+            speakVoiceNavigation("Voz da navegação ativada", true);
+        } else {
+            if (tts != null) tts.stop();
+            if (showToast) Toast.makeText(getContext(), "🔇 Voz na Navegação Silenciada", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void updateMuteButtonIcon() {
+        if (btnMuteVoiceNav == null) return;
+        boolean enabled = isVoiceNavigationEnabled();
+        if (enabled) {
+            btnMuteVoiceNav.setImageResource(android.R.drawable.ic_lock_silent_mode_off);
+        } else {
+            btnMuteVoiceNav.setImageResource(android.R.drawable.ic_lock_silent_mode);
+        }
+    }
+
+    private void speakVoiceNavigation(String text, boolean force) {
+        if (text == null || text.trim().isEmpty() || tts == null) return;
+        if (!isVoiceNavigationEnabled()) return;
+
+        long now = System.currentTimeMillis();
+        String cleaned = text.trim();
+        if (!force && cleaned.equalsIgnoreCase(lastSpokenInstruction) && (now - lastSpokenTime < 8000)) {
+            return;
+        }
+
+        lastSpokenInstruction = cleaned;
+        lastSpokenTime = now;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            tts.speak(cleaned, TextToSpeech.QUEUE_FLUSH, null, "nav_voice_" + now);
+        } else {
+            tts.speak(cleaned, TextToSpeech.QUEUE_FLUSH, null);
+        }
+    }
+
+    private String lastManeuverKey = "";
+    private int lastDistanceStage = -1;
+
+    private void announceNavigationTurn(String instruction, double nextDistMeters) {
+        if (instruction == null || instruction.trim().isEmpty()) return;
+
+        String distPhrase;
+        int distanceStage;
+
+        if (nextDistMeters > 300) {
+            distanceStage = 0;
+            if (nextDistMeters >= 1000) {
+                distPhrase = String.format(Locale.getDefault(), "Em %.1f quilômetros, ", nextDistMeters / 1000.0);
+            } else {
+                distPhrase = "Em " + (int) (Math.round(nextDistMeters / 50.0) * 50) + " metros, ";
+            }
+        } else if (nextDistMeters > 60) {
+            distanceStage = 1;
+            distPhrase = "Em " + (int) (Math.round(nextDistMeters / 10.0) * 10) + " metros, ";
+        } else {
+            distanceStage = 2;
+            distPhrase = "Agora, ";
+        }
+
+        String maneuverKey = instruction.trim().toLowerCase();
+        String fullVoiceText = distPhrase + instruction.trim();
+
+        if (!maneuverKey.equalsIgnoreCase(lastManeuverKey) || distanceStage > lastDistanceStage) {
+            lastManeuverKey = maneuverKey;
+            lastDistanceStage = distanceStage;
+            speakVoiceNavigation(fullVoiceText, true);
+        }
+    }
 
     private RouteStop currentlySelectedStop = null;
     private long lastTraceUpdate = 0;
@@ -397,49 +598,75 @@ public class RouteFragment extends Fragment {
     private final Runnable timerRunnable = new Runnable() {
         @Override
         public void run() {
-            if (isAdded() && currentRouteHeader != null && currentRouteHeader.startTime > 0) {
-                long elapsed;
-                if (currentRouteHeader.endTime > 0) {
-                    elapsed = currentRouteHeader.endTime - currentRouteHeader.startTime - currentRouteHeader.totalPausedMs;
-                } else {
-                    long now = System.currentTimeMillis();
-                    long currentPausedMs = currentRouteHeader.totalPausedMs + 
-                        (currentRouteHeader.lastPauseStartTime > 0 ? (now - currentRouteHeader.lastPauseStartTime) : 0);
-                    elapsed = now - currentRouteHeader.startTime - currentPausedMs;
-                }
-                
-                long s = elapsed / 1000;
-                long m = s / 60;
-                long h_val = m / 60;
-                String time = String.format(Locale.getDefault(), "%02d:%02d:%02d", h_val, m % 60, s % 60);
+            try {
+                if (isAdded() && currentRouteHeader != null) {
+                    boolean hasStops = currentStops != null && !currentStops.isEmpty();
+                    boolean timerOnCardsOnly = sharedPreferences != null && sharedPreferences.getBoolean("timer_on_cards_only", false);
 
-                boolean timerOnCardsOnly = sharedPreferences.getBoolean("timer_on_cards_only", false);
+                    if (currentRouteHeader.startTime > 0) {
+                        long elapsed;
+                        if (currentRouteHeader.endTime > 0) {
+                            elapsed = currentRouteHeader.endTime - currentRouteHeader.startTime - currentRouteHeader.totalPausedMs;
+                        } else {
+                            long now = System.currentTimeMillis();
+                            long currentPausedMs = currentRouteHeader.totalPausedMs + 
+                                (currentRouteHeader.lastPauseStartTime > 0 ? (now - currentRouteHeader.lastPauseStartTime) : 0);
+                            elapsed = now - currentRouteHeader.startTime - currentPausedMs;
+                        }
+                        if (elapsed < 0) elapsed = 0;
+                        
+                        long s = elapsed / 1000;
+                        long m = s / 60;
+                        long h_val = m / 60;
+                        String time = String.format(Locale.getDefault(), "%02d:%02d:%02d", h_val, m % 60, s % 60);
+                        if (currentRouteHeader.lastPauseStartTime > 0 && currentRouteHeader.endTime == 0) {
+                            time += " ⏸️";
+                        }
 
-                if (textRouteTotalTime != null) textRouteTotalTime.setText(time);
-                
-                boolean homeDefined = sharedPreferences.getFloat("home_lat", 0) != 0;
-                if (imageHomeWarning != null) {
-                    imageHomeWarning.setVisibility(homeDefined ? View.GONE : View.VISIBLE);
-                }
+                        if (textRouteTotalTime != null) textRouteTotalTime.setText(time);
+                        
+                        boolean homeDefined = sharedPreferences != null && sharedPreferences.getFloat("home_lat", 0) != 0;
+                        if (imageHomeWarning != null) {
+                            imageHomeWarning.setVisibility(homeDefined ? View.GONE : View.VISIBLE);
+                        }
 
-                if (cardRouteTotalTime != null) {
-                    if (timerOnCardsOnly) {
-                        // Se estiver no modo "Apenas nos Cards", só mostra o balão se a rota estiver finalizada
-                        cardRouteTotalTime.setVisibility(currentRouteHeader.endTime > 0 ? View.VISIBLE : View.GONE);
+                        boolean isOptPending = sharedPreferences != null && sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+
+                        if (cardRouteTotalTime != null) {
+                            if (isOptPending) {
+                                cardRouteTotalTime.setVisibility(View.GONE);
+                            } else if (timerOnCardsOnly) {
+                                cardRouteTotalTime.setVisibility(currentRouteHeader.endTime > 0 ? View.VISIBLE : View.GONE);
+                            } else {
+                                cardRouteTotalTime.setVisibility(hasStops ? View.VISIBLE : View.GONE);
+                            }
+                        }
+
+                        // Notifica os cards para atualizar o tempo individual
+                        if (viewPagerStops != null && stopsCardAdapter != null && currentStops != null && !currentStops.isEmpty()) {
+                            stopsCardAdapter.notifyItemRangeChanged(0, currentStops.size(), "TIMER_UPDATE");
+                        }
                     } else {
-                        // Caso contrário, mostra sempre que estiver rodando
-                        cardRouteTotalTime.setVisibility(View.VISIBLE);
+                        // Rota carregada, mas ainda não iniciada (startTime == 0)
+                        boolean isOptPending = sharedPreferences != null && sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+                        if (cardRouteTotalTime != null && textRouteTotalTime != null) {
+                            if (hasStops && !timerOnCardsOnly && !isOptPending) {
+                                textRouteTotalTime.setText("Iniciar Rota");
+                                if (imageHomeWarning != null) imageHomeWarning.setVisibility(View.GONE);
+                                cardRouteTotalTime.setVisibility(View.VISIBLE);
+                            } else {
+                                cardRouteTotalTime.setVisibility(View.GONE);
+                            }
+                        }
                     }
+                } else {
+                    if (cardRouteTotalTime != null) cardRouteTotalTime.setVisibility(View.GONE);
                 }
-
-                // 🔥 Notifica os cards para atualizar o tempo individual
-                if (viewPagerStops != null && stopsCardAdapter != null) {
-                    stopsCardAdapter.notifyItemRangeChanged(0, currentStops.size(), "TIMER_UPDATE");
-                }
-            } else {
-                if (cardRouteTotalTime != null) cardRouteTotalTime.setVisibility(View.GONE);
+            } catch (Exception e) {
+                Log.e("DriveLog", "Erro no timerRunnable: " + e.getMessage(), e);
+            } finally {
+                timerHandler.postDelayed(this, 1000);
             }
-            timerHandler.postDelayed(this, 1000);
         }
     };
     private boolean isSelectingSuggestion = false;
@@ -447,6 +674,7 @@ public class RouteFragment extends Fragment {
     private int currentRouteId = -1;
     private int pendingRestoreIndex = -1;
     private boolean isPositionRestored = false;
+    private boolean hasLeftHomeForRoute = false;
     private LiveData<List<RouteStop>> currentStopsLive;
     private LiveData<List<RouteGroup>> currentGroupsLive;
     private LiveData<RouteHeader> currentHeaderLive;
@@ -674,30 +902,79 @@ public class RouteFragment extends Fragment {
         if (editSearch == null || cardSearch == null || getContext() == null) return;
         if (editSearch.getVisibility() == View.GONE) return;
 
-        ViewGroup.LayoutParams lp = cardSearch.getLayoutParams();
-        if (!(lp instanceof RelativeLayout.LayoutParams)) return;
-        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) lp;
-        params.width = RelativeLayout.LayoutParams.WRAP_CONTENT;
-        params.removeRule(RelativeLayout.ALIGN_PARENT_START);
-        params.addRule(RelativeLayout.START_OF, R.id.btnToggleStatsSummary);
-        params.removeRule(RelativeLayout.END_OF);
-        cardSearch.setLayoutParams(params);
-        
-        if (layoutSearchBalloonOuter != null) layoutSearchBalloonOuter.getLayoutParams().width = ViewGroup.LayoutParams.WRAP_CONTENT;
-        if (layoutSearchBalloonInner != null) layoutSearchBalloonInner.getLayoutParams().width = ViewGroup.LayoutParams.WRAP_CONTENT;
+        editSearch.animate().alpha(0f).setDuration(200).withEndAction(() -> {
+            editSearch.setVisibility(View.GONE);
+            editSearch.setText("");
 
-        editSearch.setVisibility(View.GONE);
-        btnSearch.setVisibility(View.GONE);
-        if (btnToggleSearch != null) btnToggleSearch.setImageResource(android.R.drawable.ic_menu_search);
-        editSearch.setText("");
+            ViewGroup.LayoutParams lp = cardSearch.getLayoutParams();
+            if (lp instanceof RelativeLayout.LayoutParams) {
+                RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) lp;
+                params.width = RelativeLayout.LayoutParams.WRAP_CONTENT;
+                params.removeRule(RelativeLayout.ALIGN_PARENT_START);
+                params.addRule(RelativeLayout.ALIGN_PARENT_END, RelativeLayout.TRUE);
+                cardSearch.setLayoutParams(params);
+            }
+
+            if (layoutSearchBalloonOuter != null) layoutSearchBalloonOuter.getLayoutParams().width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            if (layoutSearchBalloonInner != null) layoutSearchBalloonInner.getLayoutParams().width = ViewGroup.LayoutParams.WRAP_CONTENT;
+
+            if (btnToggleSearch != null) {
+                btnToggleSearch.setVisibility(View.VISIBLE);
+                btnToggleSearch.setImageResource(android.R.drawable.ic_menu_search);
+                btnToggleSearch.setTranslationX(0f);
+                btnToggleSearch.setAlpha(0f);
+                btnToggleSearch.animate().alpha(1f).setDuration(200).start();
+            }
+
+            if (btnAddStopManual != null) {
+                btnAddStopManual.setVisibility(View.VISIBLE);
+                btnAddStopManual.setAlpha(0f);
+                btnAddStopManual.animate().alpha(1f).setDuration(200).start();
+            }
+
+            if (btnPackageOrganization != null) {
+                btnPackageOrganization.setVisibility(View.VISIBLE);
+                btnPackageOrganization.setAlpha(0f);
+                btnPackageOrganization.animate().alpha(1f).setDuration(200).start();
+            }
+
+            if (btnRouteMenu != null) {
+                btnRouteMenu.setVisibility(View.VISIBLE);
+                btnRouteMenu.setAlpha(0f);
+                btnRouteMenu.animate().alpha(1f).setDuration(200).start();
+            }
+
+            if (layoutNotificationsContainer != null) {
+                boolean showNotifs = sharedPreferences.getBoolean("show_fab_notifications", true);
+                layoutNotificationsContainer.setVisibility(showNotifs ? View.VISIBLE : View.GONE);
+                layoutNotificationsContainer.setAlpha(0f);
+                layoutNotificationsContainer.animate().alpha(1f).setDuration(200).start();
+            }
+
+            if (layoutNavMapIconContainer != null) {
+                boolean isSearchBalloonStyle = "search_balloon".equals(sharedPreferences.getString("nav_button_style", "original"));
+                boolean hasStops = currentStops != null && !currentStops.isEmpty();
+                boolean isOptPending = sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+                boolean isManualPending = sharedPreferences.getBoolean("route_manual_list_pending_" + currentRouteId, false);
+                
+                if (isSearchBalloonStyle && hasStops && !isOptPending && !isManualPending) {
+                    layoutNavMapIconContainer.setVisibility(View.VISIBLE);
+                    layoutNavMapIconContainer.setAlpha(0f);
+                    layoutNavMapIconContainer.animate().alpha(1f).setDuration(200).start();
+                } else {
+                    layoutNavMapIconContainer.setVisibility(View.GONE);
+                }
+            }
+
+            updateNavigationButtonStyle();
+        }).start();
+
         editSearch.clearFocus();
-        
         if (recyclerSuggestions != null) recyclerSuggestions.setVisibility(View.GONE);
 
         InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(editSearch.getWindowToken(), 0);
 
-        // Restaura botão do drawer se necessário
         updateAppModeUI();
     }
 
@@ -716,7 +993,7 @@ public class RouteFragment extends Fragment {
         int mb;
         if (isCardActive) {
             // Se o card de paradas estiver ativo, os botões ficam ACIMA dele (margem maior)
-            mb = (int) (220 * getResources().getDisplayMetrics().density) + systemBottom;
+            mb = (int) (246 * getResources().getDisplayMetrics().density) + systemBottom;
         } else {
             // Se NÃO estiver ativo, eles descem para perto da parte inferior da tela
             // No modo Mapa (app_mode 1), sistemaBottom cuida da barra de navegação. 
@@ -729,6 +1006,16 @@ public class RouteFragment extends Fragment {
             ConstraintLayout.LayoutParams p = (ConstraintLayout.LayoutParams) lp;
             p.bottomMargin = mb; 
             layoutSideFabs.setLayoutParams(p);
+        }
+
+        if (cardRouteTotalTime != null) {
+            ViewGroup.LayoutParams lpTime = cardRouteTotalTime.getLayoutParams();
+            if (lpTime instanceof ConstraintLayout.LayoutParams) {
+                ConstraintLayout.LayoutParams pTime = (ConstraintLayout.LayoutParams) lpTime;
+                int stopsCardTopEdge = isCardActive ? (int) (201 * getResources().getDisplayMetrics().density) + systemBottom : ((int) (16 * getResources().getDisplayMetrics().density) + systemBottom);
+                pTime.bottomMargin = stopsCardTopEdge;
+                cardRouteTotalTime.setLayoutParams(pTime);
+            }
         }
     }
 
@@ -776,9 +1063,103 @@ public class RouteFragment extends Fragment {
         dialog.show();
     }
 
+    private void updateNavigationButtonStyle() {
+        if (getContext() == null) return;
+        String navStyle = sharedPreferences.getString("nav_button_style", "original");
+        boolean isSearchBalloonStyle = "search_balloon".equals(navStyle);
+        boolean hasStops = currentStops != null && !currentStops.isEmpty();
+
+        boolean isOptPending = sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+        boolean isManualPending = sharedPreferences.getBoolean("route_manual_list_pending_" + currentRouteId, false);
+
+        if (isOptPending || isManualPending || !hasStops) {
+            if (layoutSwitchContainer != null) layoutSwitchContainer.setVisibility(View.GONE);
+            if (layoutNavMapIconContainer != null) layoutNavMapIconContainer.setVisibility(View.GONE);
+            return;
+        }
+
+        if (isSearchBalloonStyle) {
+            if (layoutSwitchContainer != null) layoutSwitchContainer.setVisibility(View.GONE);
+            if (layoutNavMapIconContainer != null) layoutNavMapIconContainer.setVisibility(View.VISIBLE);
+        } else {
+            if (layoutSwitchContainer != null) layoutSwitchContainer.setVisibility(View.VISIBLE);
+            if (layoutNavMapIconContainer != null) layoutNavMapIconContainer.setVisibility(View.GONE);
+        }
+
+        updateNavMapIconState();
+    }
+
+    private void updateNavMapIconState() {
+        if (btnNavMapIcon == null) return;
+        boolean isTraceActive = switchTraceLine != null && switchTraceLine.isChecked();
+        String navStyle = sharedPreferences != null ? sharedPreferences.getString("nav_button_style", "original") : "original";
+        boolean isSearchBalloonStyle = "search_balloon".equals(navStyle);
+
+        if (isTraceActive) {
+            btnNavMapIcon.setColorFilter(Color.parseColor("#2196F3"));
+            btnNavMapIcon.setAlpha(1.0f);
+
+            if (isSearchBalloonStyle && cardSearchNavDistance != null && editSearch != null && editSearch.getVisibility() != View.VISIBLE) {
+                if (cardSearchNavDistance.getVisibility() != View.VISIBLE) {
+                    cardSearchNavDistance.setVisibility(View.VISIBLE);
+                    cardSearchNavDistance.setTranslationY(-20f);
+                    cardSearchNavDistance.setAlpha(0f);
+                    cardSearchNavDistance.animate().translationY(0f).alpha(1f).setDuration(250).start();
+                }
+            } else if (cardSearchNavDistance != null) {
+                cardSearchNavDistance.setVisibility(View.GONE);
+            }
+        } else {
+            btnNavMapIcon.setColorFilter(Color.parseColor("#888888"));
+            btnNavMapIcon.setAlpha(0.6f);
+
+            if (cardSearchNavDistance != null && cardSearchNavDistance.getVisibility() == View.VISIBLE) {
+                cardSearchNavDistance.animate().translationY(-20f).alpha(0f).setDuration(200).withEndAction(() -> {
+                    cardSearchNavDistance.setVisibility(View.GONE);
+                }).start();
+            }
+        }
+    }
+
     private void updateFloatingButtonsVisibility() {
         if (getContext() == null) return;
-        
+
+        updateNavigationButtonStyle();
+
+        boolean isOptPending = sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+        boolean isManualPending = sharedPreferences.getBoolean("route_manual_list_pending_" + currentRouteId, false);
+
+        if (isOptPending || isManualPending) {
+            if (fabDeliveryApp != null) fabDeliveryApp.setVisibility(View.GONE);
+            if (fabCompass != null) fabCompass.setVisibility(View.GONE);
+            if (fabReportHazard != null) fabReportHazard.setVisibility(View.GONE);
+            if (fabCenterMap != null) fabCenterMap.setVisibility(View.GONE);
+            if (fabMapOrientation != null) fabMapOrientation.setVisibility(View.GONE);
+            if (fabKmTracking != null) fabKmTracking.setVisibility(View.GONE);
+            if (layoutSwitchContainer != null) layoutSwitchContainer.setVisibility(View.GONE);
+            if (cardRouteTotalTime != null) cardRouteTotalTime.setVisibility(View.GONE);
+            if (bottomSheet != null) bottomSheet.setVisibility(View.GONE);
+            if (cardNavigationMode != null) cardNavigationMode.setVisibility(View.GONE);
+            if (layoutStatsGroup != null) layoutStatsGroup.setVisibility(View.GONE);
+            if (cardSuccessSummary != null) cardSuccessSummary.setVisibility(View.GONE);
+            if (cardPendingSummary != null) cardPendingSummary.setVisibility(View.GONE);
+            if (cardFailedSummary != null) cardFailedSummary.setVisibility(View.GONE);
+            if (btnToggleStatsSummary != null) btnToggleStatsSummary.setVisibility(View.INVISIBLE);
+            if (cardRouteCorrections != null) cardRouteCorrections.setVisibility(View.GONE);
+
+            if (cardPendingManualList != null) {
+                cardPendingManualList.setVisibility(isManualPending ? View.VISIBLE : View.GONE);
+                if (isManualPending) updatePendingManualListUI();
+            }
+            if (cardPendingOptimization != null) {
+                cardPendingOptimization.setVisibility(isOptPending && !isManualPending ? View.VISIBLE : View.GONE);
+            }
+            return;
+        } else {
+            if (cardPendingManualList != null) cardPendingManualList.setVisibility(View.GONE);
+            if (cardPendingOptimization != null) cardPendingOptimization.setVisibility(View.GONE);
+        }
+
         // --- Cálculo do estado da rota ---
         int pendCount = 0;
         for (RouteStop s : currentStops) if (s.deliveryStatus == 0) pendCount++;
@@ -797,23 +1178,41 @@ public class RouteFragment extends Fragment {
         if (fabDeliveryApp != null) fabDeliveryApp.setVisibility(showDelivery ? View.VISIBLE : View.GONE);
         if (fabCompass != null) fabCompass.setVisibility(showCompass ? View.VISIBLE : View.GONE);
         if (fabReportHazard != null) fabReportHazard.setVisibility(showReport ? View.VISIBLE : View.GONE);
-        
-        // 🔥 REGRA: O botão de alternar foco só aparece se a rota estiver ativa (não vazia e não finalizada)
         if (fabCenterMap != null) fabCenterMap.setVisibility((showCenter && isRouteActive) ? View.VISIBLE : View.GONE);
-        
         if (fabMapOrientation != null) fabMapOrientation.setVisibility(showNorth ? View.VISIBLE : View.GONE);
 
         if (fabKmTracking != null) {
             boolean remoteVisible = getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("km");
             fabKmTracking.setVisibility((remoteVisible && showKm) ? View.VISIBLE : View.GONE);
         }
+
+        boolean showNotifs = sharedPreferences.getBoolean("show_fab_notifications", true);
+        if (layoutNotificationsContainer != null) {
+            layoutNotificationsContainer.setVisibility(showNotifs ? View.VISIBLE : View.GONE);
+        }
         
         if (fabNewRoute != null) {
             fabNewRoute.setVisibility((!hasStops || isRouteFinished) ? View.VISIBLE : View.GONE);
         }
 
+        updateNavigationButtonStyle();
+
         if (bottomSheet != null) {
             bottomSheet.setVisibility((!hasStops || !showStopsCard) ? View.GONE : View.VISIBLE);
+        }
+
+        if (hasStops && autoHideRunnable == null) {
+            boolean isStatsExpanded = sharedPreferences.getBoolean("stats_summary_expanded", true);
+            if (layoutStatsGroup != null) layoutStatsGroup.setVisibility(isStatsExpanded ? View.VISIBLE : View.GONE);
+            if (cardSuccessSummary != null) cardSuccessSummary.setVisibility(isStatsExpanded ? View.VISIBLE : View.GONE);
+            if (cardPendingSummary != null) cardPendingSummary.setVisibility(isStatsExpanded ? View.VISIBLE : View.GONE);
+            if (cardFailedSummary != null) {
+                int errStops = 0;
+                if (currentStops != null) {
+                    for (RouteStop s : currentStops) if (s.deliveryStatus == 2) errStops++;
+                }
+                cardFailedSummary.setVisibility((isStatsExpanded && errStops > 0) ? View.VISIBLE : View.GONE);
+            }
         }
     }
 
@@ -834,6 +1233,153 @@ public class RouteFragment extends Fragment {
     private final ActivityResultLauncher<Intent> importXlsxLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
         if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) processXlsxImport(result.getData().getData());
     });
+
+    private EditText activeAddressFieldForOcr = null;
+    private EditText activeSequenceFieldForOcr = null;
+
+    private final ActivityResultLauncher<Intent> ocrPhotoPickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                    Uri uri = result.getData().getData();
+                    if (uri != null) processOcrImageUri(uri);
+                }
+            }
+    );
+
+    private final ActivityResultLauncher<Intent> ocrCameraCaptureLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                    Bundle extras = result.getData().getExtras();
+                    if (extras != null && extras.get("data") instanceof Bitmap) {
+                        Bitmap bitmap = (Bitmap) extras.get("data");
+                        processOcrBitmap(bitmap);
+                    }
+                }
+            }
+    );
+
+    private void promptOcrSource(EditText targetAddressField, EditText targetSequenceField) {
+        this.activeAddressFieldForOcr = targetAddressField;
+        this.activeSequenceFieldForOcr = targetSequenceField;
+
+        String[] options = {"📷 Tirar Foto com Câmera", "🖼️ Escolher Imagem da Galeria"};
+        new AlertDialog.Builder(requireContext())
+                .setTitle("📷 Identificar Endereço por Foto")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        ocrCameraCaptureLauncher.launch(cameraIntent);
+                    } else {
+                        Intent galleryIntent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        galleryIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                        galleryIntent.setType("image/*");
+                        ocrPhotoPickerLauncher.launch(galleryIntent);
+                    }
+                })
+                .show();
+    }
+
+    private void processOcrImageUri(Uri imageUri) {
+        try {
+            InputImage image = InputImage.fromFilePath(requireContext(), imageUri);
+            runMlKitTextRecognition(image);
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "Erro ao carregar imagem: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void processOcrBitmap(Bitmap bitmap) {
+        try {
+            InputImage image = InputImage.fromBitmap(bitmap, 0);
+            runMlKitTextRecognition(image);
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "Erro ao processar foto: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void runMlKitTextRecognition(InputImage image) {
+        if (getContext() == null) return;
+
+        Toast.makeText(getContext(), "🔍 Lendo texto da foto com IA...", Toast.LENGTH_SHORT).show();
+
+        TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+        recognizer.process(image)
+                .addOnSuccessListener(visionText -> {
+                    List<String> detectedLines = new ArrayList<>();
+                    String textAll = visionText.getText();
+
+                    if (textAll == null || textAll.trim().isEmpty()) {
+                        Toast.makeText(getContext(), "Nenhum texto identificado na foto.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    for (Text.TextBlock block : visionText.getTextBlocks()) {
+                        for (Text.Line line : block.getLines()) {
+                            String lText = line.getText().trim();
+                            if (lText.length() > 3) {
+                                detectedLines.add(lText);
+                            }
+                        }
+                    }
+
+                    if (detectedLines.isEmpty()) {
+                        Toast.makeText(getContext(), "Nenhum endereço reconhecido.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+
+                    List<String> addressCandidates = new ArrayList<>();
+                    String detectedSeq = "";
+
+                    for (String line : detectedLines) {
+                        String lower = line.toLowerCase();
+                        if (lower.contains("rua") || lower.contains("r.") || lower.contains("av") || lower.contains("avenida")
+                                || lower.contains("alameda") || lower.contains("servid") || lower.contains("travessa")
+                                || lower.contains("rodovia") || lower.contains("quadra") || lower.contains("qd")
+                                || lower.contains("bloco") || lower.contains("bl") || lower.contains("bairro")
+                                || line.matches(".*\\d{1,5}.*")) {
+                            addressCandidates.add(line);
+                        }
+
+                        if (detectedSeq.isEmpty() && (lower.contains("spx") || lower.contains("seq") || line.matches("^\\d{1,3}$"))) {
+                            detectedSeq = line.replaceAll("[^0-9A-Za-z-]", "").trim();
+                        }
+                    }
+
+                    final String finalSeq = detectedSeq;
+
+                    if (addressCandidates.isEmpty()) {
+                        addressCandidates = detectedLines;
+                    }
+
+                    if (addressCandidates.size() == 1) {
+                        applyOcrResultToFields(addressCandidates.get(0), finalSeq);
+                    } else {
+                        String[] candidateArray = addressCandidates.toArray(new String[0]);
+                        new AlertDialog.Builder(requireContext())
+                                .setTitle("📷 Selecione o Endereço Lido")
+                                .setItems(candidateArray, (dialog, which) -> {
+                                    applyOcrResultToFields(candidateArray[which], finalSeq);
+                                })
+                                .setNegativeButton("CANCELAR", null)
+                                .show();
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(getContext(), "Erro ao reconhecer texto: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+    }
+
+    private void applyOcrResultToFields(String addressText, String sequenceText) {
+        if (activeAddressFieldForOcr != null) {
+            activeAddressFieldForOcr.setText(addressText);
+        }
+        if (activeSequenceFieldForOcr != null && sequenceText != null && !sequenceText.isEmpty()) {
+            activeSequenceFieldForOcr.setText(sequenceText);
+        }
+        Toast.makeText(getContext(), "✨ Endereço preenchido pela foto!", Toast.LENGTH_SHORT).show();
+    }
 
     private final BroadcastReceiver newRouteReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) { if ("com.example.entregas.ACTION_NEW_ROUTE".equals(intent.getAction())) promptNewRoute(); }
@@ -880,6 +1426,8 @@ public class RouteFragment extends Fragment {
         map = view.findViewById(R.id.mapRoute); 
         applyMapStyle();
         map.setMultiTouchControls(true);
+        map.setBuiltInZoomControls(false);
+        map.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.NEVER);
         mapController = map.getController(); 
         
         // 🔥 RESTAURAR ÚLTIMA POSIÇÃO PARA EVITAR CARREGAMENTO DO ZERO
@@ -912,13 +1460,14 @@ public class RouteFragment extends Fragment {
         });
         
         // Overlay para fechar busca ao clicar no mapa
-        map.getOverlays().add(new MapEventsOverlay(new MapEventsReceiver() {
+        searchMapEventsOverlay = new MapEventsOverlay(new MapEventsReceiver() {
             @Override public boolean singleTapConfirmedHelper(GeoPoint p) {
                 closeSearchUI();
                 return false; 
             }
             @Override public boolean longPressHelper(GeoPoint p) { return false; }
-        }));
+        });
+        map.getOverlays().add(searchMapEventsOverlay);
 
         map.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_MOVE) {
@@ -951,33 +1500,107 @@ public class RouteFragment extends Fragment {
             RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) lp;
             
             if (editSearch.getVisibility() == View.GONE) {
+                final float startX = btnToggleSearch.getX();
+
                 params.width = RelativeLayout.LayoutParams.MATCH_PARENT;
                 params.addRule(RelativeLayout.ALIGN_PARENT_START, RelativeLayout.TRUE);
-                params.addRule(RelativeLayout.START_OF, R.id.btnToggleStatsSummary);
-                params.removeRule(RelativeLayout.END_OF);
+                params.addRule(RelativeLayout.ALIGN_PARENT_END, RelativeLayout.TRUE);
                 cardSearch.setLayoutParams(params);
                 
                 if (layoutSearchBalloonOuter != null) layoutSearchBalloonOuter.getLayoutParams().width = ViewGroup.LayoutParams.MATCH_PARENT;
                 if (layoutSearchBalloonInner != null) layoutSearchBalloonInner.getLayoutParams().width = ViewGroup.LayoutParams.MATCH_PARENT;
                 
-                editSearch.setVisibility(View.VISIBLE);
-                btnSearch.setVisibility(View.VISIBLE);
-                btnToggleSearch.setImageResource(R.drawable.ic_close);
-                editSearch.requestFocus();
-                
-                // Oculta botão do drawer quando busca abre
+                if (btnAddStopManual != null) btnAddStopManual.animate().alpha(0f).setDuration(150).withEndAction(() -> btnAddStopManual.setVisibility(View.GONE)).start();
+                if (btnPackageOrganization != null) btnPackageOrganization.animate().alpha(0f).setDuration(150).withEndAction(() -> btnPackageOrganization.setVisibility(View.GONE)).start();
+                if (btnRouteMenu != null) btnRouteMenu.animate().alpha(0f).setDuration(150).withEndAction(() -> btnRouteMenu.setVisibility(View.GONE)).start();
+                if (layoutNotificationsContainer != null) layoutNotificationsContainer.animate().alpha(0f).setDuration(150).withEndAction(() -> layoutNotificationsContainer.setVisibility(View.GONE)).start();
+                if (layoutNavMapIconContainer != null) layoutNavMapIconContainer.animate().alpha(0f).setDuration(150).withEndAction(() -> layoutNavMapIconContainer.setVisibility(View.GONE)).start();
                 if (layoutOpenDrawerInside != null) layoutOpenDrawerInside.setVisibility(View.GONE);
+
+                editSearch.setVisibility(View.VISIBLE);
+                editSearch.setAlpha(0f);
+                editSearch.animate().alpha(1f).setDuration(280).start();
+
+                cardSearch.post(() -> {
+                    float newLayoutX = btnToggleSearch.getX();
+                    float initialOffsetX = startX - newLayoutX;
+                    btnToggleSearch.setTranslationX(initialOffsetX);
+                    btnToggleSearch.animate()
+                            .translationX(0f)
+                            .setDuration(300)
+                            .setInterpolator(new AccelerateDecelerateInterpolator())
+                            .start();
+                });
+
+                editSearch.requestFocus();
 
                 InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
                 imm.showSoftInput(editSearch, InputMethodManager.SHOW_IMPLICIT);
             } else {
-                closeSearchUI();
+                String query = editSearch.getText().toString().trim();
+                if (query.isEmpty()) {
+                    closeSearchUI();
+                } else {
+                    searchAddress(query);
+                }
             }
         });
 
         btnAddStopManual = view.findViewById(R.id.btnAddStopManual); 
         btnOpenDrawer = view.findViewById(R.id.btnOpenRoutesDrawerInside);
         layoutOpenDrawerInside = view.findViewById(R.id.layoutOpenDrawerInside);
+
+        if (btnOpenDrawer instanceof ImageView) {
+            Drawable d = ((ImageView) btnOpenDrawer).getDrawable();
+            if (d instanceof AnimatedVectorDrawable) {
+                AnimatedVectorDrawable avd = (AnimatedVectorDrawable) d;
+                menuAnimRunnable = new Runnable() {
+                    @Override
+                    public void run() {
+                        if (isAdded()) {
+                            avd.start();
+                            menuAnimHandler.postDelayed(this, 5000);
+                        }
+                    }
+                };
+            }
+        }
+
+        cardUndoCorrection = view.findViewById(R.id.cardUndoCorrection);
+        textUndoCorrectionMessage = view.findViewById(R.id.textUndoCorrectionMessage);
+        btnUndoCorrectionAction = view.findViewById(R.id.btnUndoCorrectionAction);
+
+        layoutNotificationsContainer = view.findViewById(R.id.layoutNotificationsContainer);
+        btnNotifications = view.findViewById(R.id.btnNotifications);
+        badgeNotificationDot = view.findViewById(R.id.badgeNotificationDot);
+
+        layoutNavMapIconContainer = view.findViewById(R.id.layoutNavMapIconContainer);
+        btnNavMapIcon = view.findViewById(R.id.btnNavMapIcon);
+        cardSearchNavDistance = view.findViewById(R.id.cardSearchNavDistance);
+        textSearchNavDistance = view.findViewById(R.id.textSearchNavDistance);
+
+        if (btnNavMapIcon != null) {
+            btnNavMapIcon.setOnClickListener(v -> {
+                if (switchTraceLine != null) {
+                    boolean newState = !switchTraceLine.isChecked();
+                    switchTraceLine.setChecked(newState);
+                    updateNavMapIconState();
+                    if (newState) {
+                        Toast.makeText(getContext(), "🗺️ Linha de navegação ativada", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(getContext(), "🗺️ Linha de navegação desativada", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+
+        if (btnNotifications != null) {
+            btnNotifications.setOnClickListener(v -> {
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).showCommunityNotificationsDialog();
+                }
+            });
+        }
 
         fabCompass = view.findViewById(R.id.fabCompass);
         imageCompassInner = view.findViewById(R.id.imageCompassInner);
@@ -1045,6 +1668,34 @@ public class RouteFragment extends Fragment {
             observeTrackingStatus();
         }
 
+        // --- Balão de Otimização Pendente ---
+        cardPendingOptimization = view.findViewById(R.id.cardPendingOptimization);
+        btnFinishOptimizationNow = view.findViewById(R.id.btnFinishOptimizationNow);
+        if (btnFinishOptimizationNow != null) {
+            btnFinishOptimizationNow.setOnClickListener(v -> promptFinishOptimizationNow());
+        }
+        btnCancelAndDeleteOptimizationRoute = view.findViewById(R.id.btnCancelAndDeleteOptimizationRoute);
+        if (btnCancelAndDeleteOptimizationRoute != null) {
+            btnCancelAndDeleteOptimizationRoute.setOnClickListener(v -> promptCancelAndDeleteManualRoute());
+        }
+
+        // --- Balão de Lista em Edição ---
+        cardPendingManualList = view.findViewById(R.id.cardPendingManualList);
+        textPendingManualListTitle = view.findViewById(R.id.textPendingManualListTitle);
+        textPendingManualListSubtitle = view.findViewById(R.id.textPendingManualListSubtitle);
+        btnContinueManualListEditing = view.findViewById(R.id.btnContinueManualListEditing);
+        if (btnContinueManualListEditing != null) {
+            btnContinueManualListEditing.setOnClickListener(v -> {
+                if (currentRouteId != -1) {
+                    showManualListCreationDialog(currentRouteId, (currentRouteHeader != null && currentRouteHeader.name != null) ? currentRouteHeader.name : "Minha Rota");
+                }
+            });
+        }
+        btnCancelAndDeleteManualRoute = view.findViewById(R.id.btnCancelAndDeleteManualRoute);
+        if (btnCancelAndDeleteManualRoute != null) {
+            btnCancelAndDeleteManualRoute.setOnClickListener(v -> promptCancelAndDeleteManualRoute());
+        }
+
         // --- Inicialização da Linha do Tempo ---
         cardTimeline = view.findViewById(R.id.cardTimelineRoute);
         seekBarTimeline = view.findViewById(R.id.seekBarTimelineRoute);
@@ -1066,6 +1717,8 @@ public class RouteFragment extends Fragment {
 
         if (btnSearch != null) btnSearch.setOnClickListener(v -> searchAddress(editSearch.getText().toString()));
         if (btnAddStopManual != null) btnAddStopManual.setOnClickListener(v -> showAddOptionDialog());
+        btnPackageOrganization = view.findViewById(R.id.btnPackageOrganization);
+        if (btnPackageOrganization != null) btnPackageOrganization.setOnClickListener(v -> showPackageOrganizationDialog());
         if (btnRouteMenu != null) {
             btnRouteMenu.setOnClickListener(v -> showRouteOptionsMenu(v));
         }
@@ -1099,43 +1752,18 @@ public class RouteFragment extends Fragment {
         textWeatherCity = view.findViewById(R.id.textWeatherCity);
         imageWeatherIcon = view.findViewById(R.id.imageWeatherIcon);
         cardWeatherSummary = view.findViewById(R.id.cardWeatherSummary);
-        cardRouteTotalTime = view.findViewById(R.id.cardRouteTotalTime);
-        textRouteTotalTime = view.findViewById(R.id.textRouteTotalTime);
         cardRouteCorrections = view.findViewById(R.id.cardRouteCorrections);
         textRouteCorrections = view.findViewById(R.id.textRouteCorrections);
         if (cardRouteCorrections != null) {
             cardRouteCorrections.setOnClickListener(v -> showRouteCorrectionsDialog());
         }
         
+        cleanupInvalidLocalFixes(getContext());
+
         AppDatabase.getInstance(requireContext()).appDao().getAllCorrectedAddressesLive()
             .observe(getViewLifecycleOwner(), caList -> updateRouteCorrectionsCount());
 
         textSheetHeader = view.findViewById(R.id.textSheetHeader);
-        imageHomeWarning = view.findViewById(R.id.imageHomeWarning);
-        if (cardRouteTotalTime != null) {
-            cardRouteTotalTime.setOnClickListener(v -> {
-                PopupMenu p = new PopupMenu(requireContext(), v);
-                
-                boolean homeDefined = sharedPreferences.getFloat("home_lat", 0) != 0;
-                if (!homeDefined) {
-                    p.getMenu().add("Definir Endereço de Casa");
-                }
-                
-                if (currentRouteHeader != null && currentRouteHeader.startTime > 0) {
-                    p.getMenu().add("Estatísticas da Rota");
-                }
-
-                p.setOnMenuItemClickListener(item -> {
-                    if ("Definir Endereço de Casa".equals(item.getTitle())) {
-                        startHomeSelection();
-                    } else if (item.getTitle().equals("Estatísticas da Rota")) {
-                        showRouteStatsPopup();
-                    }
-                    return true;
-                });
-                p.show();
-            });
-        }
         if (cardWeatherSummary != null) {
             cardWeatherSummary.setOnClickListener(v -> {
                 if (lastWeekWeather.isEmpty()) {
@@ -1144,6 +1772,15 @@ public class RouteFragment extends Fragment {
                 } else {
                     showWeatherHourlyPopup();
                 }
+            });
+        }
+
+        btnMuteVoiceNav = view.findViewById(R.id.btnMuteVoiceNav);
+        updateMuteButtonIcon();
+        if (btnMuteVoiceNav != null) {
+            btnMuteVoiceNav.setOnClickListener(v -> {
+                boolean currentState = isVoiceNavigationEnabled();
+                setVoiceNavigationEnabled(!currentState, true);
             });
         }
         
@@ -1161,8 +1798,16 @@ public class RouteFragment extends Fragment {
         }
         btnStartLassoDraw = view.findViewById(R.id.btnStartLassoDraw); btnUndoLasso = view.findViewById(R.id.btnUndoLasso);
         btnExitLasso = view.findViewById(R.id.btnExitLasso); cardFixMode = view.findViewById(R.id.cardFixMode);
+        View btnCancelFix = view.findViewById(R.id.btnCancelFix);
+        if (btnCancelFix != null) {
+            btnCancelFix.setOnClickListener(v -> exitFixMode());
+        }
         cardLassoMode = view.findViewById(R.id.cardLassoMode); cardRestWarning = view.findViewById(R.id.cardRestWarningRoute);
         cardNavigationMode = view.findViewById(R.id.cardNavigationMode);
+        borderProgressDrawable = new BorderProgressDrawable(2.5f, 12f, Color.parseColor("#E0E0E0"), Color.parseColor("#2196F3"), requireContext());
+        if (cardNavigationMode != null) {
+            cardNavigationMode.setForeground(borderProgressDrawable);
+        }
 
         editSearchStops = view.findViewById(R.id.editSearchStops);
         btnToggleSearchStops = view.findViewById(R.id.btnToggleSearchStops);
@@ -1289,22 +1934,23 @@ public class RouteFragment extends Fragment {
         if (cardPendingSummary != null) cardPendingSummary.setOnClickListener(v -> showStatsPopup(0));
 
         layoutStatsGroup = view.findViewById(R.id.layoutStatsGroup);
-        btnToggleStatsSummary = view.findViewById(R.id.btnToggleStatsSummary);
-        imageToggleStatsSummary = view.findViewById(R.id.imageToggleStatsSummary);
-
-        if (btnToggleStatsSummary != null) {
-            btnToggleStatsSummary.setOnClickListener(v -> toggleStatsSummary());
-            
-            // Estado inicial do SharedPreferences
-            boolean isExpanded = sharedPreferences.getBoolean("stats_summary_expanded", true);
-            if (!isExpanded) {
-                if (layoutStatsGroup != null) layoutStatsGroup.setVisibility(View.GONE);
-                if (imageToggleStatsSummary != null) imageToggleStatsSummary.setImageResource(R.drawable.ic_arrow_down);
-            }
-        }
 
         if (bottomSheet != null) {
             bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet);
+
+            requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), new OnBackPressedCallback(true) {
+                @Override
+                public void handleOnBackPressed() {
+                    if (bottomSheetBehavior != null && bottomSheetBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
+                        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                    } else {
+                        setEnabled(false);
+                        requireActivity().getOnBackPressedDispatcher().onBackPressed();
+                        setEnabled(true);
+                    }
+                }
+            });
+
             bottomSheetBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
                 @Override public void onStateChanged(@NonNull View bs, int ns) {
                     if (ns == BottomSheetBehavior.STATE_EXPANDED) { 
@@ -1354,7 +2000,7 @@ public class RouteFragment extends Fragment {
         recyclerSuggestions.setAdapter(suggestionsAdapter);
         stopsCardAdapter = new StopsCardAdapter(this, new ArrayList<>(), this::onStopAction);
         viewPagerStops.setAdapter(stopsCardAdapter);
-        stopsListAdapter = new StopsListAdapter(new ArrayList<>(), stop -> { 
+        stopsListAdapter = new StopsListAdapter(this, new ArrayList<>(), stop -> { 
             if (isUnifyMode) {
                 btnUnifyManual.setText("Confirmar (" + stopsListAdapter.getSelectedStops().size() + ")");
             } else if (isEditMode) {
@@ -1513,6 +2159,19 @@ public class RouteFragment extends Fragment {
                         if (currentlySelectedStop != null && switchTraceLine != null && switchTraceLine.isChecked()) {
                             updateNavigationLineProgress();
                         }
+
+                        // 🔥 Atualiza o clima automaticamente ao mudar de cidade/posição (> 5km) ou após 30 min
+                        boolean shouldUpdateWeather = false;
+                        if (lastWeatherLocation == null) {
+                            shouldUpdateWeather = true;
+                        } else if (currentLocation.distanceToAsDouble(lastWeatherLocation) > 5000) {
+                            shouldUpdateWeather = true;
+                        } else if (System.currentTimeMillis() - lastWeatherUpdate > 1800000) {
+                            shouldUpdateWeather = true;
+                        }
+                        if (shouldUpdateWeather) {
+                            fetchWeather();
+                        }
                     });
                 }
             }
@@ -1618,6 +2277,7 @@ public class RouteFragment extends Fragment {
     private void switchRoute(int rid, String n) {
         if (getContext() == null) return;
         this.currentRouteId = rid;
+        this.hasLeftHomeForRoute = false;
         
         // 🔥 Limpeza total do estado da rota anterior
         currentlySelectedStop = null;
@@ -1677,6 +2337,14 @@ public class RouteFragment extends Fragment {
                 createNewRoute(name, false);
             }
         });
+        v.findViewById(R.id.cardManualListCreation).setOnClickListener(v2 -> { 
+            d.dismiss(); 
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).showInterstitialThenAction(() -> createNewRouteWithManualList(name));
+            } else {
+                createNewRouteWithManualList(name);
+            }
+        });
         v.findViewById(R.id.cardImportXlsx).setOnClickListener(v2 -> { 
             d.dismiss(); 
             if (getActivity() instanceof MainActivity) {
@@ -1703,6 +2371,174 @@ public class RouteFragment extends Fragment {
                 CloudSyncHelper.syncNow(requireContext(), "Nova Rota"); 
             }); 
         }).start(); 
+    }
+
+    private void createNewRouteWithManualList(String name) {
+        new Thread(() -> {
+            RouteHeader h = new RouteHeader(name);
+            long id = AppDatabase.getInstance(requireContext()).appDao().insertRouteHeader(h);
+            Activity activity = getActivity();
+            if (activity != null) activity.runOnUiThread(() -> {
+                switchRoute((int) id, name);
+                sharedPreferences.edit().putBoolean("route_manual_list_pending_" + id, true).apply();
+                sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
+                showManualListCreationDialog((int) id, name);
+                CloudSyncHelper.syncNow(requireContext(), "Nova Rota Manual");
+            });
+        }).start();
+    }
+
+    private void showManualListCreationDialog(int routeId, String routeName) {
+        if (getContext() == null) return;
+
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_manual_list_creation, null);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).setCancelable(false).create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        TextView textTitle = v.findViewById(R.id.textManualListTitle);
+        if (textTitle != null) textTitle.setText("📝 Criar Lista de Paradas - " + routeName);
+
+        EditText editAddress = v.findViewById(R.id.editManualAddress);
+        EditText editCity = v.findViewById(R.id.editManualCity);
+        EditText editSequence = v.findViewById(R.id.editManualSequence);
+
+        if (editCity != null) {
+            String detectedCity = getCurrentCityAndState();
+            if (!detectedCity.isEmpty()) {
+                editCity.setText(detectedCity);
+            }
+        }
+
+        MaterialButton btnScanPhoto = v.findViewById(R.id.btnScanAddressFromPhoto);
+        if (btnScanPhoto != null) {
+            btnScanPhoto.setOnClickListener(v2 -> promptOcrSource(editAddress, editSequence));
+        }
+
+        MaterialButton btnAddStop = v.findViewById(R.id.btnAddManualStopToList);
+        TextView textSavedHeader = v.findViewById(R.id.textSavedStopsHeader);
+        RecyclerView recyclerPreview = v.findViewById(R.id.recyclerManualStopsPreview);
+        MaterialButton btnCancel = v.findViewById(R.id.btnCancelManualListCreation);
+        MaterialButton btnFinish = v.findViewById(R.id.btnFinishManualListCreation);
+
+        List<RouteStop> savedStops = new ArrayList<>();
+        Set<Integer> emptySelected = new HashSet<>();
+        final ImportPreviewAdapter[] manualAdapterHolder = new ImportPreviewAdapter[1];
+
+        ImportPreviewAdapter manualAdapter = new ImportPreviewAdapter(savedStops, emptySelected, new ImportPreviewAdapter.OnPreviewInteractionListener() {
+            @Override public void onSelectionChanged() {}
+            @Override
+            public void onDelete(int position) {
+                if (position >= 0 && position < savedStops.size()) {
+                    RouteStop toRemove = savedStops.remove(position);
+                    new Thread(() -> {
+                        AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                        dao.deleteRouteStop(toRemove);
+                        List<RouteStop> current = dao.getStopsForRoute(routeId);
+                        for (int i = 0; i < current.size(); i++) {
+                            current.get(i).sortOrder = i;
+                            current.get(i).stopNumber = i + 1;
+                        }
+                        dao.updateRouteStops(current);
+                    }).start();
+
+                    if (manualAdapterHolder[0] != null) manualAdapterHolder[0].notifyDataSetChanged();
+                    int count = savedStops.size();
+                    if (textTitle != null) textTitle.setText("📝 Criar Lista (" + count + " Paradas) - " + routeName);
+                    if (textSavedHeader != null) textSavedHeader.setText("📋 Paradas Adicionadas (" + count + "):");
+                    if (btnFinish != null) btnFinish.setText("Finalizar Lista e Iniciar Rota");
+                }
+            }
+            @Override public void onStartDrag(RecyclerView.ViewHolder viewHolder) {}
+        });
+        manualAdapterHolder[0] = manualAdapter;
+
+        if (recyclerPreview != null) {
+            recyclerPreview.setLayoutManager(new LinearLayoutManager(getContext()));
+            recyclerPreview.setAdapter(manualAdapter);
+        }
+
+        Runnable reloadSavedStops = () -> new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+            List<RouteStop> stopsFromDb = dao.getStopsForRoute(routeId);
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    savedStops.clear();
+                    savedStops.addAll(stopsFromDb);
+                    int count = savedStops.size();
+                    if (manualAdapterHolder[0] != null) manualAdapterHolder[0].notifyDataSetChanged();
+                    if (textTitle != null) {
+                        textTitle.setText("📝 Criar Lista (" + count + " Paradas) - " + routeName);
+                    }
+                    if (textSavedHeader != null) {
+                        textSavedHeader.setText("📋 Paradas Adicionadas (" + count + "):");
+                    }
+                    if (btnFinish != null) {
+                        btnFinish.setText("Finalizar Lista e Iniciar Rota");
+                    }
+                });
+            }
+        }).start();
+
+        reloadSavedStops.run();
+
+        View.OnClickListener saveActionListener = v2 -> {
+            String rawAddr = editAddress != null ? editAddress.getText().toString().trim() : "";
+            String cityText = editCity != null ? editCity.getText().toString().trim() : "";
+            String seqStr = editSequence != null ? editSequence.getText().toString().trim() : "";
+
+            if (rawAddr.isEmpty()) {
+                Toast.makeText(getContext(), "Digite o endereço do pacote.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            if (editAddress != null) editAddress.setText("");
+            if (editSequence != null) editSequence.setText("");
+            if (editAddress != null) editAddress.requestFocus();
+
+            geocodeManualStopAndSave(routeId, rawAddr, seqStr, cityText, () -> {
+                Toast.makeText(getContext(), "Parada salva no mapa!", Toast.LENGTH_SHORT).show();
+                reloadSavedStops.run();
+            });
+        };
+
+        if (btnAddStop != null) {
+            btnAddStop.setOnClickListener(saveActionListener);
+        }
+
+        if (editSequence != null) {
+            editSequence.setOnEditorActionListener((tv, actionId, event) -> {
+                if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_NEXT) {
+                    saveActionListener.onClick(tv);
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        if (btnCancel != null) {
+            btnCancel.setOnClickListener(v2 -> {
+                dialog.dismiss();
+                loadStopsForCurrentRoute();
+            });
+        }
+
+        if (btnFinish != null) {
+            btnFinish.setOnClickListener(v2 -> {
+                dialog.dismiss();
+                sharedPreferences.edit().remove("route_manual_list_pending_" + routeId).apply();
+                if (!savedStops.isEmpty()) {
+                    sharedPreferences.edit().putBoolean("route_optimization_pending_" + routeId, true).apply();
+                    showImportPreviewDialog(routeId, new ArrayList<>(savedStops));
+                } else {
+                    loadStopsForCurrentRoute();
+                }
+            });
+        }
+
+        dialog.show();
     }
 
     private void toggleEditMode() { isEditMode = !isEditMode; btnEditList.setText(isEditMode ? "Concluir" : "Editar Lista"); stopsListAdapter.setEditMode(isEditMode); if (isEditMode) itemTouchHelper.attachToRecyclerView(recyclerAllStops); else { itemTouchHelper.attachToRecyclerView(null); saveStopsOrder(); } }
@@ -1875,11 +2711,12 @@ public class RouteFragment extends Fragment {
         TextView title = v.findViewById(R.id.textStatsTitle);
         TextView textStops = v.findViewById(R.id.textStatsStopsCount);
         TextView textPackages = v.findViewById(R.id.textStatsPackagesCount);
-        TextView textStopsList = v.findViewById(R.id.textStatsStopsList);
+        RecyclerView recycler = v.findViewById(R.id.recyclerStatsStopsList);
+        TextView textEmpty = v.findViewById(R.id.textStatsStopsListEmpty);
         View layoutPackages = v.findViewById(R.id.layoutStatsPackages);
 
         int okStops = 0, okPkgs = 0, errStops = 0, pendStops = 0, pendPkgs = 0;
-        StringBuilder listBuilder = new StringBuilder();
+        List<RouteStop> matchedStops = new ArrayList<>();
         
         for (int i = 0; i < currentStops.size(); i++) {
             RouteStop s = currentStops.get(i);
@@ -1889,10 +2726,7 @@ public class RouteFragment extends Fragment {
             else if (type == 0 && s.deliveryStatus == 0) { pendStops++; pendPkgs += s.packageCount; match = true; }
 
             if (match) {
-                String seq = (s.allSequences != null && !s.allSequences.isEmpty()) ? s.allSequences : String.valueOf(s.sequence);
-                listBuilder.append("<b>#").append(s.stopNumber).append("</b> - ")
-                        .append(s.address).append("<br/>")
-                        .append("<font color='#666666'>Sequência: ").append(seq).append("</font><br/><br/>");
+                matchedStops.add(s);
             }
         }
 
@@ -1916,10 +2750,47 @@ public class RouteFragment extends Fragment {
             textPackages.setText(String.valueOf(pendPkgs));
         }
 
-        if (listBuilder.length() > 0) {
-            textStopsList.setText(Html.fromHtml(listBuilder.toString(), Html.FROM_HTML_MODE_COMPACT));
+        if (!matchedStops.isEmpty()) {
+            if (recycler != null) {
+                recycler.setVisibility(View.VISIBLE);
+                recycler.setLayoutManager(new LinearLayoutManager(getContext()));
+                recycler.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+                    @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int vt) {
+                        View itemView = LayoutInflater.from(p.getContext()).inflate(R.layout.item_dialog_stop_info, p, false);
+                        return new RecyclerView.ViewHolder(itemView) {};
+                    }
+
+                    @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder h, int pos) {
+                        RouteStop s = matchedStops.get(pos);
+                        TextView tNum = h.itemView.findViewById(R.id.textDialogStopNumber);
+                        TextView tAddr = h.itemView.findViewById(R.id.textDialogStopAddress);
+                        TextView tSeq = h.itemView.findViewById(R.id.textDialogStopSeq);
+                        TextView btnLoc = h.itemView.findViewById(R.id.btnDialogVehicleLocation);
+
+                        if (tNum != null) tNum.setText(String.valueOf(s.stopNumber));
+                        if (tAddr != null) tAddr.setText(s.address);
+                        if (tSeq != null) tSeq.setText(getFormattedSeqInfo(s));
+
+                        if (btnLoc != null) {
+                            if (s.vehicleLocation != null && !s.vehicleLocation.trim().isEmpty()) {
+                                btnLoc.setText("📍 " + s.vehicleLocation + " ▾");
+                            } else {
+                                btnLoc.setText("📍 Local ▾");
+                            }
+                            btnLoc.setOnClickListener(btnV -> {
+                                showVehicleLocationPicker(s, btnV);
+                                if (tSeq != null) tSeq.setText(getFormattedSeqInfo(s));
+                            });
+                        }
+                    }
+
+                    @Override public int getItemCount() { return matchedStops.size(); }
+                });
+            }
+            if (textEmpty != null) textEmpty.setVisibility(View.GONE);
         } else {
-            textStopsList.setText("Nenhuma parada nesta categoria.");
+            if (recycler != null) recycler.setVisibility(View.GONE);
+            if (textEmpty != null) textEmpty.setVisibility(View.VISIBLE);
         }
 
         v.findViewById(R.id.btnStatsClose).setOnClickListener(v2 -> dialog.dismiss());
@@ -1938,6 +2809,118 @@ public class RouteFragment extends Fragment {
     private void centerOnActiveStop() { if (currentStops.isEmpty()) { centerOnCurrentLocation(); return; } int p = viewPagerStops.getCurrentItem(); if (p>=0 && p<currentStops.size()) { RouteStop s = currentStops.get(p); if (mapController!=null && s.latitude!=0) { mapController.animateTo(new GeoPoint(s.latitude, s.longitude)); } else centerOnCurrentLocation(); isMapFocusedOnUser = false; updateCenterFabIcon(); } else centerOnCurrentLocation(); }
 
     private void centerOnCurrentLocation() { if (getContext()!=null && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED) fusedLocationClient.getLastLocation().addOnSuccessListener(l -> { if (l!=null && mapController!=null) { currentLocation = new GeoPoint(l.getLatitude(), l.getLongitude()); mapController.animateTo(currentLocation); isMapFocusedOnUser = true; updateCenterFabIcon(); } }); }
+
+    private void startRouteTimerManually() {
+        if (getContext() == null) return;
+        final int targetId = (currentRouteHeader != null && currentRouteHeader.id > 0) ? currentRouteHeader.id : currentRouteId;
+        if (targetId <= 0) return;
+
+        long now = System.currentTimeMillis();
+        hasLeftHomeForRoute = false;
+
+        if (currentRouteHeader != null) {
+            currentRouteHeader.startTime = now;
+            currentRouteHeader.totalPausedMs = 0;
+            currentRouteHeader.lastPauseStartTime = 0;
+            currentRouteHeader.endTime = 0;
+            currentRouteHeader.isCompleted = false;
+        }
+
+        Toast.makeText(getContext(), "🚀 Rota iniciada!", Toast.LENGTH_SHORT).show();
+        timerHandler.removeCallbacks(timerRunnable);
+        timerHandler.post(timerRunnable);
+
+        new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+            RouteHeader header = dao.getRouteById(targetId);
+            if (header != null) {
+                header.startTime = now;
+                header.totalPausedMs = 0;
+                header.lastPauseStartTime = 0;
+                header.endTime = 0;
+                header.isCompleted = false;
+                dao.updateRouteHeader(header);
+            }
+        }).start();
+    }
+
+    private void promptResetRoute() {
+        if (getContext() == null || currentRouteId == -1) return;
+
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_modern_confirm, null);
+        TextView title = dialogView.findViewById(R.id.textModernTitle);
+        TextView message = dialogView.findViewById(R.id.textModernMessage);
+        MaterialButton btnCancel = dialogView.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = dialogView.findViewById(R.id.btnModernPositive);
+
+        if (title != null) title.setText("Reiniciar Rota");
+        if (message != null) message.setText("Deseja zerar todo o tempo e reiniciar todas as paradas desta rota para o estado pendente?");
+        if (btnConfirm != null) btnConfirm.setText("REINICIAR");
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(dialogView).create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v -> dialog.dismiss());
+        if (btnConfirm != null) {
+            btnConfirm.setOnClickListener(v -> {
+                dialog.dismiss();
+                resetEntireRoute();
+            });
+        }
+
+        dialog.show();
+    }
+
+    private void resetEntireRoute() {
+        if (getContext() == null || currentRouteId == -1) return;
+        hasLeftHomeForRoute = false;
+
+        new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+            RouteHeader header = dao.getRouteById(currentRouteId);
+            if (header != null) {
+                header.startTime = 0;
+                header.endTime = 0;
+                header.totalPausedMs = 0;
+                header.lastPauseStartTime = 0;
+                header.isCompleted = false;
+                dao.updateRouteHeader(header);
+            }
+
+            if (currentRouteHeader != null) {
+                currentRouteHeader.startTime = 0;
+                currentRouteHeader.endTime = 0;
+                currentRouteHeader.totalPausedMs = 0;
+                currentRouteHeader.lastPauseStartTime = 0;
+                currentRouteHeader.isCompleted = false;
+            }
+
+            // Reseta o status de todas as paradas da rota para 0 (Pendente)
+            if (currentStops != null) {
+                for (RouteStop s : currentStops) {
+                    s.deliveryStatus = 0;
+                    s.deliveryTimestamp = 0;
+                    dao.updateRouteStop(s);
+                }
+            }
+
+            String celebrationKey = "last_finished_route_" + currentRouteId;
+            sharedPreferences.edit().remove(celebrationKey).apply();
+
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    if (textRouteTotalTime != null) textRouteTotalTime.setText("Iniciar Rota");
+                    if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                    if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                    refreshMarkers();
+                    flashStatsSummary(cardPendingSummary);
+                    CloudSyncHelper.syncNow(requireContext(), "Rota Reiniciada");
+                    Toast.makeText(getContext(), "🔄 Rota reiniciada com sucesso!", Toast.LENGTH_SHORT).show();
+                });
+            }
+        }).start();
+    }
 
     private void startHomeSelection() {
         if (homeSelectionOverlay != null) {
@@ -2296,8 +3279,20 @@ public class RouteFragment extends Fragment {
     }
 
     private void checkHomeAutoPause(GeoPoint loc) {
-        if (currentRouteHeader == null || currentRouteHeader.startTime == 0 || currentRouteHeader.endTime > 0) return;
+        if (loc == null || currentRouteHeader == null || currentRouteHeader.startTime == 0 || currentRouteHeader.endTime > 0) return;
         
+        // Só ativa a pausa automática por estar em casa se pelo menos 1 parada da rota tiver sido entregue
+        boolean hasDeliveredStops = false;
+        if (currentStops != null) {
+            for (RouteStop s : currentStops) {
+                if (s.deliveryStatus == 1) {
+                    hasDeliveredStops = true;
+                    break;
+                }
+            }
+        }
+        if (!hasDeliveredStops) return;
+
         float homeLat = sharedPreferences.getFloat("home_lat", 0);
         float homeLon = sharedPreferences.getFloat("home_lon", 0);
         if (homeLat == 0) return;
@@ -2305,6 +3300,17 @@ public class RouteFragment extends Fragment {
         GeoPoint home = new GeoPoint(homeLat, homeLon);
         double dist = loc.distanceToAsDouble(home);
         int radius = sharedPreferences.getInt("home_trigger_radius", 100);
+
+        // Se o motorista se afastar de casa durante a rota, marca que ele já saiu de casa
+        if (dist >= radius) {
+            hasLeftHomeForRoute = true;
+        }
+
+        // A pausa automática por estar em casa SÓ deve acontecer se o motorista JÁ TIVER SAÍDO de casa pelo menos uma vez durante a rota.
+        // Isso evita que o cronômetro congele se o motorista iniciar a rota ou testar entregas estando em casa.
+        if (!hasLeftHomeForRoute) {
+            return;
+        }
         
         long now = System.currentTimeMillis();
         boolean updated = false;
@@ -2916,6 +3922,7 @@ public class RouteFragment extends Fragment {
         final int[] likesCount = {q.likes};
         final int[] dislikesCount = {q.dislikes};
         final Boolean[] userVote = {null};
+        final boolean[] hasUserInteracted = {false};
 
         TextView textReliability = v.findViewById(R.id.textQuadraReliability);
         Runnable updateReliabilityBadge = () -> {
@@ -2956,7 +3963,7 @@ public class RouteFragment extends Fragment {
 
         // Busca a contagem atualizada do Firebase para garantir precisão
         FirebaseHelper.getQuadraDetails(q.name, q.neighborhood, (freshLikes, freshDislikes) -> {
-            if (isAdded()) {
+            if (isAdded() && !hasUserInteracted[0]) {
                 q.likes = freshLikes;
                 q.dislikes = freshDislikes;
                 likesCount[0] = freshLikes;
@@ -2970,7 +3977,7 @@ public class RouteFragment extends Fragment {
 
         // Busca o voto prévio do usuário
         FirebaseHelper.getUserQuadraVote(q.name, q.neighborhood, currentUserId, isLike -> {
-            if (isAdded()) {
+            if (isAdded() && !hasUserInteracted[0]) {
                 userVote[0] = isLike;
                 if (Boolean.TRUE.equals(isLike) && btnLike != null) {
                     btnLike.setBackgroundTintList(ColorStateList.valueOf(activeLikeColor));
@@ -2985,6 +3992,7 @@ public class RouteFragment extends Fragment {
         // Configura Lógica de Voto Único / Alternância de Like
         if (btnLike != null) {
             btnLike.setOnClickListener(view -> {
+                hasUserInteracted[0] = true;
                 if (Boolean.TRUE.equals(userVote[0])) {
                     userVote[0] = null;
                     likesCount[0] = Math.max(0, likesCount[0] - 1);
@@ -3025,6 +4033,7 @@ public class RouteFragment extends Fragment {
         // Configura Lógica de Voto Único / Alternância de Dislike
         if (btnDislike != null) {
             btnDislike.setOnClickListener(view -> {
+                hasUserInteracted[0] = true;
                 if (Boolean.FALSE.equals(userVote[0])) {
                     userVote[0] = null;
                     dislikesCount[0] = Math.max(0, dislikesCount[0] - 1);
@@ -3292,37 +4301,8 @@ public class RouteFragment extends Fragment {
 
     private void geocodeAndSaveStop(String address, String neighborhood) {
         new Thread(() -> {
-            try {
-                String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                String userAgent = "DriveLogApp_v1527_" + uniqueId;
-                
-                String query = address + (neighborhood.isEmpty() ? "" : ", " + neighborhood);
-                String u = String.format(Locale.US, "https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=1", URLEncoder.encode(query, "UTF-8"));
-                HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
-                c.setRequestProperty("User-Agent", userAgent);
-                BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()));
-                StringBuilder res = new StringBuilder();
-                String l; while((l=r.readLine())!=null) res.append(l);
-                JSONArray a = new JSONArray(res.toString());
-                
-                if (a.length() > 0) {
-                    JSONObject o = a.getJSONObject(0);
-                    saveStopToDb(address, neighborhood, o.getDouble("lat"), o.getDouble("lon"));
-                } else {
-                    Activity activity = getActivity();
-                    if (activity != null) activity.runOnUiThread(() -> {
-                            new AlertDialog.Builder(requireContext())
-                                .setTitle("Endereço não localizado")
-                                .setMessage("Não encontramos as coordenadas para: " + address + ".\n\nDeseja adicionar na sua localização atual mesmo assim?")
-                                .setPositiveButton("Sim, Usar GPS", (d, w) -> saveStopToDb(address, neighborhood, currentLocation.getLatitude(), currentLocation.getLongitude()))
-                                .setNegativeButton("Não, Cancelar", null)
-                                .show();
-                        });
-                }
-            } catch (Exception e) {
-                Activity activity = getActivity();
-                    if (activity != null) activity.runOnUiThread(() -> Toast.makeText(getContext(), "Erro na busca: " + e.getMessage(), Toast.LENGTH_SHORT).show());
-            }
+            double[] coords = searchCoordinatesCityRestricted(address, neighborhood);
+            saveStopToDb(address, neighborhood, coords[0], coords[1]);
         }).start();
     }
 
@@ -3681,175 +4661,467 @@ public class RouteFragment extends Fragment {
         dialog.show();
     }
 
+    public static class DialogOptionItem {
+        String id;
+        String title;
+        boolean isCategory;
+        boolean isCheckable;
+        boolean isChecked;
+        boolean isDropdown;
+        String valueText;
+
+        DialogOptionItem(String id, String title, boolean isCategory, boolean isCheckable, boolean isChecked) {
+            this(id, title, isCategory, isCheckable, isChecked, false, null);
+        }
+
+        DialogOptionItem(String id, String title, boolean isCategory, boolean isCheckable, boolean isChecked, boolean isDropdown, String valueText) {
+            this.id = id;
+            this.title = title;
+            this.isCategory = isCategory;
+            this.isCheckable = isCheckable;
+            this.isChecked = isChecked;
+            this.isDropdown = isDropdown;
+            this.valueText = valueText;
+        }
+    }
+
+    private String currentPopupTopicId = null;
+
     private void showRouteOptionsMenu(View anchor) {
-        Log.d("DriveLog", "showRouteOptionsMenu chamado!");
-        if (currentRouteId == -1) return;
-        PopupMenu p = new PopupMenu(requireContext(), anchor);
-        
-        boolean showWeather = sharedPreferences.getBoolean("show_weather_balloon", true);
-        p.getMenu().add(0, 105, 1, "Exibir Clima no Mapa").setCheckable(true).setChecked(showWeather);
-        
-        boolean autoNearest = sharedPreferences.getBoolean("advance_to_nearest", false);
-        p.getMenu().add(0, 103, 2, "Avançar para a mais próxima").setCheckable(true).setChecked(autoNearest);
-        
-        boolean timerOnCards = sharedPreferences.getBoolean("timer_on_cards_only", false);
-        p.getMenu().add(0, 104, 3, "Tempo apenas nos Cards").setCheckable(true).setChecked(timerOnCards);
-        
-        p.getMenu().add("Otimizar Rota");
-        p.getMenu().add("Otimizar Rota 2.0");
-        p.getMenu().add("Desenhar Rota (Laço)");
-        p.getMenu().add("Inverter Ordem");
-        p.getMenu().add("Limpar Rota");
-        p.getMenu().add("Importar Planilha");
-        
-        // --- Submenu de Alinhamento de Botões ---
-        SubMenu sub = p.getMenu().addSubMenu("Lado dos Botões Flutuantes");
-        String currentAlign = sharedPreferences.getString("side_fabs_alignment", "auto");
-        sub.add(2, 200, 0, "Automático (Padrão)").setCheckable(true).setChecked("auto".equals(currentAlign));
-        sub.add(2, 201, 1, "Esquerdo").setCheckable(true).setChecked("left".equals(currentAlign));
-        sub.add(2, 202, 2, "Direito").setCheckable(true).setChecked("right".equals(currentAlign));
-        
-        // --- NOVO: Submenu de Visibilidade dos Botões ---
-        SubMenu subVis = p.getMenu().addSubMenu("Visibilidade dos Botões");
-        subVis.add(3, 301, 0, "Botão Atalho App").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_delivery_app", true));
-        subVis.add(3, 307, 1, "Botão Bússola").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_compass", true));
-        subVis.add(3, 302, 2, "Botão Reportar").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_report_hazard", true));
-        subVis.add(3, 303, 2, "Botão Localização").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_center_map", true));
-        subVis.add(3, 304, 3, "Botão Norte").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_orientation", true));
-        
-        if (getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("km")) {
-            subVis.add(3, 306, 4, "Botão Rastreio KM").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_km_tracking", true));
+        showRouteOptionsMenuDialog();
+    }
+
+    private void showRouteOptionsMenuDialog() {
+        if (currentRouteId == -1 || getContext() == null) return;
+
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_route_options, null);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
 
-        if (getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("community_notifications")) {
-            subVis.add(3, 308, 5, "Botão Notificações").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_fab_notifications", true));
-        }
-        
-        subVis.add(3, 305, 5, "Card de Paradas").setCheckable(true).setChecked(sharedPreferences.getBoolean("show_bottom_sheet_stops", true));
+        TextView textTitle = v.findViewById(R.id.textDialogMenuTitle);
+        MaterialButton btnBack = v.findViewById(R.id.btnDialogBackMenu);
+        View btnClose = v.findViewById(R.id.btnDialogCloseMenu);
+        RecyclerView recycler = v.findViewById(R.id.recyclerDialogOptionsMenu);
+        recycler.setLayoutManager(new LinearLayoutManager(getContext()));
 
-        // Opção "Ocultar Entregas" movida para baixo do alinhamento de botões
-        boolean hideDelivered = sharedPreferences.getBoolean("hide_delivered_stops", false);
-        p.getMenu().add(0, 102, 8, "Ocultar Entregas no Mapa").setCheckable(true).setChecked(hideDelivered);
-        
-        FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
-        if (u != null && u.getEmail() != null) {
-            FirebaseHelper.checkDeveloperAccess(u.getEmail(), isDev -> {
-                Activity activity = getActivity();
-                if (isDev && activity != null) {
-                    activity.runOnUiThread(() -> {
-                        SharedPreferences pr = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
-                        p.getMenu().add(1, 101, 9, "🔄 Dev: Auto-Compartilhar").setCheckable(true).setChecked(pr.getBoolean("dev_auto_share_routes", false));
-                        p.getMenu().add(1, 99, 10, "🚀 Dev: Compartilhar Rota");
-                        p.getMenu().add(1, 100, 11, "📥 Dev: Baixar Rotas");
-                    });
+        if (btnClose != null) btnClose.setOnClickListener(v2 -> dialog.dismiss());
+
+        currentPopupTopicId = null;
+
+        dialog.setOnKeyListener((dialogInterface, keyCode, event) -> {
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+                if (currentPopupTopicId != null) {
+                    currentPopupTopicId = null;
+                    refreshDialogMenuUI(v, dialog, btnBack, textTitle, recycler);
+                    return true;
                 }
+            }
+            return false;
+        });
+
+        if (btnBack != null) {
+            btnBack.setOnClickListener(v2 -> {
+                currentPopupTopicId = null;
+                refreshDialogMenuUI(v, dialog, btnBack, textTitle, recycler);
             });
         }
-        
-        p.setOnMenuItemClickListener(item -> {
-            Log.d("DriveLog", "Menu clicado: " + item.getTitle());
-            if (item.getItemId() == 99) {
-                shareCurrentRouteWithDevs();
-            } else if (item.getItemId() == 100) {
-                showSharedDeveloperRoutes();
-            } else if (item.getItemId() == 101) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("dev_auto_share_routes", n).apply();
-            } else if (item.getItemId() == 102) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("hide_delivered_stops", n).apply();
-                refreshMarkers(); // Atualiza o mapa imediatamente
-            } else if (item.getItemId() == 105) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_weather_balloon", n).apply();
-                if (cardWeatherSummary != null) cardWeatherSummary.setVisibility(n ? View.VISIBLE : View.GONE);
-            } else if (item.getItemId() == 103) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("advance_to_nearest", n).apply();
-            } else if (item.getItemId() == 104) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("timer_on_cards_only", n).apply();
-                // Força atualização imediata da visibilidade do balão
-                if (cardRouteTotalTime != null) {
-                    if (n) {
-                        // Se ativou "apenas nos cards", só mostra se já estiver finalizada
-                        cardRouteTotalTime.setVisibility(currentRouteHeader != null && currentRouteHeader.endTime > 0 ? View.VISIBLE : View.GONE);
-                    } else {
-                        // Se desativou, mostra se já tiver começado
-                        cardRouteTotalTime.setVisibility(currentRouteHeader != null && currentRouteHeader.startTime > 0 ? View.VISIBLE : View.GONE);
+
+        refreshDialogMenuUI(v, dialog, btnBack, textTitle, recycler);
+        dialog.show();
+    }
+
+    private void refreshDialogMenuUI(View dialogView, AlertDialog dialog, MaterialButton btnBack, TextView textTitle, RecyclerView recycler) {
+        if (getContext() == null) return;
+        List<DialogOptionItem> items = new ArrayList<>();
+
+        if (currentPopupTopicId == null) {
+            if (btnBack != null) btnBack.setVisibility(View.GONE);
+            if (textTitle != null) textTitle.setText("⚙️ Opções da Rota");
+
+            items.add(new DialogOptionItem("topic_quick_access", "⚡ Acesso Rápido", true, false, false));
+            items.add(new DialogOptionItem("topic_optimization", "🧠 Otimização e Ações", true, false, false));
+            items.add(new DialogOptionItem("topic_navigation", "🔊 Navegação e Voz", true, false, false));
+            items.add(new DialogOptionItem("topic_visibility", "👁️ Visibilidade no Mapa", true, false, false));
+            items.add(new DialogOptionItem("topic_layout", "🔘 Botões e Layout", true, false, false));
+            items.add(new DialogOptionItem("topic_help", "❓ Ajuda", true, false, false));
+
+            FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
+            if (u != null && u.getEmail() != null) {
+                FirebaseHelper.checkDeveloperAccess(u.getEmail(), isDev -> {
+                    Activity act = getActivity();
+                    if (isDev && act != null) {
+                        act.runOnUiThread(() -> {
+                            items.add(new DialogOptionItem("topic_dev", "🛠️ Ferramentas DEV", true, false, false));
+                            if (recycler.getAdapter() != null) recycler.getAdapter().notifyDataSetChanged();
+                        });
                     }
-                }
-                if (stopsCardAdapter != null) stopsCardAdapter.notifyItemRangeChanged(0, currentStops.size(), "TIMER_UPDATE");
-            } else if (item.getItemId() == 200) {
-                sharedPreferences.edit().putString("side_fabs_alignment", "auto").apply();
-                updateAppModeUI();
-            } else if (item.getItemId() == 201) {
-                sharedPreferences.edit().putString("side_fabs_alignment", "left").apply();
-                updateAppModeUI();
-            } else if (item.getItemId() == 202) {
-                sharedPreferences.edit().putString("side_fabs_alignment", "right").apply();
-                updateAppModeUI();
-            } else if (item.getItemId() == 301) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_fab_delivery_app", n).apply();
-                updateFloatingButtonsVisibility();
-            } else if (item.getItemId() == 307) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_fab_compass", n).apply();
-                updateFloatingButtonsVisibility();
-            } else if (item.getItemId() == 302) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_fab_report_hazard", n).apply();
-                updateFloatingButtonsVisibility();
-            } else if (item.getItemId() == 303) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_fab_center_map", n).apply();
-                updateFloatingButtonsVisibility();
-            } else if (item.getItemId() == 304) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_fab_orientation", n).apply();
-                updateFloatingButtonsVisibility();
-            } else if (item.getItemId() == 305) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", n).apply();
-                updateFloatingButtonsVisibility();
-            } else if (item.getItemId() == 306) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_fab_km_tracking", n).apply();
-                updateFloatingButtonsVisibility();
-            } else if (item.getItemId() == 308) {
-                boolean n = !item.isChecked();
-                item.setChecked(n);
-                sharedPreferences.edit().putBoolean("show_fab_notifications", n).apply();
-                updateFloatingButtonsVisibility();
-            } else if ("Otimizar Rota".equals(item.getTitle())) {
-                optimizeRoute();
-            } else if ("Otimizar Rota 2.0".equals(item.getTitle())) {
-                optimizeRouteV2();
-            } else if ("Desenhar Rota (Laço)".equals(item.getTitle())) {
-                enterLassoMode();
-            } else if ("Inverter Ordem".equals(item.getTitle())) {
-                reverseRouteOrder();
-            } else if ("Limpar Rota".equals(item.getTitle())) {
-                promptClearRoute();
-            } else if ("Importar Planilha".equals(item.getTitle())) {
-                startXlsxImport();
+                });
             }
-            return true;
+        } else {
+            if (btnBack != null) btnBack.setVisibility(View.VISIBLE);
+
+            if ("topic_quick_access".equals(currentPopupTopicId)) {
+                if (textTitle != null) textTitle.setText("⚡ Acesso Rápido");
+                items.add(new DialogOptionItem("quick_map", "🗺️ Mapa", false, false, false));
+                items.add(new DialogOptionItem("quick_earnings", "💰 Ganhos", false, false, false));
+                items.add(new DialogOptionItem("quick_km", "🛣️ Rastreamento de KM", false, false, false));
+                items.add(new DialogOptionItem("quick_fuel", "⛽ Abastecimento", false, false, false));
+                items.add(new DialogOptionItem("quick_maint", "🛠️ Manutenção", false, false, false));
+                items.add(new DialogOptionItem("quick_reports", "📊 Relatórios", false, false, false));
+                
+                boolean showHelp = sharedPreferences.getBoolean("show_fab_help", true);
+                if (showHelp) {
+                    items.add(new DialogOptionItem("quick_help", "❓ Ajuda e Tutoriais", false, false, false));
+                }
+            } else if ("topic_optimization".equals(currentPopupTopicId)) {
+                if (textTitle != null) textTitle.setText("🧠 Otimização e Ações");
+                items.add(new DialogOptionItem("opt_v3", "🧠 Otimizar Rota 3.0 (Combustível)", false, false, false));
+                items.add(new DialogOptionItem("opt_v2", "⚡ Otimizar Rota 2.0 (Padrão OSRM)", false, false, false));
+                items.add(new DialogOptionItem("opt_v1", "Otimizar Rota (Básica)", false, false, false));
+                items.add(new DialogOptionItem("opt_sheet", "📄 Ordem Original (Planilha)", false, false, false));
+                items.add(new DialogOptionItem("opt_invert", "🔄 Inverter Ordem", false, false, false));
+                items.add(new DialogOptionItem("opt_lasso", "✏️ Desenhar Rota (Laço)", false, false, false));
+                items.add(new DialogOptionItem("opt_import", "📥 Importar Planilha", false, false, false));
+                items.add(new DialogOptionItem("opt_clear", "🗑️ Limpar Rota", false, false, false));
+            } else if ("topic_navigation".equals(currentPopupTopicId)) {
+                if (textTitle != null) textTitle.setText("🔊 Navegação e Voz");
+                boolean voiceNav = isVoiceNavigationEnabled();
+                boolean autoNearest = sharedPreferences.getBoolean("advance_to_nearest", false);
+                boolean timerOnCards = sharedPreferences.getBoolean("timer_on_cards_only", false);
+
+                items.add(new DialogOptionItem("nav_voice", "🔊 Voz na Navegação", false, true, voiceNav));
+                items.add(new DialogOptionItem("nav_auto_nearest", "🎯 Avançar para a mais próxima", false, true, autoNearest));
+                items.add(new DialogOptionItem("nav_timer_cards", "⏱️ Tempo apenas nos Cards", false, true, timerOnCards));
+            } else if ("topic_visibility".equals(currentPopupTopicId)) {
+                if (textTitle != null) textTitle.setText("👁️ Visibilidade no Mapa");
+                boolean showWeather = sharedPreferences.getBoolean("show_weather_balloon", true);
+                boolean isStatsExpanded = sharedPreferences.getBoolean("stats_summary_expanded", true);
+                boolean hideDelivered = sharedPreferences.getBoolean("hide_delivered_stops", false);
+
+                items.add(new DialogOptionItem("vis_weather", "☁️ Exibir Clima no Mapa", false, true, showWeather));
+                items.add(new DialogOptionItem("vis_stats", "📊 Exibir Resumo de Entregas", false, true, isStatsExpanded));
+                items.add(new DialogOptionItem("vis_hide_delivered", "🙈 Ocultar Entregas no Mapa", false, true, hideDelivered));
+            } else if ("topic_help".equals(currentPopupTopicId)) {
+                if (textTitle != null) textTitle.setText("❓ Ajuda");
+                items.add(new DialogOptionItem("help_tutorial", "🎓 Ver Tutorial do App", false, false, false));
+            } else if ("topic_layout".equals(currentPopupTopicId)) {
+                if (textTitle != null) textTitle.setText("🔘 Botões e Layout");
+
+                String currentStyle = sharedPreferences.getString("nav_button_style", "original");
+                String styleLabel = "search_balloon".equals(currentStyle) ? "Ícone no Balão de Busca" : "Estilo Original";
+                items.add(new DialogOptionItem("nav_style_picker", "Estilo de Botão de Navegação", false, false, false, true, styleLabel + " ▼"));
+
+                String currentAlign = sharedPreferences.getString("side_fabs_alignment", "auto");
+                String alignLabel = "Automático (Padrão)";
+                if ("left".equals(currentAlign)) alignLabel = "Esquerdo";
+                else if ("right".equals(currentAlign)) alignLabel = "Direito";
+
+                items.add(new DialogOptionItem("align_picker", "Lado dos Botões Flutuantes", false, false, false, true, alignLabel + " ▼"));
+
+                items.add(new DialogOptionItem("btn_app", "Botão Atalho App", false, true, sharedPreferences.getBoolean("show_fab_delivery_app", true)));
+                items.add(new DialogOptionItem("btn_compass", "Botão Bússola", false, true, sharedPreferences.getBoolean("show_fab_compass", true)));
+                items.add(new DialogOptionItem("btn_report", "Botão Reportar", false, true, sharedPreferences.getBoolean("show_fab_report_hazard", true)));
+                items.add(new DialogOptionItem("btn_center", "Botão Localização", false, true, sharedPreferences.getBoolean("show_fab_center_map", true)));
+                items.add(new DialogOptionItem("btn_north", "Botão Norte", false, true, sharedPreferences.getBoolean("show_fab_orientation", true)));
+                items.add(new DialogOptionItem("btn_stops_sheet", "Card de Paradas", false, true, sharedPreferences.getBoolean("show_bottom_sheet_stops", true)));
+
+                if (getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("km")) {
+                    items.add(new DialogOptionItem("btn_km", "Botão Rastreio KM", false, true, sharedPreferences.getBoolean("show_fab_km_tracking", true)));
+                }
+                if (getActivity() instanceof MainActivity && ((MainActivity) getActivity()).isMenuVisible("community_notifications")) {
+                    items.add(new DialogOptionItem("btn_notif", "Botão Notificações", false, true, sharedPreferences.getBoolean("show_fab_notifications", true)));
+                }
+            } else if ("topic_dev".equals(currentPopupTopicId)) {
+                if (textTitle != null) textTitle.setText("🛠️ Ferramentas DEV");
+                SharedPreferences pr = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
+                items.add(new DialogOptionItem("dev_auto_share", "🔄 Dev: Auto-Compartilhar", false, true, pr.getBoolean("dev_auto_share_routes", false)));
+                items.add(new DialogOptionItem("dev_share", "🚀 Dev: Compartilhar Rota", false, false, false));
+                items.add(new DialogOptionItem("dev_download", "📥 Dev: Baixar Rotas", false, false, false));
+                items.add(new DialogOptionItem("dev_show_help", "Mostrar Ícone de Ajuda no Acesso Rápido", false, true, sharedPreferences.getBoolean("show_fab_help", true)));
+            }
+        }
+
+        DialogOptionsMenuAdapter adapter = new DialogOptionsMenuAdapter(items, item -> {
+            if (item.isCategory) {
+                currentPopupTopicId = item.id;
+                refreshDialogMenuUI(dialogView, dialog, btnBack, textTitle, recycler);
+            } else {
+                handleDialogOptionAction(dialog, item, () -> refreshDialogMenuUI(dialogView, dialog, btnBack, textTitle, recycler));
+            }
         });
-        p.show();
+        recycler.setAdapter(adapter);
+    }
+
+    private void handleDialogOptionAction(AlertDialog dialog, DialogOptionItem item, Runnable refreshUI) {
+        if (item == null) return;
+
+        if (item.isCheckable) {
+            boolean newChecked = !item.isChecked;
+            item.isChecked = newChecked;
+
+            switch (item.id) {
+                case "nav_voice":
+                    setVoiceNavigationEnabled(newChecked, true);
+                    break;
+                case "nav_auto_nearest":
+                    sharedPreferences.edit().putBoolean("advance_to_nearest", newChecked).apply();
+                    break;
+                case "nav_timer_cards":
+                    sharedPreferences.edit().putBoolean("timer_on_cards_only", newChecked).apply();
+                    if (cardRouteTotalTime != null) {
+                        if (newChecked) {
+                            cardRouteTotalTime.setVisibility(currentRouteHeader != null && currentRouteHeader.endTime > 0 ? View.VISIBLE : View.GONE);
+                        } else {
+                            cardRouteTotalTime.setVisibility(currentRouteHeader != null && currentRouteHeader.startTime > 0 ? View.VISIBLE : View.GONE);
+                        }
+                    }
+                    if (stopsCardAdapter != null && currentStops != null && !currentStops.isEmpty()) {
+                        stopsCardAdapter.notifyItemRangeChanged(0, currentStops.size(), "TIMER_UPDATE");
+                    }
+                    break;
+                case "vis_weather":
+                    sharedPreferences.edit().putBoolean("show_weather_balloon", newChecked).apply();
+                    if (cardWeatherSummary != null) cardWeatherSummary.setVisibility(newChecked ? View.VISIBLE : View.GONE);
+                    break;
+                case "vis_stats":
+                    sharedPreferences.edit().putBoolean("stats_summary_expanded", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "vis_hide_delivered":
+                    sharedPreferences.edit().putBoolean("hide_delivered_stops", newChecked).apply();
+                    refreshMarkers();
+                    break;
+                case "btn_app":
+                    sharedPreferences.edit().putBoolean("show_fab_delivery_app", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "btn_compass":
+                    sharedPreferences.edit().putBoolean("show_fab_compass", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "dev_show_help":
+                    sharedPreferences.edit().putBoolean("show_fab_help", newChecked).apply();
+                    break;
+                case "btn_report":
+                    sharedPreferences.edit().putBoolean("show_fab_report_hazard", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "btn_center":
+                    sharedPreferences.edit().putBoolean("show_fab_center_map", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "btn_north":
+                    sharedPreferences.edit().putBoolean("show_fab_orientation", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "btn_stops_sheet":
+                    sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "btn_km":
+                    sharedPreferences.edit().putBoolean("show_fab_km_tracking", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "btn_notif":
+                    sharedPreferences.edit().putBoolean("show_fab_notifications", newChecked).apply();
+                    updateFloatingButtonsVisibility();
+                    break;
+                case "dev_auto_share":
+                    sharedPreferences.edit().putBoolean("dev_auto_share_routes", newChecked).apply();
+                    break;
+            }
+            if (refreshUI != null) refreshUI.run();
+        } else {
+            dialog.dismiss();
+            switch (item.id) {
+                case "quick_map":
+                    centerOnCurrentLocation();
+                    break;
+                case "quick_earnings":
+                    if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).openFragmentInSettings(new EarningsParentFragment(), "Ganhos");
+                    break;
+                case "quick_km":
+                    if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).openFragmentInSettings(new KmParentFragment(), "KM Diário");
+                    break;
+                case "quick_fuel":
+                    if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).openFragmentInSettings(new FuelParentFragment(), "Abastecimentos");
+                    break;
+                case "quick_maint":
+                    if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).openFragmentInSettings(new MaintenanceParentFragment(), "Manutenção");
+                    break;
+                case "quick_reports":
+                    if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).openFragmentInSettings(new ReportsFragment(), "Relatórios");
+                    break;
+                case "help_tutorial":
+                    if (getActivity() instanceof MainActivity) {
+                        ((MainActivity) getActivity()).showAppTutorial();
+                    }
+                    break;
+                case "opt_v3":
+                    promptOptimizeRouteV3();
+                    break;
+                case "opt_v2":
+                    optimizeRouteV2();
+                    break;
+                case "opt_v1":
+                    optimizeRoute();
+                    break;
+                case "opt_sheet":
+                    promptApplyOriginalOrder();
+                    break;
+                case "opt_invert":
+                    reverseRouteOrder();
+                    break;
+                case "opt_lasso":
+                    enterLassoMode();
+                    break;
+                case "opt_import":
+                    startXlsxImport();
+                    break;
+                case "opt_clear":
+                    promptClearRoute();
+                    break;
+                case "nav_style_picker":
+                    String[] styleOptions = {"Estilo Original", "Ícone no Balão de Busca"};
+                    String currStyle = sharedPreferences.getString("nav_button_style", "original");
+                    int currSel = "search_balloon".equals(currStyle) ? 1 : 0;
+
+                    AlertDialog styleDialog = new AlertDialog.Builder(requireContext())
+                            .setTitle("Estilo de Botão de Navegação")
+                            .setSingleChoiceItems(styleOptions, currSel, (d, which) -> {
+                                d.dismiss();
+                                String newStyle = (which == 1) ? "search_balloon" : "original";
+                                sharedPreferences.edit().putString("nav_button_style", newStyle).apply();
+                                updateNavigationButtonStyle();
+                                if (refreshUI != null) refreshUI.run();
+                            })
+                            .setNegativeButton("Cancelar", null)
+                            .create();
+
+                    if (styleDialog.getWindow() != null) {
+                        styleDialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+                    }
+                    styleDialog.show();
+                    break;
+                case "align_picker":
+                    String[] alignOptions = {"Automático (Padrão)", "Esquerdo", "Direito"};
+                    String currentAlign = sharedPreferences.getString("side_fabs_alignment", "auto");
+                    int currentSelection = 0;
+                    if ("left".equals(currentAlign)) currentSelection = 1;
+                    else if ("right".equals(currentAlign)) currentSelection = 2;
+
+                    AlertDialog pickerDialog = new AlertDialog.Builder(requireContext())
+                            .setTitle("Lado dos Botões Flutuantes")
+                            .setSingleChoiceItems(alignOptions, currentSelection, (d, which) -> {
+                                d.dismiss();
+                                String newAlign = "auto";
+                                if (which == 1) newAlign = "left";
+                                else if (which == 2) newAlign = "right";
+
+                                sharedPreferences.edit().putString("side_fabs_alignment", newAlign).apply();
+                                updateAppModeUI();
+                                if (refreshUI != null) refreshUI.run();
+                            })
+                            .setNegativeButton("Cancelar", null)
+                            .create();
+
+                    if (pickerDialog.getWindow() != null) {
+                        pickerDialog.getWindow().setBackgroundDrawableResource(R.drawable.bg_dialog_rounded);
+                    }
+                    pickerDialog.show();
+                    break;
+                case "align_auto":
+                    sharedPreferences.edit().putString("side_fabs_alignment", "auto").apply();
+                    updateAppModeUI();
+                    break;
+                case "align_left":
+                    sharedPreferences.edit().putString("side_fabs_alignment", "left").apply();
+                    updateAppModeUI();
+                    break;
+                case "align_right":
+                    sharedPreferences.edit().putString("side_fabs_alignment", "right").apply();
+                    updateAppModeUI();
+                    break;
+                case "dev_share":
+                    shareCurrentRouteWithDevs();
+                    break;
+                case "dev_download":
+                    showSharedDeveloperRoutes();
+                    break;
+            }
+        }
+    }
+
+    public static class DialogOptionsMenuAdapter extends RecyclerView.Adapter<DialogOptionsMenuAdapter.ViewHolder> {
+        private final List<DialogOptionItem> items;
+        private final OnOptionClickListener listener;
+
+        public interface OnOptionClickListener {
+            void onClick(DialogOptionItem item);
+        }
+
+        public DialogOptionsMenuAdapter(List<DialogOptionItem> items, OnOptionClickListener listener) {
+            this.items = items;
+            this.listener = listener;
+        }
+
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_dialog_route_option, parent, false);
+            return new ViewHolder(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+            DialogOptionItem item = items.get(position);
+            holder.textTitle.setText(item.title);
+
+            if (item.isCategory) {
+                holder.imageArrow.setVisibility(View.VISIBLE);
+                holder.switchCheck.setVisibility(View.GONE);
+                holder.textValue.setVisibility(View.GONE);
+            } else if (item.isDropdown) {
+                holder.imageArrow.setVisibility(View.GONE);
+                holder.switchCheck.setVisibility(View.GONE);
+                holder.textValue.setVisibility(View.VISIBLE);
+                holder.textValue.setText(item.valueText);
+            } else if (item.isCheckable) {
+                holder.imageArrow.setVisibility(View.GONE);
+                holder.switchCheck.setVisibility(View.VISIBLE);
+                holder.switchCheck.setChecked(item.isChecked);
+                holder.textValue.setVisibility(View.GONE);
+            } else {
+                holder.imageArrow.setVisibility(View.GONE);
+                holder.switchCheck.setVisibility(View.GONE);
+                holder.textValue.setVisibility(View.GONE);
+            }
+
+            holder.itemView.setOnClickListener(v -> {
+                if (listener != null) listener.onClick(item);
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return items.size();
+        }
+
+        public static class ViewHolder extends RecyclerView.ViewHolder {
+            TextView textTitle, textValue;
+            MaterialSwitch switchCheck;
+            ImageView imageArrow;
+
+            public ViewHolder(@NonNull View itemView) {
+                super(itemView);
+                textTitle = itemView.findViewById(R.id.textOptionTitle);
+                textValue = itemView.findViewById(R.id.textOptionValue);
+                switchCheck = itemView.findViewById(R.id.switchOptionCheck);
+                imageArrow = itemView.findViewById(R.id.imageOptionArrow);
+            }
+        }
     }
 
     private void enterLassoMode() {
@@ -4122,22 +5394,49 @@ public class RouteFragment extends Fragment {
     }
 
     private void fetchWeather() {
-        if (currentLocation == null) {
-            new Handler(Looper.getMainLooper()).postDelayed(this::fetchWeather, 5000);
+        if (getContext() == null) return;
+
+        // Verifica se a localização GPS atual é válida (não padrão e com coordenadas reais)
+        boolean isGpsValid = (currentLocation != null 
+                && Math.abs(currentLocation.getLatitude()) > 0.001 
+                && Math.abs(currentLocation.getLongitude()) > 0.001
+                && !(Math.abs(currentLocation.getLatitude() - (-23.5505)) < 0.01 && Math.abs(currentLocation.getLongitude() - (-46.6333)) < 0.01));
+
+        double targetLat = 0;
+        double targetLon = 0;
+
+        if (isGpsValid) {
+            targetLat = currentLocation.getLatitude();
+            targetLon = currentLocation.getLongitude();
+        } else if (currentStops != null && !currentStops.isEmpty()) {
+            // Se o GPS ainda não fixou, usa a localização da primeira parada da rota como fallback temporário
+            for (RouteStop s : currentStops) {
+                if (Math.abs(s.latitude) > 0.001) {
+                    targetLat = s.latitude;
+                    targetLon = s.longitude;
+                    break;
+                }
+            }
+        }
+
+        if (targetLat == 0 && targetLon == 0) {
+            new Handler(Looper.getMainLooper()).postDelayed(this::fetchWeather, 3000);
             return;
         }
 
-        final double lat = currentLocation.getLatitude();
-        final double lon = currentLocation.getLongitude();
-        lastWeatherLocation = currentLocation;
+        final double lat = targetLat;
+        final double lon = targetLon;
+        lastWeatherLocation = new GeoPoint(lat, lon);
         lastWeatherUpdate = System.currentTimeMillis();
 
         new Thread(() -> {
             try {
-                // 1. Buscar Clima (Open-Meteo) - Agora incluindo HOURLY
+                // 1. Buscar Clima (Open-Meteo)
                 String urlStr = String.format(Locale.US, "https://api.open-meteo.com/v1/forecast?latitude=%.6f&longitude=%.6f&current_weather=true&hourly=temperature_2m,weathercode", lat, lon);
                 URL url = new URL(urlStr);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
                 BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                 StringBuilder sb = new StringBuilder();
                 String line;
@@ -4198,7 +5497,6 @@ public class RouteFragment extends Fragment {
                         int maxFreq = -1;
                         for (int c : codeCounts.keySet()) {
                             int freq = codeCounts.get(c);
-                            // Se tiver chuva/raio pelo menos 2 horas, prioriza mostrar
                             if (c >= 51 && freq >= 2) { dominant = c; break; }
                             if (freq > maxFreq) { maxFreq = freq; dominant = c; }
                         }
@@ -4209,31 +5507,51 @@ public class RouteFragment extends Fragment {
                 }
                 lastWeekWeather = weekList;
 
-                // 2. Buscar Nome da Cidade (Nominatim Reverse Geocoding)
+                // 2. Buscar Nome da Cidade (Geocoder nativo + Nominatim fallback)
                 String cityName = "";
-                try {
-                    String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                    String userAgent = "DriveLogApp_v1527_" + uniqueId;
-                    String geoUrl = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=json&zoom=10", lat, lon);
-                    URL urlGeo = new URL(geoUrl);
-                    HttpURLConnection connGeo = (HttpURLConnection) urlGeo.openConnection();
-                    connGeo.setRequestProperty("User-Agent", userAgent);
-                    BufferedReader readerGeo = new BufferedReader(new InputStreamReader(connGeo.getInputStream()));
-                    StringBuilder sbGeo = new StringBuilder();
-                    while ((line = readerGeo.readLine()) != null) sbGeo.append(line);
-                    readerGeo.close();
-                    
-                    JSONObject jsonGeo = new JSONObject(sbGeo.toString());
-                    if (jsonGeo.has("address")) {
-                        JSONObject addr = jsonGeo.getJSONObject("address");
-                        if (addr.has("city")) cityName = addr.getString("city");
-                        else if (addr.has("town")) cityName = addr.getString("town");
-                        else if (addr.has("village")) cityName = addr.getString("village");
-                        else if (addr.has("suburb")) cityName = addr.getString("suburb");
-                        else if (addr.has("neighbourhood")) cityName = addr.getString("neighbourhood");
-                        else if (addr.has("municipality")) cityName = addr.getString("municipality");
-                    }
-                } catch (Exception ignored) {}
+                if (getContext() != null) {
+                    try {
+                        Geocoder geocoder = new Geocoder(requireContext(), Locale.getDefault());
+                        List<Address> addresses = geocoder.getFromLocation(lat, lon, 1);
+                        if (addresses != null && !addresses.isEmpty()) {
+                            Address a = addresses.get(0);
+                            if (a.getLocality() != null && !a.getLocality().isEmpty()) {
+                                cityName = a.getLocality();
+                            } else if (a.getSubAdminArea() != null && !a.getSubAdminArea().isEmpty()) {
+                                cityName = a.getSubAdminArea();
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                if (cityName.isEmpty()) {
+                    try {
+                        String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+                        String userAgent = "DriveLogApp_v1527_" + uniqueId;
+                        String geoUrl = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.6f&lon=%.6f&format=json&zoom=10", lat, lon);
+                        URL urlGeo = new URL(geoUrl);
+                        HttpURLConnection connGeo = (HttpURLConnection) urlGeo.openConnection();
+                        connGeo.setConnectTimeout(4000);
+                        connGeo.setReadTimeout(4000);
+                        connGeo.setRequestProperty("User-Agent", userAgent);
+                        BufferedReader readerGeo = new BufferedReader(new InputStreamReader(connGeo.getInputStream()));
+                        StringBuilder sbGeo = new StringBuilder();
+                        while ((line = readerGeo.readLine()) != null) sbGeo.append(line);
+                        readerGeo.close();
+
+                        JSONObject jsonGeo = new JSONObject(sbGeo.toString());
+                        if (jsonGeo.has("address")) {
+                            JSONObject addr = jsonGeo.getJSONObject("address");
+                            if (addr.has("city")) cityName = addr.getString("city");
+                            else if (addr.has("town")) cityName = addr.getString("town");
+                            else if (addr.has("municipality")) cityName = addr.getString("municipality");
+                            else if (addr.has("village")) cityName = addr.getString("village");
+                            else if (addr.has("county")) cityName = addr.getString("county");
+                            else if (addr.has("suburb")) cityName = addr.getString("suburb");
+                            else if (addr.has("neighbourhood")) cityName = addr.getString("neighbourhood");
+                        }
+                    } catch (Exception ignored) {}
+                }
 
                 final String finalCity = cityName;
                 lastCityName = finalCity;
@@ -4383,12 +5701,229 @@ public class RouteFragment extends Fragment {
         saveStopToDb(a, "", la, lo);
     }
 
+    private String getCurrentCityAndState() {
+        if (getContext() == null) return "";
+        try {
+            double lat = 0.0, lon = 0.0;
+            if (currentLocation != null && Math.abs(currentLocation.getLatitude()) > 0.001) {
+                lat = currentLocation.getLatitude();
+                lon = currentLocation.getLongitude();
+            } else if (currentStops != null && !currentStops.isEmpty()) {
+                for (RouteStop s : currentStops) {
+                    if (s.latitude != 0 && s.longitude != 0) {
+                        lat = s.latitude;
+                        lon = s.longitude;
+                        break;
+                    }
+                }
+            }
+
+            if (lat == 0.0 || lon == 0.0) return "";
+
+            Geocoder geocoder = new Geocoder(getContext(), Locale.getDefault());
+            List<Address> addresses = geocoder.getFromLocation(lat, lon, 1);
+            if (addresses != null && !addresses.isEmpty()) {
+                Address a = addresses.get(0);
+                String city = a.getLocality() != null ? a.getLocality() : a.getSubAdminArea();
+                String state = a.getAdminArea() != null ? a.getAdminArea() : "";
+                if (city != null && !city.isEmpty()) {
+                    if (!state.isEmpty()) return city + ", " + state;
+                    return city;
+                }
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private double[] searchCoordinatesCityRestricted(String rawAddr, String neighborhood) {
+        return searchCoordinatesCityRestricted(rawAddr, neighborhood, "");
+    }
+
+    private double[] searchCoordinatesCityRestricted(String rawAddr, String neighborhood, String cityOverride) {
+        double[] result = new double[]{0.0, 0.0};
+        if (rawAddr == null || rawAddr.trim().isEmpty() || getContext() == null) return result;
+
+        Context ctx = getContext();
+        double baseLat = 0.0, baseLon = 0.0;
+        if (currentLocation != null && Math.abs(currentLocation.getLatitude()) > 0.001) {
+            baseLat = currentLocation.getLatitude();
+            baseLon = currentLocation.getLongitude();
+        } else if (currentStops != null && !currentStops.isEmpty()) {
+            for (RouteStop s : currentStops) {
+                if (s.latitude != 0 && s.longitude != 0) {
+                    baseLat = s.latitude;
+                    baseLon = s.longitude;
+                    break;
+                }
+            }
+        }
+
+        // Tier 1: Local / Community Corrected Address
+        AppDao dao = AppDatabase.getInstance(ctx.getApplicationContext()).appDao();
+        CorrectedAddress ca = dao.getCorrectedAddress(rawAddr);
+        if (ca != null && ca.latitude != 0 && ca.longitude != 0) {
+            return new double[]{ca.latitude, ca.longitude};
+        }
+
+        // Detect current city and state unless cityOverride is specified
+        String cityState = (cityOverride != null && !cityOverride.trim().isEmpty()) ? cityOverride.trim() : "";
+        if (cityState.isEmpty() && baseLat != 0.0 && baseLon != 0.0) {
+            try {
+                Geocoder g = new Geocoder(ctx, Locale.getDefault());
+                List<Address> addrs = g.getFromLocation(baseLat, baseLon, 1);
+                if (addrs != null && !addrs.isEmpty()) {
+                    Address a = addrs.get(0);
+                    String city = a.getLocality() != null ? a.getLocality() : a.getSubAdminArea();
+                    String state = a.getAdminArea() != null ? a.getAdminArea() : "";
+                    if (city != null && !city.isEmpty()) {
+                        cityState = !state.isEmpty() ? (city + ", " + state) : city;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        String baseQuery = rawAddr.trim() + (neighborhood != null && !neighborhood.trim().isEmpty() ? ", " + neighborhood.trim() : "");
+        String cityQuery = (!cityState.isEmpty() && !baseQuery.toLowerCase().contains(cityState.toLowerCase())) 
+                ? (baseQuery + ", " + cityState) 
+                : baseQuery;
+
+        double minLat = baseLat != 0 ? baseLat - 0.45 : -90;
+        double maxLat = baseLat != 0 ? baseLat + 0.45 : 90;
+        double minLon = baseLon != 0 ? baseLon - 0.45 : -180;
+        double maxLon = baseLon != 0 ? baseLon + 0.45 : 180;
+
+        // Tier 2: Android Native Geocoder (City-Qualified & Bounded)
+        try {
+            Geocoder geocoder = new Geocoder(ctx, Locale.getDefault());
+            List<Address> addresses = null;
+
+            if (baseLat != 0 && baseLon != 0) {
+                addresses = geocoder.getFromLocationName(cityQuery, 5, minLat, minLon, maxLat, maxLon);
+                if (addresses == null || addresses.isEmpty()) {
+                    addresses = geocoder.getFromLocationName(baseQuery, 5, minLat, minLon, maxLat, maxLon);
+                }
+            }
+            if (addresses == null || addresses.isEmpty()) {
+                addresses = geocoder.getFromLocationName(cityQuery, 5);
+            }
+
+            if (addresses != null && !addresses.isEmpty()) {
+                Address best = addresses.get(0);
+                if (baseLat != 0 && baseLon != 0) {
+                    double bestDist = Double.MAX_VALUE;
+                    for (Address a : addresses) {
+                        float[] distResult = new float[1];
+                        Location.distanceBetween(baseLat, baseLon, a.getLatitude(), a.getLongitude(), distResult);
+                        if (distResult[0] < bestDist) {
+                            bestDist = distResult[0];
+                            best = a;
+                        }
+                    }
+                }
+                return new double[]{best.getLatitude(), best.getLongitude()};
+            }
+        } catch (Exception ignored) {}
+
+        // Tier 3: OpenStreetMap Nominatim Search (With Viewbox Bounding)
+        try {
+            String uniqueId = Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.ANDROID_ID);
+            String userAgent = "DriveLogApp_v1527_" + uniqueId;
+            
+            String viewboxParam = (baseLat != 0 && baseLon != 0) 
+                    ? String.format(Locale.US, "&viewbox=%.6f,%.6f,%.6f,%.6f&bounded=0", minLon, maxLat, maxLon, minLat) 
+                    : "";
+
+            String u = "https://nominatim.openstreetmap.org/search?q=" + URLEncoder.encode(cityQuery, "UTF-8") + "&format=json&limit=5" + viewboxParam;
+            HttpURLConnection conn = (HttpURLConnection) new URL(u).openConnection();
+            conn.setRequestProperty("User-Agent", userAgent);
+
+            if (conn.getResponseCode() == 200) {
+                BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder res = new StringBuilder(); String l;
+                while ((l = r.readLine()) != null) res.append(l);
+
+                JSONArray arr = new JSONArray(res.toString());
+                if (arr.length() > 0) {
+                    JSONObject bestObj = arr.getJSONObject(0);
+                    if (baseLat != 0 && baseLon != 0) {
+                        double bestDist = Double.MAX_VALUE;
+                        for (int i = 0; i < arr.length(); i++) {
+                            JSONObject o = arr.getJSONObject(i);
+                            double oLat = o.getDouble("lat");
+                            double oLon = o.getDouble("lon");
+                            float[] distResult = new float[1];
+                            Location.distanceBetween(baseLat, baseLon, oLat, oLon, distResult);
+                            if (distResult[0] < bestDist) {
+                                bestDist = distResult[0];
+                                bestObj = o;
+                            }
+                        }
+                    }
+                    return new double[]{bestObj.getDouble("lat"), bestObj.getDouble("lon")};
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // Tier 4: Fallback GPS
+        if (baseLat != 0 && baseLon != 0) {
+            return new double[]{baseLat, baseLon};
+        }
+
+        return result;
+    }
+
+    private void geocodeManualStopAndSave(int routeId, String rawAddr, String seqStr, String cityOverride, Runnable onComplete) {
+        if (getContext() == null) return;
+        final Context ctx = getContext();
+        new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(ctx.getApplicationContext()).appDao();
+            List<RouteStop> current = dao.getStopsForRoute(routeId);
+            int nextOrder = current.size();
+            int seq = parseSafeInt(seqStr);
+
+            double[] coords = searchCoordinatesCityRestricted(rawAddr, "", cityOverride);
+            double lat = coords[0];
+            double lon = coords[1];
+
+            RouteStop newStop = new RouteStop(rawAddr, lat, lon);
+            newStop.routeId = routeId;
+            newStop.sequence = seq;
+            newStop.allSequences = !seqStr.isEmpty() ? seqStr : String.valueOf(nextOrder + 1);
+            newStop.packageCount = 1;
+            newStop.sortOrder = nextOrder;
+            newStop.stopNumber = nextOrder + 1;
+            if (cityOverride != null && !cityOverride.trim().isEmpty()) {
+                newStop.city = cityOverride.trim();
+            }
+
+            dao.insertRouteStop(newStop);
+
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    if (onComplete != null) onComplete.run();
+                });
+            }
+        }).start();
+    }
+
     private void saveStopToDb(String address, String neighborhood, double lat, double lon) {
         if (getContext() == null || currentRouteId == -1) return;
         final int routeId = currentRouteId;
+        final Context ctx = getContext();
         new Thread(() -> {
-            AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
-            RouteStop s = new RouteStop(address, lat, lon);
+            AppDao dao = AppDatabase.getInstance(ctx.getApplicationContext()).appDao();
+
+            double finalLat = lat;
+            double finalLon = lon;
+
+            if (finalLat == 0.0 || finalLon == 0.0) {
+                double[] coords = searchCoordinatesCityRestricted(address, neighborhood);
+                finalLat = coords[0];
+                finalLon = coords[1];
+            }
+
+            RouteStop s = new RouteStop(address, finalLat, finalLon);
             s.routeId = routeId;
             s.neighborhood = neighborhood;
             List<RouteStop> existing = dao.getStopsForRoute(routeId);
@@ -4398,12 +5933,9 @@ public class RouteFragment extends Fragment {
             if (getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
                     if (editSearch != null) editSearch.setText("");
-                    
-                    // 🔥 Ativa automaticamente o card de paradas ao adicionar uma parada manualmente
                     sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
-
                     Toast.makeText(getContext(), "Parada adicionada!", Toast.LENGTH_SHORT).show();
-                    CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota");
+                    CloudSyncHelper.syncNow(ctx, "Atividade na Rota");
                 });
             }
         }).start();
@@ -4453,8 +5985,23 @@ public class RouteFragment extends Fragment {
             animateNumber(textPendingCount, pendStops);
             animateNumber(textPendingPackageCount, pendPackages);
 
-            if (cardFailedSummary != null && autoHideRunnable == null) {
-                cardFailedSummary.setVisibility(errStops > 0 ? View.VISIBLE : View.GONE);
+            boolean isOptPending = sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+            boolean isManualPending = sharedPreferences.getBoolean("route_manual_list_pending_" + currentRouteId, false);
+            boolean isStatsExpanded = sharedPreferences.getBoolean("stats_summary_expanded", true);
+
+            if (isOptPending || isManualPending) {
+                if (layoutStatsGroup != null) layoutStatsGroup.setVisibility(View.GONE);
+                if (cardSuccessSummary != null) cardSuccessSummary.setVisibility(View.GONE);
+                if (cardPendingSummary != null) cardPendingSummary.setVisibility(View.GONE);
+                if (cardFailedSummary != null) cardFailedSummary.setVisibility(View.GONE);
+                if (cardRouteCorrections != null) cardRouteCorrections.setVisibility(View.GONE);
+            } else if (autoHideRunnable == null) {
+                if (layoutStatsGroup != null) layoutStatsGroup.setVisibility(isStatsExpanded ? View.VISIBLE : View.GONE);
+                if (cardSuccessSummary != null) cardSuccessSummary.setVisibility(isStatsExpanded ? View.VISIBLE : View.GONE);
+                if (cardPendingSummary != null) cardPendingSummary.setVisibility(isStatsExpanded ? View.VISIBLE : View.GONE);
+                if (cardFailedSummary != null) {
+                    cardFailedSummary.setVisibility((isStatsExpanded && errStops > 0) ? View.VISIBLE : View.GONE);
+                }
             }
 
             // Efeito de celebração se a rota foi concluída (nenhuma pendente)
@@ -4463,9 +6010,28 @@ public class RouteFragment extends Fragment {
             
             if (!stops.isEmpty() && pendStops == 0) {
                 if (!alreadyCelebrated) {
+                    sharedPreferences.edit().putBoolean(celebrationKey, true).apply();
                     Log.d("DriveLog", "Rota concluída! Disparando celebração para rota: " + currentRouteId);
                     Toast.makeText(getContext(), "🎉 ROTA CONCLUÍDA!", Toast.LENGTH_LONG).show();
                     triggerCelebration();
+
+                    // 🔥 SE A NAVEGAÇÃO ESTIVER ATIVA (SWITCH ATIVADO), ENCAMINHA PARA A CASA DO MOTORISTA
+                    if (switchTraceLine != null && switchTraceLine.isChecked()) {
+                        float homeLat = sharedPreferences.getFloat("home_lat", 0);
+                        float homeLon = sharedPreferences.getFloat("home_lon", 0);
+
+                        if (homeLat != 0 && homeLon != 0) {
+                            RouteStop homeStop = new RouteStop("Minha Residência (Casa)", homeLat, homeLon);
+                            homeStop.stopNumber = 0;
+                            currentlySelectedStop = homeStop;
+                            updateSelectionTrace(homeStop);
+                            speakVoiceNavigation("Todas as entregas foram concluídas! Encaminhando você para sua residência.", true);
+                            Toast.makeText(getContext(), "🏠 Rota concluída! Encaminhando para sua residência...", Toast.LENGTH_LONG).show();
+                        } else {
+                            speakVoiceNavigation("Parabéns! Todas as entregas foram concluídas. Defina seu endereço de Casa no menu para ser direcionado ao finalizar.", true);
+                            Toast.makeText(getContext(), "🏠 Defina o endereço de Casa no menu para ser direcionado ao finalizar.", Toast.LENGTH_LONG).show();
+                        }
+                    }
                 }
             } else if (!stops.isEmpty() && pendStops > 0 && alreadyCelebrated) {
                 // Se voltou a ter paradas pendentes, permite celebrar de novo quando terminar
@@ -4482,7 +6048,7 @@ public class RouteFragment extends Fragment {
 
             if (stopsCardAdapter != null) { 
                 stopsCardAdapter.setStops(stops); 
-                bottomSheet.setVisibility((stops.isEmpty() || !showStopsCard) ? View.GONE : View.VISIBLE); 
+                bottomSheet.setVisibility((stops.isEmpty() || !showStopsCard || isOptPending || isManualPending) ? View.GONE : View.VISIBLE); 
             } 
             if (stopsListAdapter != null) stopsListAdapter.setStops(stops); 
             
@@ -4510,6 +6076,12 @@ public class RouteFragment extends Fragment {
         }
         currentHeaderLive = dao.getRouteByIdLive(currentRouteId);
         currentHeaderLive.observe(getViewLifecycleOwner(), header -> {
+            if (header == null) return;
+            if (this.currentRouteHeader != null && this.currentRouteHeader.startTime > 0 && header.startTime == 0) {
+                header.startTime = this.currentRouteHeader.startTime;
+                header.totalPausedMs = this.currentRouteHeader.totalPausedMs;
+                header.lastPauseStartTime = this.currentRouteHeader.lastPauseStartTime;
+            }
             this.currentRouteHeader = header;
             if (stopsCardAdapter != null) stopsCardAdapter.setRouteHeader(header);
         });
@@ -4526,8 +6098,153 @@ public class RouteFragment extends Fragment {
         });
     }
 
+    private void updatePendingManualListUI() {
+        if (currentRouteId == -1 || cardPendingManualList == null) return;
+        int stopCount = currentStops != null ? currentStops.size() : 0;
+
+        if (textPendingManualListTitle != null) {
+            textPendingManualListTitle.setText("📝 Lista em Edição (" + stopCount + " Paradas)");
+        }
+        if (textPendingManualListSubtitle != null) {
+            if (stopCount == 0) {
+                textPendingManualListSubtitle.setText("Sua lista ainda está sem paradas. Clique abaixo para cadastrar pacotes.");
+            } else if (stopCount == 1) {
+                textPendingManualListSubtitle.setText("Você possui 1 parada salva em edição. Clique abaixo para continuar cadastrando.");
+            } else {
+                textPendingManualListSubtitle.setText("Você possui " + stopCount + " paradas salvas em edição. Clique abaixo para continuar cadastrando.");
+            }
+        }
+        if (btnContinueManualListEditing != null) {
+            btnContinueManualListEditing.setText("📝 CONTINUAR EDIÇÃO");
+        }
+    }
+
+    private void promptCancelAndDeleteManualRoute() {
+        if (currentRouteId == -1 || getContext() == null) return;
+        final int routeToDeleteId = currentRouteId;
+
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_modern_confirm, null);
+        TextView title = v.findViewById(R.id.textModernTitle);
+        TextView message = v.findViewById(R.id.textModernMessage);
+        MaterialButton btnCancel = v.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = v.findViewById(R.id.btnModernPositive);
+
+        if (title != null) title.setText("Excluir Rota em Edição");
+        if (message != null) message.setText("Deseja realmente cancelar a edição e excluir esta rota?");
+        if (btnCancel != null) btnCancel.setText("CANCELAR");
+        if (btnConfirm != null) {
+            btnConfirm.setText("EXCLUIR ROTA");
+            btnConfirm.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#F44336")));
+        }
+
+        AlertDialog confirmDialog = new AlertDialog.Builder(requireContext()).setView(v).create();
+        if (confirmDialog.getWindow() != null) {
+            confirmDialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v2 -> confirmDialog.dismiss());
+
+        if (btnConfirm != null) {
+            btnConfirm.setOnClickListener(v2 -> {
+                confirmDialog.dismiss();
+                new Thread(() -> {
+                    AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                    
+                    dao.clearRouteStopsByRoute(routeToDeleteId);
+                    dao.deleteGroupsForRoute(routeToDeleteId);
+                    
+                    RouteHeader headerToDelete = dao.getRouteById(routeToDeleteId);
+                    if (headerToDelete != null) {
+                        dao.deleteRouteHeader(headerToDelete);
+                    }
+
+                    sharedPreferences.edit().remove("route_manual_list_pending_" + routeToDeleteId).apply();
+                    sharedPreferences.edit().remove("route_optimization_pending_" + routeToDeleteId).apply();
+
+                    List<RouteHeader> remainingRoutes = dao.getAllRoutes();
+                    int targetPreviousRouteId = -1;
+                    String targetPreviousRouteName = "Minha Rota";
+
+                    if (remainingRoutes != null && !remainingRoutes.isEmpty()) {
+                        RouteHeader prev = remainingRoutes.get(0);
+                        targetPreviousRouteId = prev.id;
+                        targetPreviousRouteName = prev.name;
+                    }
+
+                    final int prevId = targetPreviousRouteId;
+                    final String prevName = targetPreviousRouteName;
+
+                    Activity activity = getActivity();
+                    if (activity != null) {
+                        activity.runOnUiThread(() -> {
+                            if (prevId != -1) {
+                                switchRoute(prevId, prevName);
+                                Toast.makeText(getContext(), "Rota excluída. Retornando para: " + prevName, Toast.LENGTH_SHORT).show();
+                            } else {
+                                currentRouteId = -1;
+                                if (cardPendingManualList != null) cardPendingManualList.setVisibility(View.GONE);
+                                if (cardPendingOptimization != null) cardPendingOptimization.setVisibility(View.GONE);
+                                updateFloatingButtonsVisibility();
+                                Toast.makeText(getContext(), "Rota excluída com sucesso.", Toast.LENGTH_SHORT).show();
+                            }
+                            CloudSyncHelper.syncNow(requireContext(), "Exclusão de Rota");
+                        });
+                    }
+                }).start();
+            });
+        }
+
+        confirmDialog.show();
+    }
+
     private void refreshMarkers() { 
         if (map == null || currentStops == null) return; 
+
+        boolean isOptPending = sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+        boolean isManualPending = sharedPreferences.getBoolean("route_manual_list_pending_" + currentRouteId, false);
+
+        if (isOptPending || isManualPending) {
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    if (cardPendingManualList != null) {
+                        cardPendingManualList.setVisibility(isManualPending ? View.VISIBLE : View.GONE);
+                        if (isManualPending) updatePendingManualListUI();
+                    }
+                    if (cardPendingOptimization != null) cardPendingOptimization.setVisibility(isOptPending && !isManualPending ? View.VISIBLE : View.GONE);
+                    if (layoutSwitchContainer != null) layoutSwitchContainer.setVisibility(View.GONE);
+                    if (cardRouteTotalTime != null) cardRouteTotalTime.setVisibility(View.GONE);
+                    if (bottomSheet != null) bottomSheet.setVisibility(View.GONE);
+                    if (cardNavigationMode != null) cardNavigationMode.setVisibility(View.GONE);
+                    if (fabDeliveryApp != null) fabDeliveryApp.setVisibility(View.GONE);
+                    if (fabCompass != null) fabCompass.setVisibility(View.GONE);
+                    if (fabReportHazard != null) fabReportHazard.setVisibility(View.GONE);
+                    if (fabCenterMap != null) fabCenterMap.setVisibility(View.GONE);
+                    if (fabMapOrientation != null) fabMapOrientation.setVisibility(View.GONE);
+                    if (fabKmTracking != null) fabKmTracking.setVisibility(View.GONE);
+                    if (layoutStatsGroup != null) layoutStatsGroup.setVisibility(View.GONE);
+                    if (cardSuccessSummary != null) cardSuccessSummary.setVisibility(View.GONE);
+                    if (cardPendingSummary != null) cardPendingSummary.setVisibility(View.GONE);
+                    if (cardFailedSummary != null) cardFailedSummary.setVisibility(View.GONE);
+                    if (btnToggleStatsSummary != null) btnToggleStatsSummary.setVisibility(View.INVISIBLE);
+                    if (cardRouteCorrections != null) cardRouteCorrections.setVisibility(View.GONE);
+                    if (map != null) {
+                        map.getOverlays().clear();
+                        map.invalidate();
+                    }
+                });
+            }
+            return;
+        } else {
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    if (cardPendingManualList != null) cardPendingManualList.setVisibility(View.GONE);
+                    if (cardPendingOptimization != null) cardPendingOptimization.setVisibility(View.GONE);
+                    updateFloatingButtonsVisibility();
+                });
+            }
+        }
         
         final List<RouteStop> stopsSnapshot = new ArrayList<>(currentStops);
         final int selectedIndex = (viewPagerStops != null) ? viewPagerStops.getCurrentItem() : 0;
@@ -4890,13 +6607,31 @@ public class RouteFragment extends Fragment {
                                     
                                     String inst = parseInstruction(mType, mMod, mName);
                                     allInstructions.add(new NavInstruction(inst, sDist, mType, mMod));
-                                    
-                                    if (s == 0 || (s == 1 && nextStepDist < 10)) {
-                                        instruction = inst;
-                                        nextStepDist = sDist;
-                                        maneuverType = mType;
-                                        modifier = mMod;
+                                }
+
+                                if (steps.length() > 0) {
+                                    int targetStepIdx = 0;
+                                    double accumDist = steps.getJSONObject(0).optDouble("distance", 0);
+
+                                    // Se houver próximo passo, a manobra a exibir é a do PRÓXIMO passo (ex: dobrar na próxima rua)
+                                    if (steps.length() > 1) {
+                                        targetStepIdx = 1;
+                                        // Se o primeiro segmento for muito curto (<15m) e houver mais passos, avança para a manobra seguinte
+                                        if (accumDist < 15 && steps.length() > 2) {
+                                            accumDist += steps.getJSONObject(1).optDouble("distance", 0);
+                                            targetStepIdx = 2;
+                                        }
                                     }
+
+                                    JSONObject targetStep = steps.getJSONObject(targetStepIdx);
+                                    JSONObject targetMan = targetStep.getJSONObject("maneuver");
+
+                                    nextStepDist = accumDist;
+                                    maneuverType = targetMan.optString("type", "");
+                                    modifier = targetMan.optString("modifier", "");
+                                    String targetName = targetStep.optString("name", "");
+
+                                    instruction = parseInstruction(maneuverType, modifier, targetName);
                                 }
                             }
                         }
@@ -4945,10 +6680,17 @@ public class RouteFragment extends Fragment {
                                 if (textSwitchDistance != null) {
                                     textSwitchDistance.setText(distStr);
                                 }
+                                if (textSearchNavDistance != null) {
+                                    textSearchNavDistance.setText(distStr);
+                                }
                                 
                                 // Modo Navegação (Balão Superior)
                                 if (cardNavigationMode != null) {
                                     animateNavigationCard(true);
+                                    initialStepDistance = finalNextDist > 0 ? finalNextDist : 200.0;
+                                    if (borderProgressDrawable != null) {
+                                        borderProgressDrawable.setProgress(100f);
+                                    }
                                     if (textNavDistance != null) {
                                         if (finalNextDist < 1000) textNavDistance.setText(String.format(Locale.getDefault(), "%.0fm", finalNextDist));
                                         else textNavDistance.setText(String.format(Locale.getDefault(), "%.1fkm", finalNextDist / 1000.0));
@@ -4975,6 +6717,9 @@ public class RouteFragment extends Fragment {
 
                                     if (textNavInstruction != null) textNavInstruction.setText(finalInstruction);
                                     if (imageNavManeuver != null) imageNavManeuver.setImageResource(getManeuverIcon(finalManeuver, finalModifier));
+                                    if (finalInstruction != null && !finalInstruction.trim().isEmpty()) {
+                                        announceNavigationTurn(finalInstruction, finalNextDist);
+                                    }
                                 }
                                 
                                 // Limpamos qualquer texto interno que possa estar interferindo
@@ -5014,6 +6759,7 @@ public class RouteFragment extends Fragment {
 
         // Se o motorista desviou mais de 60 metros da rota, recalcula nova rota no OSRM
         if (minDistance > 60) {
+            speakVoiceNavigation("Recalculando rota...", false);
             lastTraceUpdate = now;
             updateSelectionTrace(currentlySelectedStop);
             return;
@@ -5036,6 +6782,38 @@ public class RouteFragment extends Fragment {
                 if (remainingMeters < 1000) distStr = String.format(Locale.getDefault(), "%.0fm", remainingMeters);
                 else distStr = String.format(Locale.getDefault(), "%.1fkm", remainingMeters / 1000.0);
                 textSwitchDistance.setText(distStr);
+                if (textSearchNavDistance != null) textSearchNavDistance.setText(distStr);
+            }
+
+            if (borderProgressDrawable != null && initialStepDistance > 0) {
+                float pct = (float) Math.max(0, Math.min(100, (remainingMeters / initialStepDistance) * 100.0));
+                borderProgressDrawable.setProgress(pct);
+            }
+
+            if (currentlySelectedStop.id != lastAnnouncedStopId) {
+                lastAnnouncedStopId = currentlySelectedStop.id;
+                is100mAnnounced = false;
+                isArrivedAnnounced = false;
+            }
+
+            if (remainingMeters <= 25.0 && !isArrivedAnnounced) {
+                isArrivedAnnounced = true;
+                is100mAnnounced = true;
+                if (currentlySelectedStop.stopNumber == 0) {
+                    speakVoiceNavigation("Você chegou em sua residência. Bom descanso!", true);
+                    Toast.makeText(getContext(), "🏠 Você chegou em sua residência! Bom descanso!", Toast.LENGTH_LONG).show();
+                } else {
+                    String addr = currentlySelectedStop.address != null ? currentlySelectedStop.address : "";
+                    speakVoiceNavigation("Você chegou na Parada #" + currentlySelectedStop.stopNumber + ": " + addr, true);
+                }
+            } else if (remainingMeters <= 100.0 && remainingMeters > 25.0 && !is100mAnnounced) {
+                is100mAnnounced = true;
+                if (currentlySelectedStop.stopNumber == 0) {
+                    speakVoiceNavigation("Sua residência está a 100 metros à frente.", true);
+                } else {
+                    String addr = currentlySelectedStop.address != null ? currentlySelectedStop.address : "";
+                    speakVoiceNavigation("Parada #" + currentlySelectedStop.stopNumber + " a 100 metros: " + addr, true);
+                }
             }
 
             map.invalidate();
@@ -5044,6 +6822,9 @@ public class RouteFragment extends Fragment {
 
     private void animateNavigationCard(boolean show) {
         if (cardNavigationMode == null) return;
+
+        boolean isOptPending = sharedPreferences != null && sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+        if (isOptPending) show = false;
 
         if (show) {
             // Evita reiniciar a animação se já estiver visível
@@ -5078,33 +6859,82 @@ public class RouteFragment extends Fragment {
         }
     }
 
+
+
     private String parseInstruction(String type, String modifier, String name) {
-        String base = "";
-        if (type.equals("turn") || type.equals("on_ramp") || type.equals("off_ramp")) {
-            if (modifier.contains("right")) base = "Dobre à direita";
-            else if (modifier.contains("left")) base = "Dobre à esquerda";
-            else if (modifier.contains("slight right")) base = "Mantenha à direita";
-            else if (modifier.contains("slight left")) base = "Mantenha à esquerda";
-            else base = "Siga em frente";
-        } else if (type.equals("new name")) base = "Siga para";
-        else if (type.equals("depart")) base = "Siga em direção a";
-        else if (type.equals("arrive")) base = "Você chegou ao destino";
-        else if (type.equals("roundabout") || type.equals("rotary")) base = "Na rotatória, saia";
-        else if (type.equals("uturn")) base = "Faça o retorno";
-        else if (type.equals("merge")) base = "Acesse a via";
-        else base = "Siga em frente";
-        
-        if (name != null && !name.isEmpty() && !name.equals("null") && !name.equals("unnamed")) return base + " na " + name;
-        if (base.equals("Siga em direção a")) return "Siga em frente";
-        return base;
+        boolean hasName = name != null && !name.trim().isEmpty() && !name.equalsIgnoreCase("null") && !name.equalsIgnoreCase("unnamed");
+        String formattedName = hasName ? name.trim() : "";
+        String mod = modifier != null ? modifier.toLowerCase(Locale.ROOT) : "";
+
+        if ("arrive".equals(type)) {
+            return "Você chegou ao destino";
+        }
+
+        // 1. Se houver indicação de curva/virada no modificador (direita ou esquerda), essa é a instrução principal!
+        String turnBase = null;
+        if (mod.contains("sharp right")) {
+            turnBase = "Curva acentuada à direita";
+        } else if (mod.contains("sharp left")) {
+            turnBase = "Curva acentuada à esquerda";
+        } else if (mod.contains("slight right")) {
+            turnBase = "Mantenha à direita";
+        } else if (mod.contains("slight left")) {
+            turnBase = "Mantenha à esquerda";
+        } else if (mod.contains("right")) {
+            turnBase = "Dobre à direita";
+        } else if (mod.contains("left")) {
+            turnBase = "Dobre à esquerda";
+        } else if (mod.contains("uturn") || "uturn".equals(type)) {
+            turnBase = "Faça o retorno";
+        }
+
+        if (turnBase != null) {
+            if (hasName) {
+                return turnBase + " na " + formattedName;
+            }
+            return turnBase;
+        }
+
+        // 2. Se for uma continuação sem virada (linha reta, mudança de nome da via, rotatória, etc)
+        if ("roundabout".equals(type) || "rotary".equals(type)) {
+            if (hasName) return "Na rotatória, saia em direção a " + formattedName;
+            return "Na rotatória, pegue a saída";
+        }
+
+        if ("merge".equals(type)) {
+            if (hasName) return "Acesse a via " + formattedName;
+            return "Acesse a via";
+        }
+
+        if ("end of road".equals(type)) {
+            if (hasName) return "No fim da via, siga na " + formattedName;
+            return "No fim da via";
+        }
+
+        if ("depart".equals(type)) {
+            if (hasName) return "Siga na " + formattedName;
+            return "Siga em frente";
+        }
+
+        if ("new name".equals(type)) {
+            if (hasName) return "Siga pela " + formattedName;
+            return "Siga em frente";
+        }
+
+        if (hasName) {
+            return "Siga na " + formattedName;
+        }
+
+        return "Siga em frente";
     }
 
     private int getManeuverIcon(String type, String modifier) {
-        if (type.equals("uturn")) return R.drawable.ic_nav_uturn;
-        if (type.equals("roundabout") || type.equals("rotary")) return R.drawable.ic_nav_roundabout;
-        if (modifier.contains("right")) return R.drawable.ic_nav_turn_right;
-        if (modifier.contains("left")) return R.drawable.ic_nav_turn_left;
-        if (type.equals("arrive")) return android.R.drawable.ic_menu_myplaces;
+        String mod = modifier != null ? modifier.toLowerCase(Locale.ROOT) : "";
+        if ("uturn".equals(type) || mod.contains("uturn")) return R.drawable.ic_nav_uturn;
+        if ("roundabout".equals(type) || "rotary".equals(type)) return R.drawable.ic_nav_roundabout;
+        if (mod.contains("right")) return R.drawable.ic_nav_turn_right;
+        if (mod.contains("left")) return R.drawable.ic_nav_turn_left;
+        if ("arrive".equals(type)) return android.R.drawable.ic_menu_myplaces;
         return R.drawable.ic_nav_straight;
     }
 
@@ -5126,6 +6956,7 @@ public class RouteFragment extends Fragment {
         if (getView() != null) ViewCompat.requestApplyInsets(getView());
         timerHandler.post(timerRunnable);
         animationHandler.post(markerAnimationRunnable);
+        if (menuAnimRunnable != null) menuAnimHandler.post(menuAnimRunnable);
         
         // Registrar receiver para nova rota
         if (getContext() != null) {
@@ -5213,6 +7044,7 @@ public class RouteFragment extends Fragment {
 
     @Override public void onPause() { 
         super.onPause(); 
+        if (menuAnimRunnable != null) menuAnimHandler.removeCallbacks(menuAnimRunnable);
         
         // 🔥 SALVAR ESTADO DO MAPA PARA CARREGAMENTO RÁPIDO NO PRÓXIMO INÍCIO
         if (map != null) {
@@ -5302,13 +7134,13 @@ public class RouteFragment extends Fragment {
         if (fabDeliveryApp == null || getContext() == null) return;
         SharedPreferences prefs = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
         String pkg = prefs.getString("delivery_app_package", "").trim();
-        
-        // Visibilidade agora controlada por updateFloatingButtonsVisibility
-        // fabDeliveryApp.setVisibility(View.VISIBLE);
+
+        fabDeliveryApp.setElevation(0f);
+        fabDeliveryApp.setCompatElevation(0f);
+        fabDeliveryApp.setOutlineProvider(null);
 
         if (pkg.isEmpty()) {
             fabDeliveryApp.setImageResource(R.drawable.ic_map);
-            fabDeliveryApp.setClipToOutline(false);
             fabDeliveryApp.setSupportBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
         } else {
             try {
@@ -5316,12 +7148,9 @@ public class RouteFragment extends Fragment {
                 ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
                 Drawable icon = info.loadIcon(pm);
                 fabDeliveryApp.setImageDrawable(icon);
-                fabDeliveryApp.setClipToOutline(true);
-                fabDeliveryApp.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
                 fabDeliveryApp.setSupportBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
             } catch (Exception e) {
                 fabDeliveryApp.setImageResource(R.drawable.ic_map);
-                fabDeliveryApp.setClipToOutline(false);
             }
         }
     }
@@ -5523,43 +7352,1420 @@ public class RouteFragment extends Fragment {
                 if (!stopsMap.isEmpty()) {
                     List<RouteStop> finalStops = new ArrayList<>(stopsMap.values());
                     
-                    // 🔥 Ordenação e Renumeração: Garante que os números das paradas sejam únicos e sequenciais
-                    // respeitando a ordem de aparição no Excel (sortOrder)
                     Collections.sort(finalStops, (a, b) -> Integer.compare(a.sortOrder, b.sortOrder));
                     for (int i = 0; i < finalStops.size(); i++) {
                         finalStops.get(i).sortOrder = i;
                         finalStops.get(i).stopNumber = i + 1;
                     }
-                    
+
+                    // Grava as paradas importadas no banco de dados limpando a versão anterior da rota
+                    dao.clearRouteStopsByRoute(targetRouteId);
+                    for (RouteStop s : finalStops) s.id = 0;
                     dao.insertRouteStops(finalStops);
-                    
-                    // 🔥 Sincroniza TUDO após a inserção para garantir que não haja números duplicados
-                    // se o usuário importou em uma rota que já tinha paradas
-                    List<RouteStop> all = dao.getStopsForRoute(targetRouteId);
-                    for (int i = 0; i < all.size(); i++) {
-                        all.get(i).sortOrder = i;
-                        all.get(i).stopNumber = i + 1;
+
+                    sharedPreferences.edit().putBoolean("route_optimization_pending_" + targetRouteId, true).apply();
+
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> { 
+                            importDialog.dismiss();
+                            showImportPreviewDialog(targetRouteId, finalStops);
+                        });
                     }
-                    dao.updateRouteStops(all);
-
-                    if (getActivity() != null) getActivity().runOnUiThread(() -> { 
-                        importDialog.dismiss();
-                        
-                        // 🔥 Ativa automaticamente o card de paradas ao importar com sucesso
-                        sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
-
-                        Toast.makeText(getContext(), "Importado com sucesso!", Toast.LENGTH_SHORT).show(); 
-                        CloudSyncHelper.syncNow(requireContext(), "Atividade na Rota"); 
-                    });
                 } else {
-                    getActivity().runOnUiThread(importDialog::dismiss);
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            importDialog.dismiss();
+                            Toast.makeText(getContext(), "Nenhuma parada encontrada na planilha", Toast.LENGTH_SHORT).show();
+                        });
+                    }
                 }
                 workbook.close();
             } catch (Exception e) { 
                 e.printStackTrace(); 
-                getActivity().runOnUiThread(importDialog::dismiss);
+                if (getActivity() != null) getActivity().runOnUiThread(importDialog::dismiss);
             }
         }).start();
+    }
+
+    private void showImportPreviewDialog(int targetRouteId, List<RouteStop> initialStops) {
+        if (getContext() == null || initialStops == null || initialStops.isEmpty()) return;
+
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_import_preview, null);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).setCancelable(false).create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        TextView textTitle = v.findViewById(R.id.textImportPreviewTitle);
+        MaterialButton btnUnify = v.findViewById(R.id.btnUnifyPreviewSelected);
+        MaterialButton btnSelectAll = v.findViewById(R.id.btnSelectAllPreview);
+        RecyclerView recycler = v.findViewById(R.id.recyclerImportPreview);
+        MaterialButton btnCancel = v.findViewById(R.id.btnCancelImportPreview);
+        MaterialButton btnConfirm = v.findViewById(R.id.btnConfirmImportPreview);
+
+        Spinner spinnerOptEngine = v.findViewById(R.id.spinnerOptEngine);
+        Spinner spinnerStartMode = v.findViewById(R.id.spinnerStartMode);
+        LinearLayout layoutStartPicker = v.findViewById(R.id.layoutStartStopPicker);
+        Spinner spinnerStartStop = v.findViewById(R.id.spinnerStartStop);
+
+        List<RouteStop> previewList = new ArrayList<>(initialStops);
+        renumberPreviewList(previewList);
+
+        if (textTitle != null) {
+            textTitle.setText("📋 Prévia da Rota (" + previewList.size() + " Paradas)");
+        }
+
+        String[] engineOptions = {
+            "🧠 Otimização 3.0 (Combustível - TSP 2-Opt)",
+            "⚡ Otimização 2.0 (Padrão OSRM)",
+            "📄 Ordem Original (Planilha Importada)"
+        };
+        ArrayAdapter<String> engineAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, engineOptions);
+        if (spinnerOptEngine != null) {
+            spinnerOptEngine.setAdapter(engineAdapter);
+            spinnerOptEngine.setSelection(0); // 3.0 é o padrão!
+        }
+
+        String[] startModeOptions = {
+            "📍 Localização Atual (GPS)",
+            "🎯 A partir de uma Parada específica"
+        };
+        ArrayAdapter<String> startModeAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, startModeOptions);
+        if (spinnerStartMode != null) {
+            spinnerStartMode.setAdapter(startModeAdapter);
+            spinnerStartMode.setSelection(0); // GPS é o padrão!
+            spinnerStartMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    if (layoutStartPicker != null) {
+                        layoutStartPicker.setVisibility(position == 1 ? View.VISIBLE : View.GONE);
+                    }
+                }
+                @Override public void onNothingSelected(AdapterView<?> parent) {}
+            });
+        }
+
+        List<String> stopTitles = new ArrayList<>();
+        for (int i = 0; i < previewList.size(); i++) {
+            RouteStop s = previewList.get(i);
+            stopTitles.add("Parada #" + (i + 1) + ": " + (s.address != null ? s.address : ""));
+        }
+        ArrayAdapter<String> startStopAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, stopTitles);
+        if (spinnerStartStop != null) spinnerStartStop.setAdapter(startStopAdapter);
+
+        Set<Integer> selectedIndices = new HashSet<>();
+        final ImportPreviewAdapter[] previewAdapterHolder = new ImportPreviewAdapter[1];
+        final ItemTouchHelper[] previewTouchHelperHolder = new ItemTouchHelper[1];
+
+        ItemTouchHelper previewTouchHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(
+                ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) {
+
+            @Override
+            public boolean onMove(@NonNull RecyclerView recyclerView,
+                                  @NonNull RecyclerView.ViewHolder viewHolder,
+                                  @NonNull RecyclerView.ViewHolder target) {
+                int fromPos = viewHolder.getBindingAdapterPosition();
+                int toPos = target.getBindingAdapterPosition();
+
+                if (fromPos != RecyclerView.NO_POSITION && toPos != RecyclerView.NO_POSITION && fromPos != toPos) {
+                    Collections.swap(previewList, fromPos, toPos);
+                    renumberPreviewList(previewList);
+                    selectedIndices.clear();
+                    if (previewAdapterHolder[0] != null) {
+                        previewAdapterHolder[0].notifyItemMoved(fromPos, toPos);
+                        previewAdapterHolder[0].notifyItemRangeChanged(0, previewList.size());
+                    }
+                    if (textTitle != null) textTitle.setText("📋 Prévia da Rota (" + previewList.size() + " Paradas)");
+                    if (btnUnify != null) btnUnify.setText("Unificar (0)");
+                    if (btnSelectAll != null) btnSelectAll.setText("Marcar Todos");
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+            }
+
+            @Override
+            public void onSelectedChanged(RecyclerView.ViewHolder viewHolder, int actionState) {
+                super.onSelectedChanged(viewHolder, actionState);
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && viewHolder != null) {
+                    viewHolder.itemView.setAlpha(0.8f);
+                    viewHolder.itemView.setScaleX(1.02f);
+                    viewHolder.itemView.setScaleY(1.02f);
+                }
+            }
+
+            @Override
+            public void clearView(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
+                super.clearView(recyclerView, viewHolder);
+                viewHolder.itemView.setAlpha(1.0f);
+                viewHolder.itemView.setScaleX(1.0f);
+                viewHolder.itemView.setScaleY(1.0f);
+                renumberPreviewList(previewList);
+                if (previewAdapterHolder[0] != null) {
+                    previewAdapterHolder[0].notifyDataSetChanged();
+                }
+            }
+        });
+        previewTouchHelperHolder[0] = previewTouchHelper;
+
+        ImportPreviewAdapter previewAdapter = new ImportPreviewAdapter(previewList, selectedIndices, new ImportPreviewAdapter.OnPreviewInteractionListener() {
+            @Override
+            public void onSelectionChanged() {
+                if (btnUnify != null) btnUnify.setText("Unificar (" + selectedIndices.size() + ")");
+                if (btnSelectAll != null) btnSelectAll.setText(selectedIndices.size() == previewList.size() ? "Desmarcar Todos" : "Marcar Todos");
+            }
+
+            @Override
+            public void onDelete(int position) {
+                if (position >= 0 && position < previewList.size()) {
+                    previewList.remove(position);
+                    selectedIndices.clear();
+                    renumberPreviewList(previewList);
+                    if (previewAdapterHolder[0] != null) previewAdapterHolder[0].notifyDataSetChanged();
+                    if (textTitle != null) textTitle.setText("📋 Prévia da Rota (" + previewList.size() + " Paradas)");
+                    if (btnUnify != null) btnUnify.setText("Unificar (0)");
+                    if (btnSelectAll != null) btnSelectAll.setText("Marcar Todos");
+                }
+            }
+
+            @Override
+            public void onStartDrag(RecyclerView.ViewHolder viewHolder) {
+                if (previewTouchHelperHolder[0] != null) {
+                    previewTouchHelperHolder[0].startDrag(viewHolder);
+                }
+            }
+        });
+        previewAdapterHolder[0] = previewAdapter;
+
+        MaterialCardView cardGroupingSuggestions = v.findViewById(R.id.cardGroupingSuggestions);
+        TextView textGroupingSuggestions = v.findViewById(R.id.textGroupingSuggestions);
+
+        Runnable updateSuggestionsUI = () -> {
+            if (cardGroupingSuggestions == null || textGroupingSuggestions == null) return;
+            int suggestedClustersCount = calculateGroupingSuggestionsCount(previewList);
+            if (suggestedClustersCount > 0) {
+                cardGroupingSuggestions.setVisibility(View.VISIBLE);
+                textGroupingSuggestions.setText("💡 " + suggestedClustersCount + " Sugestão(ões) de Agrupamento encontradas (mesmo local/condomínio). Clique para unificar!");
+            } else {
+                cardGroupingSuggestions.setVisibility(View.GONE);
+            }
+        };
+
+        updateSuggestionsUI.run();
+
+        if (cardGroupingSuggestions != null) {
+            cardGroupingSuggestions.setOnClickListener(v2 -> {
+                showGroupingSuggestionsReviewDialog(previewList, previewAdapterHolder[0], textTitle, btnUnify, stopTitles, startStopAdapter, updateSuggestionsUI);
+            });
+        }
+
+        if (recycler != null) {
+            recycler.setLayoutManager(new LinearLayoutManager(getContext()));
+            recycler.setAdapter(previewAdapter);
+            previewTouchHelper.attachToRecyclerView(recycler);
+        }
+
+        if (btnSelectAll != null) {
+            btnSelectAll.setOnClickListener(v2 -> {
+                if (selectedIndices.size() == previewList.size()) {
+                    selectedIndices.clear();
+                } else {
+                    for (int i = 0; i < previewList.size(); i++) selectedIndices.add(i);
+                }
+                previewAdapter.notifyDataSetChanged();
+                if (btnUnify != null) btnUnify.setText("Unificar (" + selectedIndices.size() + ")");
+                btnSelectAll.setText(selectedIndices.size() == previewList.size() ? "Desmarcar Todos" : "Marcar Todos");
+            });
+        }
+
+        if (btnUnify != null) {
+            btnUnify.setOnClickListener(v2 -> {
+                if (selectedIndices.size() < 2) {
+                    Toast.makeText(getContext(), "Selecione pelo menos 2 paradas para unificar!", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                List<Integer> sortedIndices = new ArrayList<>(selectedIndices);
+                Collections.sort(sortedIndices);
+
+                RouteStop master = previewList.get(sortedIndices.get(0));
+                StringBuilder combinedAddresses = new StringBuilder(master.allAddresses != null ? master.allAddresses : master.address);
+                StringBuilder combinedSequences = new StringBuilder(master.allSequences != null ? master.allSequences : (master.sequence > 0 ? String.valueOf(master.sequence) : ""));
+                int totalPackages = master.packageCount;
+                Set<String> uniqueBuyers = new HashSet<>();
+                if (master.allAddresses != null) {
+                    for (String addr : master.allAddresses.split("\n")) uniqueBuyers.add(addr.trim());
+                } else {
+                    uniqueBuyers.add(master.address.trim());
+                }
+
+                for (int i = 1; i < sortedIndices.size(); i++) {
+                    RouteStop other = previewList.get(sortedIndices.get(i));
+                    combinedAddresses.append("\n").append(other.allAddresses != null ? other.allAddresses : other.address);
+                    String oSeq = other.allSequences != null ? other.allSequences : (other.sequence > 0 ? String.valueOf(other.sequence) : "");
+                    if (!oSeq.isEmpty()) combinedSequences.append(", ").append(oSeq);
+                    totalPackages += other.packageCount;
+                    if (other.allAddresses != null) {
+                        for (String addr : other.allAddresses.split("\n")) uniqueBuyers.add(addr.trim());
+                    } else {
+                        uniqueBuyers.add(other.address.trim());
+                    }
+                }
+
+                master.allAddresses = combinedAddresses.toString();
+                master.allSequences = combinedSequences.toString();
+                master.packageCount = totalPackages;
+                master.buyerCount = uniqueBuyers.size();
+
+                for (int i = sortedIndices.size() - 1; i >= 1; i--) {
+                    int removeIdx = sortedIndices.get(i);
+                    previewList.remove(removeIdx);
+                }
+
+                selectedIndices.clear();
+                renumberPreviewList(previewList);
+                previewAdapter.notifyDataSetChanged();
+                if (textTitle != null) textTitle.setText("📋 Prévia da Rota (" + previewList.size() + " Paradas)");
+                btnUnify.setText("Unificar (0)");
+                if (btnSelectAll != null) btnSelectAll.setText("Marcar Todos");
+                Toast.makeText(getContext(), "Paradas unificadas com sucesso!", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        if (btnCancel != null) {
+            btnCancel.setText("FECHAR");
+            btnCancel.setOnClickListener(v2 -> {
+                dialog.dismiss();
+                saveImportedStopsToDatabase(targetRouteId, previewList);
+            });
+        }
+
+        if (btnConfirm != null) {
+            btnConfirm.setText("⚡ Otimizar e Iniciar Rota");
+            btnConfirm.setOnClickListener(v2 -> {
+                boolean isGpsMode = (spinnerStartMode == null || spinnerStartMode.getSelectedItemPosition() == 0);
+                int chosenStartIdx = (spinnerStartStop != null && !isGpsMode) ? spinnerStartStop.getSelectedItemPosition() : 0;
+                int selectedEngineIndex = (spinnerOptEngine != null) ? spinnerOptEngine.getSelectedItemPosition() : 0;
+
+                Runnable saveAndDismiss = () -> {
+                    dialog.dismiss();
+                    sharedPreferences.edit().remove("route_optimization_pending_" + targetRouteId).apply();
+                    saveImportedStopsToDatabase(targetRouteId, previewList);
+                };
+
+                if (selectedEngineIndex == 2) { // Ordem Original
+                    applyOriginalOrder(previewList, isGpsMode, chosenStartIdx, saveAndDismiss);
+                } else if (selectedEngineIndex == 1) { // 2.0
+                    optimizePreviewListV2(previewList, isGpsMode, chosenStartIdx, saveAndDismiss);
+                } else { // 3.0 (padrão)
+                    optimizePreviewListV3(previewList, isGpsMode, chosenStartIdx, saveAndDismiss);
+                }
+            });
+        }
+
+        dialog.show();
+    }
+
+    private int calculateGroupingSuggestionsCount(List<RouteStop> list) {
+        if (list == null || list.size() < 2) return 0;
+        int clusters = 0;
+        Set<Integer> processed = new HashSet<>();
+
+        for (int i = 0; i < list.size(); i++) {
+            if (processed.contains(i)) continue;
+            RouteStop a = list.get(i);
+            boolean foundPair = false;
+
+            for (int j = i + 1; j < list.size(); j++) {
+                if (processed.contains(j)) continue;
+                RouteStop b = list.get(j);
+
+                if (isSameLocationOrAddress(a, b)) {
+                    processed.add(j);
+                    foundPair = true;
+                }
+            }
+            if (foundPair) {
+                processed.add(i);
+                clusters++;
+            }
+        }
+        return clusters;
+    }
+
+    public static class GroupingSuggestion {
+        public RouteStop master;
+        public List<RouteStop> matchedStops = new ArrayList<>();
+        public String reason;
+        public boolean isChecked = true;
+    }
+
+    private List<GroupingSuggestion> findGroupingSuggestions(List<RouteStop> list) {
+        List<GroupingSuggestion> suggestions = new ArrayList<>();
+        if (list == null || list.size() < 2) return suggestions;
+
+        Set<Integer> processed = new HashSet<>();
+
+        for (int i = 0; i < list.size(); i++) {
+            if (processed.contains(i)) continue;
+            RouteStop master = list.get(i);
+            GroupingSuggestion sugg = new GroupingSuggestion();
+            sugg.master = master;
+
+            double minDistanceFound = Double.MAX_VALUE;
+            boolean sameAddressMatch = false;
+
+            for (int j = i + 1; j < list.size(); j++) {
+                if (processed.contains(j)) continue;
+                RouteStop other = list.get(j);
+
+                if (isSameLocationOrAddress(master, other)) {
+                    sugg.matchedStops.add(other);
+                    processed.add(j);
+
+                    if (master.latitude != 0 && master.longitude != 0 && other.latitude != 0 && other.longitude != 0) {
+                        float[] res = new float[1];
+                        Location.distanceBetween(master.latitude, master.longitude, other.latitude, other.longitude, res);
+                        if (res[0] < minDistanceFound) minDistanceFound = res[0];
+                    }
+
+                    if (master.address != null && other.address != null && master.address.equalsIgnoreCase(other.address)) {
+                        sameAddressMatch = true;
+                    }
+                }
+            }
+
+            if (!sugg.matchedStops.isEmpty()) {
+                processed.add(i);
+                if (sameAddressMatch) {
+                    sugg.reason = "📍 Mesmo Endereço / Condomínio";
+                } else if (minDistanceFound < Double.MAX_VALUE) {
+                    sugg.reason = String.format(Locale.getDefault(), "📏 Distância Próxima (%.0fm)", minDistanceFound);
+                } else {
+                    sugg.reason = "📍 Mesmo Local";
+                }
+                suggestions.add(sugg);
+            }
+        }
+
+        return suggestions;
+    }
+
+    private void showGroupingSuggestionsReviewDialog(
+            List<RouteStop> previewList,
+            ImportPreviewAdapter adapter,
+            TextView textTitle,
+            MaterialButton btnUnify,
+            List<String> stopTitles,
+            ArrayAdapter<String> startStopAdapter,
+            Runnable updateSuggestionsUI) {
+
+        if (getContext() == null || previewList == null) return;
+
+        List<GroupingSuggestion> suggestions = findGroupingSuggestions(previewList);
+        if (suggestions.isEmpty()) {
+            Toast.makeText(getContext(), "Nenhuma sugestão de agrupamento encontrada.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Context ctx = requireContext();
+        LinearLayout mainLayout = new LinearLayout(ctx);
+        mainLayout.setOrientation(LinearLayout.VERTICAL);
+        mainLayout.setPadding(32, 24, 32, 8);
+
+        TextView textDialogTitle = new TextView(ctx);
+        textDialogTitle.setText("💡 Sugestões de Agrupamento (" + suggestions.size() + ")");
+        textDialogTitle.setTextSize(16);
+        textDialogTitle.setTypeface(null, Typeface.BOLD);
+        textDialogTitle.setTextColor(0xFF1976D2);
+        mainLayout.addView(textDialogTitle);
+
+        TextView textSub = new TextView(ctx);
+        textSub.setText("Verifique os grupos encontrados e desmarque qualquer um que não seja viável antes de unificar.");
+        textSub.setTextSize(12);
+        textSub.setTextColor(0xFF666666);
+        textSub.setPadding(0, 4, 0, 16);
+        mainLayout.addView(textSub);
+
+        ScrollView scrollView = new ScrollView(ctx);
+        LinearLayout itemsLayout = new LinearLayout(ctx);
+        itemsLayout.setOrientation(LinearLayout.VERTICAL);
+
+        for (int i = 0; i < suggestions.size(); i++) {
+            GroupingSuggestion sugg = suggestions.get(i);
+
+            MaterialCardView card = new MaterialCardView(ctx);
+            card.setRadius(12f);
+            card.setCardElevation(2f);
+            card.setStrokeWidth(1);
+            card.setStrokeColor(0xFFBBDEFB);
+            card.setCardBackgroundColor(0xFFF1F8E9);
+            
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            cardParams.setMargins(0, 0, 0, 12);
+            card.setLayoutParams(cardParams);
+
+            LinearLayout container = new LinearLayout(ctx);
+            container.setOrientation(LinearLayout.HORIZONTAL);
+            container.setPadding(12, 12, 12, 12);
+            container.setGravity(Gravity.CENTER_VERTICAL);
+
+            CheckBox checkBox = new CheckBox(ctx);
+            checkBox.setChecked(sugg.isChecked);
+            checkBox.setOnCheckedChangeListener((cb, isChecked) -> sugg.isChecked = isChecked);
+            container.addView(checkBox);
+
+            LinearLayout infoLayout = new LinearLayout(ctx);
+            infoLayout.setOrientation(LinearLayout.VERTICAL);
+            infoLayout.setPadding(8, 0, 0, 0);
+
+            TextView textReason = new TextView(ctx);
+            textReason.setText(sugg.reason + " • Total: " + (sugg.master.packageCount + countPackages(sugg.matchedStops)) + " pacotes");
+            textReason.setTextSize(11);
+            textReason.setTypeface(null, Typeface.BOLD);
+            textReason.setTextColor(0xFF2E7D32);
+            infoLayout.addView(textReason);
+
+            TextView textMaster = new TextView(ctx);
+            textMaster.setText("📍 Parada Principal: " + (sugg.master.address != null ? sugg.master.address : ""));
+            textMaster.setTextSize(12);
+            textMaster.setTypeface(null, Typeface.BOLD);
+            textMaster.setTextColor(0xFF333333);
+            infoLayout.addView(textMaster);
+
+            for (RouteStop m : sugg.matchedStops) {
+                TextView textMatched = new TextView(ctx);
+                textMatched.setText("   └ Unificar com: " + (m.address != null ? m.address : ""));
+                textMatched.setTextSize(11);
+                textMatched.setTextColor(0xFF555555);
+                infoLayout.addView(textMatched);
+            }
+
+            container.addView(infoLayout);
+            card.addView(container);
+
+            card.setOnClickListener(v -> checkBox.toggle());
+
+            itemsLayout.addView(card);
+        }
+
+        scrollView.addView(itemsLayout);
+        mainLayout.addView(scrollView);
+
+        new AlertDialog.Builder(ctx)
+                .setView(mainLayout)
+                .setPositiveButton("UNIFICAR SELECIONADOS", (dialog, which) -> {
+                    int unifiedCount = applyApprovedGroupUnification(previewList, suggestions);
+                    if (unifiedCount > 0) {
+                        renumberPreviewList(previewList);
+                        if (adapter != null) adapter.notifyDataSetChanged();
+                        if (textTitle != null) textTitle.setText("📋 Prévia da Rota (" + previewList.size() + " Paradas)");
+                        if (btnUnify != null) btnUnify.setText("Unificar (0)");
+
+                        if (stopTitles != null && startStopAdapter != null) {
+                            stopTitles.clear();
+                            for (int i = 0; i < previewList.size(); i++) {
+                                RouteStop s = previewList.get(i);
+                                stopTitles.add("Parada #" + (i + 1) + ": " + (s.address != null ? s.address : ""));
+                            }
+                            startStopAdapter.notifyDataSetChanged();
+                        }
+
+                        if (updateSuggestionsUI != null) updateSuggestionsUI.run();
+                        Toast.makeText(getContext(), "⚡ " + unifiedCount + " grupo(s) unificados com sucesso!", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(getContext(), "Nenhum grupo selecionado.", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("CANCELAR", null)
+                .show();
+    }
+
+    private int countPackages(List<RouteStop> stops) {
+        if (stops == null) return 0;
+        int total = 0;
+        for (RouteStop s : stops) total += s.packageCount;
+        return total;
+    }
+
+    private int applyApprovedGroupUnification(List<RouteStop> previewList, List<GroupingSuggestion> suggestions) {
+        if (previewList == null || suggestions == null) return 0;
+        int count = 0;
+
+        for (GroupingSuggestion sugg : suggestions) {
+            if (!sugg.isChecked || sugg.matchedStops.isEmpty()) continue;
+
+            RouteStop master = sugg.master;
+            StringBuilder combinedAddresses = new StringBuilder(master.allAddresses != null ? master.allAddresses : master.address);
+            StringBuilder combinedSequences = new StringBuilder(master.allSequences != null ? master.allSequences : (master.sequence > 0 ? String.valueOf(master.sequence) : ""));
+            int totalPackages = master.packageCount;
+            Set<String> uniqueBuyers = new HashSet<>();
+            if (master.allAddresses != null) {
+                for (String addr : master.allAddresses.split("\n")) uniqueBuyers.add(addr.trim());
+            } else {
+                uniqueBuyers.add(master.address.trim());
+            }
+
+            for (RouteStop other : sugg.matchedStops) {
+                combinedAddresses.append("\n").append(other.allAddresses != null ? other.allAddresses : other.address);
+                String oSeq = other.allSequences != null ? other.allSequences : (other.sequence > 0 ? String.valueOf(other.sequence) : "");
+                if (!oSeq.isEmpty()) combinedSequences.append(", ").append(oSeq);
+                totalPackages += other.packageCount;
+                if (other.allAddresses != null) {
+                    for (String addr : other.allAddresses.split("\n")) uniqueBuyers.add(addr.trim());
+                } else {
+                    uniqueBuyers.add(other.address.trim());
+                }
+                previewList.remove(other);
+            }
+
+            master.allAddresses = combinedAddresses.toString();
+            master.allSequences = combinedSequences.toString();
+            master.packageCount = totalPackages;
+            master.buyerCount = uniqueBuyers.size();
+
+            count++;
+        }
+
+        return count;
+    }
+
+    private boolean isSameLocationOrAddress(RouteStop a, RouteStop b) {
+        if (a == null || b == null) return false;
+        
+        if (a.latitude != 0 && a.longitude != 0 && b.latitude != 0 && b.longitude != 0) {
+            float[] res = new float[1];
+            Location.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude, res);
+            if (res[0] < 15.0) return true;
+        }
+
+        if (a.address != null && b.address != null) {
+            String normA = Normalizer.normalize(a.address.toUpperCase(), Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", "").replaceAll("[.,\\-]", " ").replaceAll("\\s+", " ").trim();
+            String normB = Normalizer.normalize(b.address.toUpperCase(), Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", "").replaceAll("[.,\\-]", " ").replaceAll("\\s+", " ").trim();
+            if (!normA.isEmpty() && normA.equalsIgnoreCase(normB)) return true;
+        }
+
+        return false;
+    }
+
+    private int applySuggestedGroupUnification(List<RouteStop> list) {
+        if (list == null || list.size() < 2) return 0;
+
+        int count = 0;
+        boolean foundAny = true;
+
+        while (foundAny) {
+            foundAny = false;
+            for (int i = 0; i < list.size(); i++) {
+                RouteStop master = list.get(i);
+                List<Integer> matches = new ArrayList<>();
+
+                for (int j = i + 1; j < list.size(); j++) {
+                    RouteStop other = list.get(j);
+                    if (isSameLocationOrAddress(master, other)) {
+                        matches.add(j);
+                    }
+                }
+
+                if (!matches.isEmpty()) {
+                    foundAny = true;
+                    count++;
+
+                    StringBuilder combinedAddresses = new StringBuilder(master.allAddresses != null ? master.allAddresses : master.address);
+                    StringBuilder combinedSequences = new StringBuilder(master.allSequences != null ? master.allSequences : (master.sequence > 0 ? String.valueOf(master.sequence) : ""));
+                    int totalPackages = master.packageCount;
+                    Set<String> uniqueBuyers = new HashSet<>();
+                    if (master.allAddresses != null) {
+                        for (String addr : master.allAddresses.split("\n")) uniqueBuyers.add(addr.trim());
+                    } else {
+                        uniqueBuyers.add(master.address.trim());
+                    }
+
+                    for (int idx : matches) {
+                        RouteStop other = list.get(idx);
+                        combinedAddresses.append("\n").append(other.allAddresses != null ? other.allAddresses : other.address);
+                        String oSeq = other.allSequences != null ? other.allSequences : (other.sequence > 0 ? String.valueOf(other.sequence) : "");
+                        if (!oSeq.isEmpty()) combinedSequences.append(", ").append(oSeq);
+                        totalPackages += other.packageCount;
+                        if (other.allAddresses != null) {
+                            for (String addr : other.allAddresses.split("\n")) uniqueBuyers.add(addr.trim());
+                        } else {
+                            uniqueBuyers.add(other.address.trim());
+                        }
+                    }
+
+                    master.allAddresses = combinedAddresses.toString();
+                    master.allSequences = combinedSequences.toString();
+                    master.packageCount = totalPackages;
+                    master.buyerCount = uniqueBuyers.size();
+
+                    for (int k = matches.size() - 1; k >= 0; k--) {
+                        list.remove((int) matches.get(k));
+                    }
+                    break;
+                }
+            }
+        }
+        return count;
+    }
+
+    private void promptFinishOptimizationNow() {
+        if (currentRouteId == -1) {
+            if (getContext() != null) Toast.makeText(getContext(), "Nenhuma rota ativa selecionada.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final Context ctx = getContext();
+        if (ctx == null) return;
+
+        new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(ctx).appDao();
+            List<RouteStop> stops = dao.getStopsForRoute(currentRouteId);
+            if (stops == null || stops.isEmpty()) {
+                Activity act = getActivity();
+                if (act != null) {
+                    act.runOnUiThread(() -> Toast.makeText(ctx, "Nenhuma parada encontrada nesta rota.", Toast.LENGTH_SHORT).show());
+                }
+                return;
+            }
+
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> showImportPreviewDialog(currentRouteId, stops));
+            }
+        }).start();
+    }
+
+    private void applyOriginalOrder(List<RouteStop> previewList, boolean isGpsMode, int chosenStartIdx, Runnable onComplete) {
+        if (previewList == null || previewList.isEmpty()) return;
+
+        RouteStop selectedFirst = (!isGpsMode && chosenStartIdx >= 0 && chosenStartIdx < previewList.size()) 
+                ? previewList.get(chosenStartIdx) 
+                : null;
+
+        Collections.sort(previewList, (a, b) -> {
+            if (a.sequence > 0 && b.sequence > 0) {
+                return Integer.compare(a.sequence, b.sequence);
+            }
+            return Integer.compare(a.sortOrder, b.sortOrder);
+        });
+
+        if (selectedFirst != null) {
+            int newPos = previewList.indexOf(selectedFirst);
+            if (newPos > 0) {
+                List<RouteStop> reordered = new ArrayList<>();
+                for (int i = newPos; i < previewList.size(); i++) {
+                    reordered.add(previewList.get(i));
+                }
+                for (int i = 0; i < newPos; i++) {
+                    reordered.add(previewList.get(i));
+                }
+                previewList.clear();
+                previewList.addAll(reordered);
+            }
+        }
+
+        renumberPreviewList(previewList);
+
+        if (getContext() != null) {
+            Toast.makeText(getContext(), "📄 Ordem original da planilha aplicada!", Toast.LENGTH_SHORT).show();
+        }
+
+        if (onComplete != null) {
+            onComplete.run();
+        }
+    }
+
+    private void promptApplyOriginalOrder() {
+        if (currentRouteId == -1 || getContext() == null) return;
+
+        new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+            List<RouteStop> stops = dao.getStopsForRoute(currentRouteId);
+            if (stops == null || stops.isEmpty()) return;
+
+            Activity activity = getActivity();
+            if (activity == null) return;
+
+            activity.runOnUiThread(() -> {
+                applyOriginalOrder(stops, true, 0, () -> {
+                    sharedPreferences.edit().remove("route_optimization_pending_" + currentRouteId).apply();
+                    saveImportedStopsToDatabase(currentRouteId, stops);
+                });
+            });
+        }).start();
+    }
+
+    private void promptOptimizeRouteV3() {
+        if (currentRouteId == -1 || getContext() == null) return;
+
+        new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+            List<RouteStop> stops = dao.getStopsForRoute(currentRouteId);
+            if (stops == null || stops.isEmpty()) {
+                Activity act = getActivity();
+                if (act != null) {
+                    act.runOnUiThread(() -> Toast.makeText(requireContext(), "Nenhuma parada encontrada nesta rota.", Toast.LENGTH_SHORT).show());
+                }
+                return;
+            }
+
+            Activity activity = getActivity();
+            if (activity == null) return;
+
+            activity.runOnUiThread(() -> {
+                View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_import_preview, null);
+                
+                View btnUnify = v.findViewById(R.id.btnUnifyPreviewSelected);
+                View btnSelectAll = v.findViewById(R.id.btnSelectAllPreview);
+                View recycler = v.findViewById(R.id.recyclerImportPreview);
+                if (btnUnify != null) btnUnify.setVisibility(View.GONE);
+                if (btnSelectAll != null) btnSelectAll.setVisibility(View.GONE);
+                if (recycler != null) recycler.setVisibility(View.GONE);
+
+                TextView textTitle = v.findViewById(R.id.textImportPreviewTitle);
+                if (textTitle != null) textTitle.setText("🧠 Otimização 3.0 (Combustível)");
+
+                Spinner spinnerOptEngine = v.findViewById(R.id.spinnerOptEngine);
+                Spinner spinnerStartMode = v.findViewById(R.id.spinnerStartMode);
+                LinearLayout layoutStartPicker = v.findViewById(R.id.layoutStartStopPicker);
+                Spinner spinnerStartStop = v.findViewById(R.id.spinnerStartStop);
+
+                String[] engineOptions = {
+                    "🧠 Otimização 3.0 (Combustível - TSP 2-Opt)",
+                    "⚡ Otimização 2.0 (Padrão OSRM)",
+                    "📄 Ordem Original (Planilha Importada)"
+                };
+                ArrayAdapter<String> engineAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, engineOptions);
+                if (spinnerOptEngine != null) {
+                    spinnerOptEngine.setAdapter(engineAdapter);
+                    spinnerOptEngine.setSelection(0);
+                }
+
+                String[] startModeOptions = {
+                    "📍 Localização Atual (GPS)",
+                    "🎯 A partir de uma Parada específica"
+                };
+                ArrayAdapter<String> startModeAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, startModeOptions);
+                if (spinnerStartMode != null) {
+                    spinnerStartMode.setAdapter(startModeAdapter);
+                    spinnerStartMode.setSelection(0);
+                    spinnerStartMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                        @Override
+                        public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                            if (layoutStartPicker != null) {
+                                layoutStartPicker.setVisibility(position == 1 ? View.VISIBLE : View.GONE);
+                            }
+                        }
+                        @Override public void onNothingSelected(AdapterView<?> parent) {}
+                    });
+                }
+
+                List<String> stopTitles = new ArrayList<>();
+                for (int i = 0; i < stops.size(); i++) {
+                    RouteStop s = stops.get(i);
+                    stopTitles.add("Parada #" + (i + 1) + ": " + (s.address != null ? s.address : ""));
+                }
+                ArrayAdapter<String> startStopAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, stopTitles);
+                if (spinnerStartStop != null) spinnerStartStop.setAdapter(startStopAdapter);
+
+                MaterialButton btnCancel = v.findViewById(R.id.btnCancelImportPreview);
+                MaterialButton btnConfirm = v.findViewById(R.id.btnConfirmImportPreview);
+
+                AlertDialog optDialog = new AlertDialog.Builder(requireContext()).setView(v).create();
+                if (optDialog.getWindow() != null) optDialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+                if (btnCancel != null) {
+                    btnCancel.setText("CANCELAR");
+                    btnCancel.setOnClickListener(v2 -> optDialog.dismiss());
+                }
+
+                if (btnConfirm != null) {
+                    btnConfirm.setText("🧠 EXECUTAR OTIMIZAÇÃO 3.0");
+                    btnConfirm.setOnClickListener(v2 -> {
+                        optDialog.dismiss();
+                        boolean isGpsMode = (spinnerStartMode == null || spinnerStartMode.getSelectedItemPosition() == 0);
+                        int chosenStartIdx = (spinnerStartStop != null && !isGpsMode) ? spinnerStartStop.getSelectedItemPosition() : 0;
+                        int selectedEngineIndex = (spinnerOptEngine != null) ? spinnerOptEngine.getSelectedItemPosition() : 0;
+
+                        Runnable saveAndDismiss = () -> {
+                            sharedPreferences.edit().remove("route_optimization_pending_" + currentRouteId).apply();
+                            saveImportedStopsToDatabase(currentRouteId, stops);
+                        };
+
+                        if (selectedEngineIndex == 2) {
+                            applyOriginalOrder(stops, isGpsMode, chosenStartIdx, saveAndDismiss);
+                        } else if (selectedEngineIndex == 1) {
+                            optimizePreviewListV2(stops, isGpsMode, chosenStartIdx, saveAndDismiss);
+                        } else {
+                            optimizePreviewListV3(stops, isGpsMode, chosenStartIdx, saveAndDismiss);
+                        }
+                    });
+                }
+
+                optDialog.show();
+            });
+        }).start();
+    }
+
+    private void optimizePreviewListV2(List<RouteStop> previewList, boolean isGpsMode, int chosenStartIdx, Runnable onComplete) {
+        if (getContext() == null || previewList == null || previewList.isEmpty()) return;
+
+        View dv = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_optimization_progress, null);
+        CircularProgressIndicator progress = dv.findViewById(R.id.progressOptimization);
+        TextView textStatus = dv.findViewById(R.id.textOptimizationStatus);
+        TextView textPercent = dv.findViewById(R.id.textOptimizationPercent);
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(dv).setCancelable(false).create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        dialog.show();
+
+        new Thread(() -> {
+            try {
+                String[] phrases = {
+                    "Analisando paradas para otimização 2.0...",
+                    "Mapeando com rota viária inteligente OSRM...",
+                    "Calculando menor percurso e melhor sequência...",
+                    "Eliminando voltas e otimizando paradas...",
+                    "Finalizando sequência perfeita..."
+                };
+
+                for (int i = 0; i < phrases.length; i++) {
+                    final String msg = phrases[i];
+                    final int p = (i + 1) * (100 / phrases.length);
+                    Activity activity = getActivity();
+                    if (activity != null) {
+                        activity.runOnUiThread(() -> {
+                            if (textStatus != null) textStatus.setText(msg);
+                            if (progress != null) progress.setProgress(p);
+                            if (textPercent != null) textPercent.setText(p + "%");
+                        });
+                    }
+                    Thread.sleep(500);
+                }
+
+                List<RouteStop> source = new ArrayList<>(previewList);
+                List<RouteStop> optimized = new ArrayList<>();
+
+                GeoPoint current;
+                if (isGpsMode) {
+                    current = currentLocation != null ? currentLocation : (source.get(0).latitude != 0 ? new GeoPoint(source.get(0).latitude, source.get(0).longitude) : new GeoPoint(-10.0, -55.0));
+                } else {
+                    int startIdx = (chosenStartIdx >= 0 && chosenStartIdx < source.size()) ? chosenStartIdx : 0;
+                    RouteStop firstStop = source.remove(startIdx);
+                    optimized.add(firstStop);
+                    current = new GeoPoint(firstStop.latitude, firstStop.longitude);
+                }
+
+                while (!source.isEmpty()) {
+                    StringBuilder coords = new StringBuilder();
+                    coords.append(String.format(Locale.US, "%.6f,%.6f", current.getLongitude(), current.getLatitude()));
+                    for (RouteStop s : source) {
+                        coords.append(String.format(Locale.US, ";%.6f,%.6f", s.longitude, s.latitude));
+                    }
+
+                    String url = "https://router.project-osrm.org/table/v1/driving/" + coords.toString() + "?sources=0&annotations=distance";
+                    HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+
+                    String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+                    String userAgent = "DriveLogApp_v1527_" + uniqueId;
+                    conn.setRequestProperty("User-Agent", userAgent);
+
+                    if (conn.getResponseCode() == 200) {
+                        BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                        StringBuilder res = new StringBuilder(); String line;
+                        while ((line = r.readLine()) != null) res.append(line);
+
+                        JSONObject json = new JSONObject(res.toString());
+                        JSONArray distances = json.getJSONArray("distances").getJSONArray(0);
+
+                        int bestIdx = -1;
+                        double minDist = Double.MAX_VALUE;
+                        for (int i = 1; i < distances.length(); i++) {
+                            if (!distances.isNull(i)) {
+                                double d = distances.getDouble(i);
+                                if (d < minDist) { minDist = d; bestIdx = i - 1; }
+                            }
+                        }
+
+                        if (bestIdx != -1) {
+                            RouteStop next = source.get(bestIdx);
+                            optimized.add(next);
+                            source.remove(bestIdx);
+                            current = new GeoPoint(next.latitude, next.longitude);
+                        } else {
+                            RouteStop nearest = source.get(0);
+                            optimized.add(nearest);
+                            source.remove(0);
+                        }
+                    } else {
+                        RouteStop nearest = null; double minDist = Double.MAX_VALUE;
+                        for (RouteStop s : source) {
+                            double d = current.distanceToAsDouble(new GeoPoint(s.latitude, s.longitude));
+                            if (d < minDist) { minDist = d; nearest = s; }
+                        }
+                        if (nearest != null) {
+                            optimized.add(nearest); source.remove(nearest);
+                            current = new GeoPoint(nearest.latitude, nearest.longitude);
+                        } else break;
+                    }
+                }
+
+                previewList.clear();
+                previewList.addAll(optimized);
+
+                Activity activity = getActivity();
+                if (activity != null) {
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        if (onComplete != null) onComplete.run();
+                        Toast.makeText(getContext(), "Otimização 2.0 concluída!", Toast.LENGTH_SHORT).show();
+                    });
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                Activity activity = getActivity();
+                if (activity != null) {
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        Toast.makeText(getContext(), "Erro ao otimizar", Toast.LENGTH_SHORT).show();
+                    });
+                }
+            }
+        }).start();
+    }
+
+    private void optimizePreviewListV3(List<RouteStop> previewList, boolean isGpsMode, int chosenStartIdx, Runnable onComplete) {
+        if (getContext() == null || previewList == null || previewList.isEmpty()) return;
+
+        View dv = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_optimization_progress, null);
+        CircularProgressIndicator progress = dv.findViewById(R.id.progressOptimization);
+        TextView textStatus = dv.findViewById(R.id.textOptimizationStatus);
+        TextView textPercent = dv.findViewById(R.id.textOptimizationPercent);
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(dv).setCancelable(false).create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        dialog.show();
+
+        new Thread(() -> {
+            try {
+                String[] phrases = {
+                    "🧠 Otimização 3.0: Mapeando coordenadas da rota...",
+                    "🧠 Consultando matriz OSRM de distâncias viárias...",
+                    "🧠 Analisando e testando 200 combinações de rotas com TSP 2-Opt...",
+                    "🧠 Comparando quilometragem e selecionando a menor rota...",
+                    "🧠 Finalizando sequência com máxima economia de combustível!"
+                };
+
+                for (int i = 0; i < phrases.length; i++) {
+                    final String msg = phrases[i];
+                    final int p = (i + 1) * (100 / phrases.length);
+                    Activity activity = getActivity();
+                    if (activity != null) {
+                        activity.runOnUiThread(() -> {
+                            if (textStatus != null) textStatus.setText(msg);
+                            if (progress != null) progress.setProgress(p);
+                            if (textPercent != null) textPercent.setText(p + "%");
+                        });
+                    }
+                    Thread.sleep(600);
+                }
+
+                List<RouteStop> source = new ArrayList<>(previewList);
+                List<RouteStop> stopNodes = new ArrayList<>();
+                GeoPoint startPoint;
+
+                if (isGpsMode) {
+                    startPoint = currentLocation != null ? currentLocation : (source.get(0).latitude != 0 ? new GeoPoint(source.get(0).latitude, source.get(0).longitude) : new GeoPoint(-10.0, -55.0));
+                    stopNodes.addAll(source);
+                } else {
+                    int sIdx = (chosenStartIdx >= 0 && chosenStartIdx < source.size()) ? chosenStartIdx : 0;
+                    RouteStop firstStop = source.remove(sIdx);
+                    startPoint = new GeoPoint(firstStop.latitude, firstStop.longitude);
+                    stopNodes.add(firstStop);
+                    stopNodes.addAll(source);
+                }
+
+                int numStops = stopNodes.size();
+                int totalPoints = isGpsMode ? numStops + 1 : numStops;
+
+                StringBuilder coords = new StringBuilder();
+                if (isGpsMode) {
+                    coords.append(String.format(Locale.US, "%.6f,%.6f", startPoint.getLongitude(), startPoint.getLatitude()));
+                    for (RouteStop s : stopNodes) {
+                        coords.append(String.format(Locale.US, ";%.6f,%.6f", s.longitude, s.latitude));
+                    }
+                } else {
+                    for (int i = 0; i < stopNodes.size(); i++) {
+                        RouteStop s = stopNodes.get(i);
+                        if (i > 0) coords.append(";");
+                        coords.append(String.format(Locale.US, "%.6f,%.6f", s.longitude, s.latitude));
+                    }
+                }
+
+                String url = "https://router.project-osrm.org/table/v1/driving/" + coords.toString() + "?annotations=distance";
+                HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+                String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+                conn.setRequestProperty("User-Agent", "DriveLogApp_v30_" + uniqueId);
+
+                double[][] distMatrix = new double[totalPoints][totalPoints];
+                boolean matrixSuccess = false;
+
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder res = new StringBuilder(); String line;
+                    while ((line = r.readLine()) != null) res.append(line);
+
+                    JSONObject json = new JSONObject(res.toString());
+                    JSONArray distancesArray = json.getJSONArray("distances");
+
+                    for (int i = 0; i < totalPoints; i++) {
+                        JSONArray row = distancesArray.getJSONArray(i);
+                        for (int j = 0; j < totalPoints; j++) {
+                            if (!row.isNull(j)) {
+                                distMatrix[i][j] = row.getDouble(j);
+                            } else {
+                                distMatrix[i][j] = Double.MAX_VALUE;
+                            }
+                        }
+                    }
+                    matrixSuccess = true;
+                }
+
+                if (!matrixSuccess) {
+                    List<GeoPoint> points = new ArrayList<>();
+                    if (isGpsMode) points.add(startPoint);
+                    for (RouteStop s : stopNodes) points.add(new GeoPoint(s.latitude, s.longitude));
+
+                    for (int i = 0; i < totalPoints; i++) {
+                        for (int j = 0; j < totalPoints; j++) {
+                            distMatrix[i][j] = points.get(i).distanceToAsDouble(points.get(j));
+                        }
+                    }
+                }
+
+                // --- MULTI-TOUR TSP EVALUATION: EVALUATE 200 CANDIDATE ROUTES & SELECT MIN DISTANCE ---
+                int numCandidates = 200;
+                int[][] candidateTours = new int[numCandidates][totalPoints];
+                double[] candidateDistances = new double[numCandidates];
+
+                Random rng = new Random(42);
+
+                for (int cIdx = 0; cIdx < numCandidates; cIdx++) {
+                    int[] tour = new int[totalPoints];
+                    tour[0] = 0; // Ponto de partida fixo (GPS ou Parada #1)
+                    boolean[] visited = new boolean[totalPoints];
+                    visited[0] = true;
+
+                    for (int i = 0; i < totalPoints - 1; i++) {
+                        int curr = tour[i];
+                        
+                        if (cIdx == 0) {
+                            int bestNext = -1;
+                            double minDist = Double.MAX_VALUE;
+                            for (int j = 1; j < totalPoints; j++) {
+                                if (!visited[j] && distMatrix[curr][j] < minDist) {
+                                    minDist = distMatrix[curr][j];
+                                    bestNext = j;
+                                }
+                            }
+                            if (bestNext != -1) {
+                                visited[bestNext] = true;
+                                tour[i + 1] = bestNext;
+                            }
+                        } else {
+                            List<Integer> unvisitedList = new ArrayList<>();
+                            for (int j = 1; j < totalPoints; j++) {
+                                if (!visited[j]) unvisitedList.add(j);
+                            }
+
+                            if (!unvisitedList.isEmpty()) {
+                                unvisitedList.sort((a, b) -> Double.compare(distMatrix[curr][a], distMatrix[curr][b]));
+                                int kBound = Math.min(3, unvisitedList.size());
+                                int pickIdx = (rng.nextDouble() < 0.65) ? 0 : rng.nextInt(kBound);
+                                int selectedNext = unvisitedList.get(pickIdx);
+                                visited[selectedNext] = true;
+                                tour[i + 1] = selectedNext;
+                            }
+                        }
+                    }
+
+                    boolean improved = true;
+                    int maxOptIterations = 300;
+                    int iter = 0;
+
+                    while (improved && iter < maxOptIterations) {
+                        improved = false;
+                        iter++;
+
+                        for (int i = 1; i < totalPoints - 1; i++) {
+                            for (int j = i + 1; j < totalPoints; j++) {
+                                double currentDist = distMatrix[tour[i - 1]][tour[i]];
+                                for (int k = i; k < j; k++) {
+                                    currentDist += distMatrix[tour[k]][tour[k + 1]];
+                                }
+                                if (j < totalPoints - 1) {
+                                    currentDist += distMatrix[tour[j]][tour[j + 1]];
+                                }
+
+                                double newDist = distMatrix[tour[i - 1]][tour[j]];
+                                for (int k = j; k > i; k--) {
+                                    newDist += distMatrix[tour[k]][tour[k - 1]];
+                                }
+                                if (j < totalPoints - 1) {
+                                    newDist += distMatrix[tour[i]][tour[j + 1]];
+                                }
+
+                                if (newDist < currentDist - 0.01) {
+                                    int left = i, right = j;
+                                    while (left < right) {
+                                        int temp = tour[left];
+                                        tour[left] = tour[right];
+                                        tour[right] = temp;
+                                        left++;
+                                        right--;
+                                    }
+                                    improved = true;
+                                }
+                            }
+                        }
+                    }
+
+                    double tourDistMeters = 0.0;
+                    for (int i = 0; i < totalPoints - 1; i++) {
+                        double d = distMatrix[tour[i]][tour[i + 1]];
+                        if (d < Double.MAX_VALUE) {
+                            tourDistMeters += d;
+                        }
+                    }
+                    candidateTours[cIdx] = tour;
+                    candidateDistances[cIdx] = tourDistMeters;
+                }
+
+                int bestCandidateIdx = 0;
+                double minTotalMeters = Double.MAX_VALUE;
+                for (int cIdx = 0; cIdx < numCandidates; cIdx++) {
+                    if (candidateDistances[cIdx] < minTotalMeters) {
+                        minTotalMeters = candidateDistances[cIdx];
+                        bestCandidateIdx = cIdx;
+                    }
+                }
+
+                int[] winningTour = candidateTours[bestCandidateIdx];
+                final double finalTotalKm = minTotalMeters / 1000.0;
+                final int finalStopsCount = stopNodes.size();
+
+                List<RouteStop> finalOptimized = new ArrayList<>();
+                if (!isGpsMode && !stopNodes.isEmpty()) {
+                    finalOptimized.add(stopNodes.get(0)); // PARADA #1 GARANTIDA NO ÍNDICE 0
+                    for (int i = 1; i < totalPoints; i++) {
+                        int stopIdx = winningTour[i];
+                        if (stopIdx > 0 && stopIdx < stopNodes.size()) {
+                            finalOptimized.add(stopNodes.get(stopIdx));
+                        }
+                    }
+                } else {
+                    for (int i = 1; i < totalPoints; i++) {
+                        int stopIdx = winningTour[i] - 1;
+                        if (stopIdx >= 0 && stopIdx < stopNodes.size()) {
+                            finalOptimized.add(stopNodes.get(stopIdx));
+                        }
+                    }
+                }
+
+                previewList.clear();
+                previewList.addAll(finalOptimized);
+
+                Activity activity = getActivity();
+                if (activity != null) {
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        if (onComplete != null) onComplete.run();
+                        showOptimization30SummaryPopup(finalTotalKm, finalStopsCount);
+                    });
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                Activity activity = getActivity();
+                if (activity != null) {
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        Toast.makeText(getContext(), "Erro ao executar Otimização 3.0", Toast.LENGTH_SHORT).show();
+                    });
+                }
+            }
+        }).start();
+    }
+
+    private void showOptimization30SummaryPopup(double totalKm, int totalStops) {
+        if (getContext() == null) return;
+
+        Context ctx = requireContext();
+        View v = LayoutInflater.from(ctx).inflate(R.layout.dialog_modern_confirm, null);
+        TextView title = v.findViewById(R.id.textModernTitle);
+        TextView message = v.findViewById(R.id.textModernMessage);
+        MaterialButton btnCancel = v.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = v.findViewById(R.id.btnModernPositive);
+
+        if (title != null) title.setText("🧠 Otimização 3.0 Concluída!");
+        if (message != null) {
+            String msg = String.format(Locale.getDefault(),
+                    "📍 Distância Total da Rota: %.1f km\n" +
+                    "📦 Total de Paradas: %d paradas\n\n" +
+                    "⛽ 200 combinações de trajetos foram analisadas pelo algoritmo TSP 2-Opt. A rota com a MENOR distância viária em KM foi selecionada!",
+                    totalKm, totalStops);
+            message.setText(msg);
+        }
+
+        if (btnCancel != null) btnCancel.setVisibility(View.GONE);
+        if (btnConfirm != null) {
+            btnConfirm.setText("🚀 INICIAR ROTA");
+            btnConfirm.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#2E7D32")));
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(ctx).setView(v).create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        if (btnConfirm != null) btnConfirm.setOnClickListener(v2 -> dialog.dismiss());
+
+        dialog.show();
+    }
+
+    private void renumberPreviewList(List<RouteStop> list) {
+        if (list == null) return;
+        for (int i = 0; i < list.size(); i++) {
+            list.get(i).sortOrder = i;
+            list.get(i).stopNumber = i + 1;
+        }
+    }
+
+    private void saveImportedStopsToDatabase(int targetRouteId, List<RouteStop> finalStops) {
+        if (getContext() == null || finalStops == null || finalStops.isEmpty()) return;
+        final Context ctx = getContext();
+        new Thread(() -> {
+            AppDao dao = AppDatabase.getInstance(ctx).appDao();
+            renumberPreviewList(finalStops);
+
+            // Evita duplicação: limpa as paradas antigas da rota e reseta os IDs
+            dao.clearRouteStopsByRoute(targetRouteId);
+            for (RouteStop s : finalStops) {
+                s.id = 0;
+            }
+            dao.insertRouteStops(finalStops);
+
+            List<RouteStop> all = dao.getStopsForRoute(targetRouteId);
+            for (int i = 0; i < all.size(); i++) {
+                all.get(i).sortOrder = i;
+                all.get(i).stopNumber = i + 1;
+            }
+            dao.updateRouteStops(all);
+
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() -> {
+                    sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
+                    loadStopsForCurrentRoute();
+                    Toast.makeText(ctx, "Rota salva com sucesso!", Toast.LENGTH_SHORT).show();
+                    CloudSyncHelper.syncNow(ctx, "Importação Concluída");
+                });
+            }
+        }).start();
+    }
+
+    private static class ImportPreviewAdapter extends RecyclerView.Adapter<ImportPreviewAdapter.ViewHolder> {
+        private final List<RouteStop> stops;
+        private final Set<Integer> selectedIndices;
+        private final OnPreviewInteractionListener listener;
+
+        interface OnPreviewInteractionListener {
+            void onSelectionChanged();
+            void onDelete(int position);
+            void onStartDrag(RecyclerView.ViewHolder viewHolder);
+        }
+
+        ImportPreviewAdapter(List<RouteStop> stops, Set<Integer> selectedIndices, OnPreviewInteractionListener listener) {
+            this.stops = stops;
+            this.selectedIndices = selectedIndices;
+            this.listener = listener;
+        }
+
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_import_preview_stop, parent, false);
+            return new ViewHolder(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder h, int position) {
+            RouteStop item = stops.get(position);
+            h.textTitle.setText("Parada #" + item.stopNumber);
+            h.textAddress.setText(item.address != null ? item.address : "");
+            
+            String neighborhoodCity = "";
+            if (item.neighborhood != null && !item.neighborhood.isEmpty()) neighborhoodCity += item.neighborhood;
+            if (item.city != null && !item.city.isEmpty()) {
+                if (!neighborhoodCity.isEmpty()) neighborhoodCity += " - ";
+                neighborhoodCity += item.city;
+            }
+            h.textNeighborhood.setText(neighborhoodCity);
+
+            String seqText = (item.allSequences != null && !item.allSequences.isEmpty()) ? item.allSequences : (item.sequence > 0 ? String.valueOf(item.sequence) : "");
+            h.textPackagesSeq.setText("📦 " + item.packageCount + (item.packageCount > 1 ? " pacotes" : " pacote") + (seqText.isEmpty() ? "" : " | Seq: " + seqText));
+
+            h.chkSelect.setOnCheckedChangeListener(null);
+            h.chkSelect.setChecked(selectedIndices.contains(position));
+            h.chkSelect.setOnCheckedChangeListener((btn, isChecked) -> {
+                int adapterPos = h.getBindingAdapterPosition();
+                if (adapterPos != RecyclerView.NO_POSITION) {
+                    if (isChecked) selectedIndices.add(adapterPos);
+                    else selectedIndices.remove(adapterPos);
+                    if (listener != null) listener.onSelectionChanged();
+                }
+            });
+
+            // Toque/manter pressionado no ícone de reordenar ativa o arraste
+            h.imgDragHandle.setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    if (listener != null) listener.onStartDrag(h);
+                }
+                return false;
+            });
+
+            h.btnDelete.setOnClickListener(v -> {
+                int adapterPos = h.getBindingAdapterPosition();
+                if (adapterPos != RecyclerView.NO_POSITION && listener != null) {
+                    listener.onDelete(adapterPos);
+                }
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return stops != null ? stops.size() : 0;
+        }
+
+        static class ViewHolder extends RecyclerView.ViewHolder {
+            CheckBox chkSelect;
+            TextView textTitle, textAddress, textNeighborhood, textPackagesSeq;
+            ImageView imgDragHandle;
+            ImageButton btnDelete;
+
+            ViewHolder(View v) {
+                super(v);
+                chkSelect = v.findViewById(R.id.chkPreviewSelect);
+                textTitle = v.findViewById(R.id.textPreviewStopTitle);
+                textAddress = v.findViewById(R.id.textPreviewAddress);
+                textNeighborhood = v.findViewById(R.id.textPreviewNeighborhood);
+                textPackagesSeq = v.findViewById(R.id.textPreviewPackagesSeq);
+                imgDragHandle = v.findViewById(R.id.imgPreviewDragHandle);
+                btnDelete = v.findViewById(R.id.btnPreviewDelete);
+            }
+        }
     }
 
     private String getCellValue(Cell cell) {
@@ -5992,32 +9198,56 @@ public class RouteFragment extends Fragment {
             
             // 🔥 Lógica de Tempo Total
             if (currentRouteHeader != null) {
+                final int targetRouteId = (stop != null && stop.routeId > 0) ? stop.routeId : (currentRouteHeader != null && currentRouteHeader.id > 0 ? currentRouteHeader.id : currentRouteId);
                 new Thread(() -> {
                     AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
-                    RouteHeader header = dao.getRouteById(currentRouteId);
+                    RouteHeader header = dao.getRouteById(targetRouteId);
                     if (header != null) {
                         boolean updated = false;
                         if (header.startTime == 0) {
-                            header.startTime = System.currentTimeMillis();
+                            long startTimeToUse = (currentRouteHeader != null && currentRouteHeader.startTime > 0)
+                                ? currentRouteHeader.startTime
+                                : System.currentTimeMillis();
+                            header.startTime = startTimeToUse;
+                            header.totalPausedMs = 0;
+                            header.lastPauseStartTime = 0;
                             updated = true;
+                            if (currentRouteHeader != null) {
+                                currentRouteHeader.startTime = startTimeToUse;
+                                currentRouteHeader.totalPausedMs = 0;
+                                currentRouteHeader.lastPauseStartTime = 0;
+                            }
                         }
                         
                         // Verifica se é a última parada
-                        List<RouteStop> all = dao.getStopsForRoute(currentRouteId);
-                        boolean allDone = true;
-                        for (RouteStop rs : all) {
-                            if (rs.id == stop.id) continue; // A atual já marcamos acima no DB via updateStopInDb mas o thread pode ser rápido
-                            if (rs.deliveryStatus == 0) { allDone = false; break; }
+                        List<RouteStop> all = dao.getStopsForRoute(targetRouteId);
+                        boolean allDone = (all != null && !all.isEmpty());
+                        if (all != null) {
+                            for (RouteStop rs : all) {
+                                if (rs.id == stop.id) continue; // A atual já marcamos acima no DB via updateStopInDb mas o thread pode ser rápido
+                                if (rs.deliveryStatus == 0) { allDone = false; break; }
+                            }
                         }
                         
-                        if (allDone && header.endTime == 0) {
-                            header.endTime = System.currentTimeMillis();
-                            updated = true;
-                            
-                            // 🔥 Se "Ocultar Entregas" estiver ativo, volta para casa automaticamente ao finalizar a última
-                            if (sharedPreferences.getBoolean("hide_delivered_stops", false)) {
-                                Activity activity = getActivity();
-                                if (activity != null) activity.runOnUiThread(() -> centerOnHome());
+                        if (allDone) {
+                            if (header.endTime == 0) {
+                                header.endTime = System.currentTimeMillis();
+                                header.isCompleted = true;
+                                updated = true;
+                                if (currentRouteHeader != null) {
+                                    currentRouteHeader.endTime = header.endTime;
+                                    currentRouteHeader.isCompleted = true;
+                                }
+                            }
+                        } else {
+                            if (header.endTime > 0) {
+                                header.endTime = 0;
+                                header.isCompleted = false;
+                                updated = true;
+                                if (currentRouteHeader != null) {
+                                    currentRouteHeader.endTime = 0;
+                                    currentRouteHeader.isCompleted = false;
+                                }
                             }
                         }
                         
@@ -6035,21 +9265,59 @@ public class RouteFragment extends Fragment {
 
             // 🔥 Lógica de Tempo Total para falha também
             if (currentRouteHeader != null) {
+                final int targetRouteId = (stop != null && stop.routeId > 0) ? stop.routeId : (currentRouteHeader != null && currentRouteHeader.id > 0 ? currentRouteHeader.id : currentRouteId);
                 new Thread(() -> {
                     AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
-                    RouteHeader header = dao.getRouteById(currentRouteId);
+                    RouteHeader header = dao.getRouteById(targetRouteId);
                     if (header != null) {
-                        List<RouteStop> all = dao.getStopsForRoute(currentRouteId);
-                        boolean allDone = true;
-                        for (RouteStop rs : all) {
-                            if (rs.id == stop.id) continue;
-                            if (rs.deliveryStatus == 0) { allDone = false; break; }
+                        boolean updated = false;
+                        if (header.startTime == 0) {
+                            long startTimeToUse = (currentRouteHeader != null && currentRouteHeader.startTime > 0)
+                                ? currentRouteHeader.startTime
+                                : System.currentTimeMillis();
+                            header.startTime = startTimeToUse;
+                            header.totalPausedMs = 0;
+                            header.lastPauseStartTime = 0;
+                            updated = true;
+                            if (currentRouteHeader != null) {
+                                currentRouteHeader.startTime = startTimeToUse;
+                                currentRouteHeader.totalPausedMs = 0;
+                                currentRouteHeader.lastPauseStartTime = 0;
+                            }
+                        }
+
+                        List<RouteStop> all = dao.getStopsForRoute(targetRouteId);
+                        boolean allDone = (all != null && !all.isEmpty());
+                        if (all != null) {
+                            for (RouteStop rs : all) {
+                                if (rs.id == stop.id) continue;
+                                if (rs.deliveryStatus == 0) { allDone = false; break; }
+                            }
                         }
                         
-                        if (allDone && header.endTime == 0) {
-                            header.endTime = System.currentTimeMillis();
-                            dao.updateRouteHeader(header);
+                        if (allDone) {
+                            if (header.endTime == 0) {
+                                header.endTime = System.currentTimeMillis();
+                                header.isCompleted = true;
+                                updated = true;
+                                if (currentRouteHeader != null) {
+                                    currentRouteHeader.endTime = header.endTime;
+                                    currentRouteHeader.isCompleted = true;
+                                }
+                            }
+                        } else {
+                            if (header.endTime > 0) {
+                                header.endTime = 0;
+                                header.isCompleted = false;
+                                updated = true;
+                                if (currentRouteHeader != null) {
+                                    currentRouteHeader.endTime = 0;
+                                    currentRouteHeader.isCompleted = false;
+                                }
+                            }
                         }
+
+                        if (updated) dao.updateRouteHeader(header);
                     }
                 }).start();
             }
@@ -6065,32 +9333,23 @@ public class RouteFragment extends Fragment {
             updateStopInDb(stop); 
             flashStatsSummary(cardPendingSummary);
             
-            // 🔥 Reset de Tempo se necessário
+            // Se a rota estava finalizada, reabre a rota mantendo o startTime intacto
             if (currentRouteHeader != null) {
+                final int targetRouteId = (stop != null && stop.routeId > 0) ? stop.routeId : (currentRouteHeader != null && currentRouteHeader.id > 0 ? currentRouteHeader.id : currentRouteId);
                 new Thread(() -> {
                     AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
-                    RouteHeader header = dao.getRouteById(currentRouteId);
+                    RouteHeader header = dao.getRouteById(targetRouteId);
                     if (header != null) {
-                        List<RouteStop> all = dao.getStopsForRoute(currentRouteId);
-                        boolean anyDelivered = false;
-                        for (RouteStop rs : all) {
-                            if (rs.id == stop.id) continue;
-                            if (rs.deliveryStatus == 1) { anyDelivered = true; break; }
-                        }
-                        
                         boolean updated = false;
-                        if (!anyDelivered) {
-                            header.startTime = 0;
+                        if (header.endTime > 0) {
                             header.endTime = 0;
+                            header.isCompleted = false;
                             updated = true;
-                        } else {
-                            // Se resetou uma, ela não pode mais ser a "última entregue" que parou o cronômetro
-                            if (header.endTime > 0) {
-                                header.endTime = 0;
-                                updated = true;
+                            if (currentRouteHeader != null) {
+                                currentRouteHeader.endTime = 0;
+                                currentRouteHeader.isCompleted = false;
                             }
                         }
-                        
                         if (updated) dao.updateRouteHeader(header);
                     }
                 }).start();
@@ -6101,9 +9360,23 @@ public class RouteFragment extends Fragment {
                 sharedPreferences.edit().remove(celebrationKey).apply();
                 Log.d("DriveLog", "Resetando flag de celebração via onStopAction (Reset)");
             }
+
+            advanceToNextStop();
         }
         else if (action == 7) showStopDetails(stop);
         else if (action == 8) showGlobalFeedbackDialog(stop.address);
+
+        // Atualiza os adaptadores da lista e os marcadores do mapa
+        if (action == 1 || action == 2 || action == 6) {
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                    if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                    refreshMarkers();
+                });
+            }
+        }
     }
 
     private void triggerCelebration() {
@@ -6167,101 +9440,177 @@ public class RouteFragment extends Fragment {
         }).start();
     }
 
+    private int findStopIndexInList(List<RouteStop> list, RouteStop target) {
+        if (list == null || target == null) return -1;
+        for (int i = 0; i < list.size(); i++) {
+            RouteStop s = list.get(i);
+            if (s != null) {
+                if (target.id > 0 && s.id > 0 && target.id == s.id) {
+                    return i;
+                }
+                if (target.stopNumber > 0 && s.stopNumber == target.stopNumber) {
+                    return i;
+                }
+                if (target.address != null && s.address != null && target.address.equalsIgnoreCase(s.address)) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
     private void advanceToNextStop() {
         if (viewPagerStops == null || currentStops == null || currentStops.isEmpty()) return;
 
         boolean autoNearest = sharedPreferences.getBoolean("advance_to_nearest", false);
-        
-        if (autoNearest && currentLocation != null) {
-            // Lógica para encontrar a parada pendente mais próxima via RUA (OSRM)
+        int currentIdx = viewPagerStops.getCurrentItem();
+
+        if (autoNearest) {
             new Thread(() -> {
                 try {
                     List<RouteStop> pending = new ArrayList<>();
                     for (RouteStop s : currentStops) {
-                        if (s.deliveryStatus == 0) pending.add(s);
+                        if (s != null && s.deliveryStatus == 0) {
+                            pending.add(s);
+                        }
                     }
-                    
+
                     if (pending.isEmpty()) return;
 
-                    // Se houver apenas uma parada pendente, pula lógica OSRM
-                    if (pending.size() == 1) {
-                        int finalIdx = currentStops.indexOf(pending.get(0));
-                        Activity activity = getActivity();
-                        if (activity != null) activity.runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
+                    // 1. Determina o ponto de referência (GPS atual se válido, ou localização da parada ativa)
+                    GeoPoint refPoint = null;
+                    boolean isGpsValid = (currentLocation != null 
+                            && Math.abs(currentLocation.getLatitude()) > 0.001 
+                            && Math.abs(currentLocation.getLongitude()) > 0.001
+                            && !(Math.abs(currentLocation.getLatitude() - (-23.5505)) < 0.01 && Math.abs(currentLocation.getLongitude() - (-46.6333)) < 0.01));
+
+                    if (isGpsValid) {
+                        refPoint = currentLocation;
+                    } else if (currentIdx >= 0 && currentIdx < currentStops.size()) {
+                        RouteStop activeStop = currentStops.get(currentIdx);
+                        if (activeStop != null && Math.abs(activeStop.latitude) > 0.001) {
+                            refPoint = new GeoPoint(activeStop.latitude, activeStop.longitude);
+                        }
+                    }
+
+                    // Se não tiver ponto de referência ou se só houver 1 parada pendente
+                    if (refPoint == null || pending.size() == 1) {
+                        int finalIdx = findStopIndexInList(currentStops, pending.get(0));
+                        if (finalIdx >= 0 && getActivity() != null) {
+                            getActivity().runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
+                        }
                         return;
                     }
 
-                    // Limita a 50 coordenadas para o servidor OSRM público
-                    List<RouteStop> targetStops = pending.size() > 50 ? pending.subList(0, 50) : pending;
-
-                    StringBuilder coords = new StringBuilder();
-                    coords.append(String.format(Locale.US, "%.6f,%.6f", currentLocation.getLongitude(), currentLocation.getLatitude()));
-                    for (RouteStop s : targetStops) {
-                        coords.append(String.format(Locale.US, ";%.6f,%.6f", s.longitude, s.latitude));
+                    // Filtra apenas paradas pendentes com coordenadas válidas
+                    List<RouteStop> validPending = new ArrayList<>();
+                    for (RouteStop s : pending) {
+                        if (Math.abs(s.latitude) > 0.001 && Math.abs(s.longitude) > 0.001) {
+                            validPending.add(s);
+                        }
                     }
 
-                    String url = "https://router.project-osrm.org/table/v1/driving/" + coords.toString() + "?sources=0&annotations=distance";
-                    HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-                    String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-                    conn.setRequestProperty("User-Agent", "DriveLogApp_v1527_" + uniqueId);
-                    
-                    if (conn.getResponseCode() == 200) {
-                        BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                        StringBuilder res = new StringBuilder(); String line;
-                        while ((line = r.readLine()) != null) res.append(line);
-                        JSONObject json = new JSONObject(res.toString());
-                        JSONArray distances = json.getJSONArray("distances").getJSONArray(0);
-                        
-                        int bestIdxInTargets = -1;
-                        double minDist = Double.MAX_VALUE;
-                        for (int i = 1; i < distances.length(); i++) {
-                            double d = distances.getDouble(i);
-                            if (d < minDist) { minDist = d; bestIdxInTargets = i - 1; }
+                    if (validPending.isEmpty()) {
+                        int finalIdx = findStopIndexInList(currentStops, pending.get(0));
+                        if (finalIdx >= 0 && getActivity() != null) {
+                            getActivity().runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
                         }
-                        
-                        if (bestIdxInTargets != -1) {
-                            RouteStop nearest = targetStops.get(bestIdxInTargets);
-                            int finalIdx = currentStops.indexOf(nearest);
-                            Activity activity = getActivity();
-                            if (activity != null) activity.runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
+                        return;
+                    }
+
+                    // Tenta calcular a distância via OSRM (RUA)
+                    final GeoPoint finalRefPoint = refPoint;
+                    RouteStop bestOsrmStop = null;
+                    try {
+                        List<RouteStop> targetStops = validPending.size() > 50 ? validPending.subList(0, 50) : validPending;
+                        StringBuilder coords = new StringBuilder();
+                        coords.append(String.format(Locale.US, "%.6f,%.6f", finalRefPoint.getLongitude(), finalRefPoint.getLatitude()));
+                        for (RouteStop s : targetStops) {
+                            coords.append(String.format(Locale.US, ";%.6f,%.6f", s.longitude, s.latitude));
+                        }
+
+                        String url = "https://router.project-osrm.org/table/v1/driving/" + coords.toString() + "?sources=0&annotations=distance";
+                        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+                        conn.setConnectTimeout(2000);
+                        conn.setReadTimeout(2000);
+                        String uniqueId = Settings.Secure.getString(requireContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+                        conn.setRequestProperty("User-Agent", "DriveLogApp_v1527_" + uniqueId);
+
+                        if (conn.getResponseCode() == 200) {
+                            BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                            StringBuilder res = new StringBuilder(); String line;
+                            while ((line = r.readLine()) != null) res.append(line);
+                            JSONObject json = new JSONObject(res.toString());
+                            JSONArray distances = json.getJSONArray("distances").getJSONArray(0);
+
+                            int bestIdxInTargets = -1;
+                            double minDist = Double.MAX_VALUE;
+                            for (int i = 1; i < distances.length(); i++) {
+                                if (!distances.isNull(i)) {
+                                    double d = distances.getDouble(i);
+                                    if (d < minDist) {
+                                        minDist = d;
+                                        bestIdxInTargets = i - 1;
+                                    }
+                                }
+                            }
+
+                            if (bestIdxInTargets >= 0 && bestIdxInTargets < targetStops.size()) {
+                                bestOsrmStop = targetStops.get(bestIdxInTargets);
+                            }
+                        }
+                    } catch (Exception ignored) {}
+
+                    if (bestOsrmStop != null) {
+                        int finalIdx = findStopIndexInList(currentStops, bestOsrmStop);
+                        if (finalIdx >= 0 && getActivity() != null) {
+                            getActivity().runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
                             return;
                         }
                     }
+
+                    // Fallback para distância direta (linear)
+                    RouteStop bestLinearStop = null;
+                    double minDist = Double.MAX_VALUE;
+                    for (RouteStop s : validPending) {
+                        double d = finalRefPoint.distanceToAsDouble(new GeoPoint(s.latitude, s.longitude));
+                        if (d < minDist) {
+                            minDist = d;
+                            bestLinearStop = s;
+                        }
+                    }
+
+                    if (bestLinearStop != null) {
+                        int finalIdx = findStopIndexInList(currentStops, bestLinearStop);
+                        if (finalIdx >= 0 && getActivity() != null) {
+                            getActivity().runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
+                            return;
+                        }
+                    }
+
+                    // Se tudo falhar, vai para a primeira pendente
+                    int finalIdx = findStopIndexInList(currentStops, pending.get(0));
+                    if (finalIdx >= 0 && getActivity() != null) {
+                        getActivity().runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
-                }
-
-                // Fallback para distância linear se der erro ou sem internet
-                int nearestIdx = -1;
-                double minDist = Double.MAX_VALUE;
-                for (int i = 0; i < currentStops.size(); i++) {
-                    RouteStop s = currentStops.get(i);
-                    if (s.deliveryStatus == 0) {
-                        double d = currentLocation.distanceToAsDouble(new GeoPoint(s.latitude, s.longitude));
-                        if (d < minDist) { minDist = d; nearestIdx = i; }
-                    }
-                }
-                if (nearestIdx != -1) {
-                    final int finalIdx = nearestIdx;
-                    Activity activity = getActivity();
-                    if (activity != null) activity.runOnUiThread(() -> viewPagerStops.setCurrentItem(finalIdx, true));
                 }
             }).start();
             return;
         }
 
         // Comportamento Padrão: Próxima na ordem numérica
-        int current = viewPagerStops.getCurrentItem();
-        for (int i = current + 1; i < currentStops.size(); i++) {
-            if (currentStops.get(i).deliveryStatus == 0) {
+        for (int i = currentIdx + 1; i < currentStops.size(); i++) {
+            if (currentStops.get(i) != null && currentStops.get(i).deliveryStatus == 0) {
                 viewPagerStops.setCurrentItem(i, true);
                 return;
             }
         }
-        
+
         // Se não houver próxima após a atual, tenta desde o começo (ex: pulou paradas)
-        for (int i = 0; i < current; i++) {
-            if (currentStops.get(i).deliveryStatus == 0) {
+        for (int i = 0; i < currentIdx; i++) {
+            if (currentStops.get(i) != null && currentStops.get(i).deliveryStatus == 0) {
                 viewPagerStops.setCurrentItem(i, true);
                 return;
             }
@@ -6303,77 +9652,11 @@ public class RouteFragment extends Fragment {
 
         // --- Status Inicial de Correção ---
         textCorrectionStatus.setVisibility(View.GONE);
-
-        // --- Seção de Correção Global / Local ---
         View cardGlobal = v.findViewById(R.id.cardGlobalDetails);
-        TextView textGlobalLikes = v.findViewById(R.id.textGlobalLikes);
-        TextView textGlobalNoteDetails = v.findViewById(R.id.textGlobalNoteDetails);
         MaterialButton btnDownload = v.findViewById(R.id.btnDownloadGlobalFix);
 
-        FirebaseHelper.searchGlobal(stop.address, new FirebaseHelper.GlobalCorrectionCallback() {
-            @Override
-            public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date) {
-                Activity activity = getActivity();
-                if (activity != null) activity.runOnUiThread(() -> {
-                    String currentUserId = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE).getString("current_user_id", "anon");
-                    boolean alreadyApplied = Math.abs(stop.latitude - lat) < 0.00001 && Math.abs(stop.longitude - lon) < 0.00001;
-
-                    // Mostra sempre o feedback se existir na comunidade
-                    cardGlobal.setVisibility(View.VISIBLE);
-                    textGlobalLikes.setText(likes + " 👍 | " + dislikes + " 👎");
-                    textGlobalLikes.setOnClickListener(v3 -> showGlobalFeedbackDialog(stop.address));
-
-                    if (alreadyApplied) {
-                        btnDownload.setVisibility(View.GONE);
-                    } else {
-                        btnDownload.setVisibility(View.VISIBLE);
-                        btnDownload.setEnabled(true);
-                        btnDownload.setText("📥 BAIXAR E APLICAR CORREÇÃO DA COMUNIDADE");
-                        textCorrectionStatus.setVisibility(View.VISIBLE);
-                        textCorrectionStatus.setText("Correção disponível");
-                        textCorrectionStatus.setTextColor(Color.parseColor("#F44336")); // Vermelho
-                    }
-
-                    if (note != null && !note.isEmpty()) {
-                        textGlobalNoteDetails.setVisibility(View.VISIBLE);
-                        textGlobalNoteDetails.setText("Obs: " + note);
-                    } else {
-                        textGlobalNoteDetails.setVisibility(View.GONE);
-                    }
-                    
-                    btnDownload.setOnClickListener(v3 -> {
-                        btnDownload.setEnabled(false);
-                        btnDownload.setText("BAIXANDO E APLICANDO...");
-                        AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
-                        new Thread(() -> {
-                            CorrectedAddress ca = dao.getCorrectedAddress(stop.address);
-                            if (ca == null) ca = new CorrectedAddress(stop.address, stop.neighborhood, lat, lon);
-                            else { ca.latitude = lat; ca.longitude = lon; }
-                            ca.notes = note; 
-                            ca.creatorId = (creatorId != null) ? creatorId : "community_anon"; // Marca como baixada
-                            ca.updatedAt = System.currentTimeMillis();
-                            dao.insertCorrectedAddress(ca);
-                            
-                            // Atualiza a parada atual com a nova coordenada
-                            stop.latitude = lat; stop.longitude = lon;
-                            dao.updateRouteStop(stop);
-                            
-                            Activity activity3 = getActivity();
-                            if (activity3 != null) activity3.runOnUiThread(() -> {
-                                Toast.makeText(getContext(), "Correção baixada e aplicada nesta parada!", Toast.LENGTH_SHORT).show();
-                                btnDownload.setVisibility(View.GONE); // Esconde o botão após baixar
-                                textCorrectionStatus.setVisibility(View.VISIBLE);
-                                textCorrectionStatus.setText("Correção baixada e aplicada");
-                                textCorrectionStatus.setTextColor(Color.parseColor("#4CAF50")); // Verde
-                                refreshMarkers();
-                                updateRouteCorrectionsCount();
-                            });
-                        }).start();
-                    });
-                });
-            }
-            @Override public void onError(String msg) {}
-        });
+        // --- Carrega o Card de Avaliação / Correção da Comunidade com Botões Diretos ---
+        loadGlobalCardForStopDetails(v, stop);
 
         if (stop.allAddresses != null && !stop.allAddresses.isEmpty()) {
             textBuyerList.setText(stop.allAddresses);
@@ -6388,7 +9671,7 @@ public class RouteFragment extends Fragment {
             
             Activity act = getActivity();
             if (act != null) act.runOnUiThread(() -> {
-                if (corrected != null) {
+                if (corrected != null && corrected.latitude != 0.0 && corrected.longitude != 0.0 && Math.abs(corrected.latitude) > 0.001) {
                     boolean localApplied = Math.abs(stop.latitude - corrected.latitude) < 0.00001 
                                         && Math.abs(stop.longitude - corrected.longitude) < 0.00001;
                     if (!localApplied) {
@@ -6401,6 +9684,10 @@ public class RouteFragment extends Fragment {
                         textCorrectionStatus.setTextColor(Color.parseColor("#F44336"));
 
                         btnDownload.setOnClickListener(v3 -> {
+                            if (corrected.latitude == 0.0 || corrected.longitude == 0.0 || Math.abs(corrected.latitude) < 0.001) {
+                                Toast.makeText(getContext(), "Coordenadas locais inválidas.", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
                             btnDownload.setEnabled(false);
                             btnDownload.setText("APLICANDO...");
                             new Thread(() -> {
@@ -6464,7 +9751,13 @@ public class RouteFragment extends Fragment {
                                     if (getActivity() != null) getActivity().runOnUiThread(() -> {
                                         btnShareLocalFix.setEnabled(true);
                                         btnShareLocalFix.setText("ENVIAR PARA A COMUNIDADE");
-                                        Toast.makeText(getContext(), "Erro ao enviar: " + msg, Toast.LENGTH_SHORT).show();
+                                        if (msg != null && msg.startsWith("ALREADY_CORRECTED_BY_OTHER")) {
+                                            String[] parts = msg.split(":");
+                                            String creatorName = (parts.length > 1 && !parts[1].isEmpty()) ? parts[1] : "outro entregador";
+                                            promptSubstitutionRequestDialog(corrected, creatorName);
+                                        } else {
+                                            Toast.makeText(getContext(), "Erro ao enviar: " + msg, Toast.LENGTH_SHORT).show();
+                                        }
                                     });
                                 }
                             });
@@ -6643,6 +9936,220 @@ public class RouteFragment extends Fragment {
             dialog.dismiss();
         });
         dialog.show();
+    }
+
+    private void loadGlobalCardForStopDetails(View dialogView, RouteStop stop) {
+        if (dialogView == null || stop == null) return;
+        View cardGlobal = dialogView.findViewById(R.id.cardGlobalDetails);
+        TextView textGlobalLikes = dialogView.findViewById(R.id.textGlobalLikes);
+        TextView textGlobalNoteDetails = dialogView.findViewById(R.id.textGlobalNoteDetails);
+        MaterialButton btnDownload = dialogView.findViewById(R.id.btnDownloadGlobalFix);
+
+        FirebaseHelper.searchGlobal(stop.address, new FirebaseHelper.GlobalCorrectionCallback() {
+            @Override
+            public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date, boolean hasCoordinateFix) {
+                Activity activity = getActivity();
+                if (activity != null) activity.runOnUiThread(() -> {
+                    boolean isRealFix = hasCoordinateFix && lat != 0.0 && lon != 0.0 && Math.abs(lat) > 0.001;
+                    boolean alreadyApplied = isRealFix && Math.abs(stop.latitude - lat) < 0.00001 && Math.abs(stop.longitude - lon) < 0.00001;
+
+                    TextView textGlobalTitle = dialogView.findViewById(R.id.textGlobalTitle);
+                    if (textGlobalTitle != null) {
+                        textGlobalTitle.setText(isRealFix ? "Correção da Comunidade" : "Avaliação do Endereço");
+                    }
+
+                    if (cardGlobal != null) cardGlobal.setVisibility(View.VISIBLE);
+
+                    final int[] likesCount = {likes};
+                    final int[] dislikesCount = {dislikes};
+                    final Boolean[] userVote = {null};
+                    final boolean[] hasUserInteracted = {false};
+
+                    int defaultBgColor = Color.parseColor("#E0E0E0");
+                    int activeLikeColor = Color.parseColor("#4CAF50");
+                    int activeDislikeColor = Color.parseColor("#F44336");
+
+                    MaterialButton btnDirectLike = dialogView.findViewById(R.id.btnDirectLike);
+                    MaterialButton btnDirectDislike = dialogView.findViewById(R.id.btnDirectDislike);
+                    MaterialButton btnDirectComments = dialogView.findViewById(R.id.btnDirectComments);
+
+                    TextView textReliabilityLabel = dialogView.findViewById(R.id.textGlobalReliabilityLabel);
+                    View viewReliabilityBar = dialogView.findViewById(R.id.viewGlobalReliabilityBar);
+
+                    Runnable updateReliabilityUI = () -> {
+                        int totalVotes = likesCount[0] + dislikesCount[0];
+                        int mainColor;
+                        String reliabilityText;
+
+                        if (totalVotes == 0) {
+                            mainColor = Color.parseColor("#F57C00");
+                            reliabilityText = "⏳ Em avaliação (Sem votos ainda)";
+                        } else {
+                            double ratio = (double) likesCount[0] / totalVotes;
+                            int percent = (int) (ratio * 100);
+                            if (ratio >= 0.75) {
+                                mainColor = Color.parseColor("#388E3C");
+                                reliabilityText = "🛡️ Alta Confiabilidade (" + percent + "%)";
+                            } else if (ratio >= 0.40) {
+                                mainColor = Color.parseColor("#E65100");
+                                reliabilityText = "⚠️ Média Confiabilidade (" + percent + "%)";
+                            } else {
+                                mainColor = Color.parseColor("#D32F2F");
+                                reliabilityText = "❌ Baixa Confiabilidade (" + percent + "%)";
+                            }
+                        }
+
+                        if (textReliabilityLabel != null) {
+                            textReliabilityLabel.setText(reliabilityText);
+                            textReliabilityLabel.setTextColor(mainColor);
+                        }
+                        if (viewReliabilityBar != null) {
+                            viewReliabilityBar.setBackgroundColor(mainColor);
+                        }
+                    };
+
+                    Runnable updateButtonsUI = () -> {
+                        if (btnDirectLike != null) {
+                            btnDirectLike.setText("👍 " + likesCount[0]);
+                            if (Boolean.TRUE.equals(userVote[0])) {
+                                btnDirectLike.setBackgroundTintList(ColorStateList.valueOf(activeLikeColor));
+                                btnDirectLike.setTextColor(Color.WHITE);
+                            } else {
+                                btnDirectLike.setBackgroundTintList(ColorStateList.valueOf(defaultBgColor));
+                                btnDirectLike.setTextColor(Color.parseColor("#388E3C"));
+                            }
+                        }
+                        if (btnDirectDislike != null) {
+                            btnDirectDislike.setText("👎 " + dislikesCount[0]);
+                            if (Boolean.FALSE.equals(userVote[0])) {
+                                btnDirectDislike.setBackgroundTintList(ColorStateList.valueOf(activeDislikeColor));
+                                btnDirectDislike.setTextColor(Color.WHITE);
+                            } else {
+                                btnDirectDislike.setBackgroundTintList(ColorStateList.valueOf(defaultBgColor));
+                                btnDirectDislike.setTextColor(Color.parseColor("#D32F2F"));
+                            }
+                        }
+                        if (textGlobalLikes != null) {
+                            textGlobalLikes.setText(likesCount[0] + " 👍 | " + dislikesCount[0] + " 👎");
+                        }
+                        updateReliabilityUI.run();
+                    };
+
+                    updateButtonsUI.run();
+
+                    if (textGlobalLikes != null) {
+                        textGlobalLikes.setOnClickListener(v3 -> showGlobalFeedbackDialog(stop.address, () -> {
+                            loadGlobalCardForStopDetails(dialogView, stop);
+                        }));
+                    }
+
+                    String currentUserId = sharedPreferences.getString("current_user_id", "anon");
+                    String userName = sharedPreferences.getString("profile_name", "Entregador");
+
+                    // Busca o voto prévio do usuário para este endereço
+                    FirebaseHelper.getUserAddressVote(stop.address, currentUserId, isLike -> {
+                        Activity act = getActivity();
+                        if (act != null) {
+                            act.runOnUiThread(() -> {
+                                if (!hasUserInteracted[0]) {
+                                    userVote[0] = isLike;
+                                    updateButtonsUI.run();
+                                }
+                            });
+                        }
+                    });
+
+                    if (btnDirectLike != null) {
+                        btnDirectLike.setOnClickListener(vClick -> {
+                            hasUserInteracted[0] = true;
+                            if (Boolean.TRUE.equals(userVote[0])) {
+                                userVote[0] = null;
+                                likesCount[0] = Math.max(0, likesCount[0] - 1);
+                            } else if (Boolean.FALSE.equals(userVote[0])) {
+                                userVote[0] = true;
+                                dislikesCount[0] = Math.max(0, dislikesCount[0] - 1);
+                                likesCount[0]++;
+                            } else {
+                                userVote[0] = true;
+                                likesCount[0]++;
+                            }
+                            updateButtonsUI.run();
+
+                            FirebaseHelper.addFeedback(stop.address, true, null, userName, currentUserId, () -> {
+                                Activity act = getActivity();
+                                if (act != null) {
+                                    act.runOnUiThread(() -> {
+                                        if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                                        if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                                    });
+                                }
+                            });
+                            Toast.makeText(getContext(), "Valeu!", Toast.LENGTH_SHORT).show();
+                        });
+                    }
+
+                    if (btnDirectDislike != null) {
+                        btnDirectDislike.setOnClickListener(vClick -> {
+                            hasUserInteracted[0] = true;
+                            if (Boolean.FALSE.equals(userVote[0])) {
+                                userVote[0] = null;
+                                dislikesCount[0] = Math.max(0, dislikesCount[0] - 1);
+                            } else if (Boolean.TRUE.equals(userVote[0])) {
+                                userVote[0] = false;
+                                likesCount[0] = Math.max(0, likesCount[0] - 1);
+                                dislikesCount[0]++;
+                            } else {
+                                userVote[0] = false;
+                                dislikesCount[0]++;
+                            }
+                            updateButtonsUI.run();
+
+                            FirebaseHelper.addFeedback(stop.address, false, null, userName, currentUserId, () -> {
+                                Activity act = getActivity();
+                                if (act != null) {
+                                    act.runOnUiThread(() -> {
+                                        if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                                        if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                                    });
+                                }
+                            });
+                            Toast.makeText(getContext(), "Feedback enviado!", Toast.LENGTH_SHORT).show();
+                        });
+                    }
+
+                    if (btnDirectComments != null) {
+                        btnDirectComments.setText("💬 " + comments);
+                        btnDirectComments.setOnClickListener(vClick -> {
+                            promptFeedbackComment(stop.address, () -> {
+                                loadGlobalCardForStopDetails(dialogView, stop);
+                                if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                                if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                            });
+                        });
+                    }
+
+                    if (btnDownload != null) {
+                        if (isRealFix && !alreadyApplied) {
+                            btnDownload.setVisibility(View.VISIBLE);
+                            btnDownload.setEnabled(true);
+                            btnDownload.setText("📥 BAIXAR E APLICAR CORREÇÃO DA COMUNIDADE");
+                        } else {
+                            btnDownload.setVisibility(View.GONE);
+                        }
+                    }
+
+                    if (textGlobalNoteDetails != null) {
+                        if (note != null && !note.isEmpty()) {
+                            textGlobalNoteDetails.setVisibility(View.VISIBLE);
+                            textGlobalNoteDetails.setText("Obs: " + note);
+                        } else {
+                            textGlobalNoteDetails.setVisibility(View.GONE);
+                        }
+                    }
+                });
+            }
+            @Override public void onError(String msg) {}
+        });
     }
 
     private void showPurchaseSeparationDialog(RouteStop stop) {
@@ -6869,6 +10376,10 @@ public class RouteFragment extends Fragment {
     }
 
     private void showGlobalFeedbackDialog(String address) {
+        showGlobalFeedbackDialog(address, null);
+    }
+
+    private void showGlobalFeedbackDialog(String address, Runnable onVoteCast) {
         View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_community_feedback, null);
         AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).create();
         if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
@@ -6876,21 +10387,32 @@ public class RouteFragment extends Fragment {
         String currentUserId = sharedPreferences.getString("current_user_id", "anon");
         String userName = sharedPreferences.getString("profile_name", "Entregador");
 
+        Runnable refreshAction = () -> {
+            Activity activity = getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                    if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                    if (onVoteCast != null) onVoteCast.run();
+                });
+            }
+        };
+
         v.findViewById(R.id.btnFeedbackLike).setOnClickListener(v2 -> {
-            FirebaseHelper.addFeedback(address, true, null, userName, currentUserId);
+            FirebaseHelper.addFeedback(address, true, null, userName, currentUserId, refreshAction);
             Toast.makeText(getContext(), "Valeu!", Toast.LENGTH_SHORT).show();
             dialog.dismiss();
         });
 
         v.findViewById(R.id.btnFeedbackDislike).setOnClickListener(v2 -> {
-            FirebaseHelper.addFeedback(address, false, null, userName, currentUserId);
+            FirebaseHelper.addFeedback(address, false, null, userName, currentUserId, refreshAction);
             Toast.makeText(getContext(), "Feedback enviado!", Toast.LENGTH_SHORT).show();
             dialog.dismiss();
         });
 
         v.findViewById(R.id.btnFeedbackComments).setOnClickListener(v2 -> {
             dialog.dismiss();
-            promptFeedbackComment(address);
+            promptFeedbackComment(address, refreshAction);
         });
 
         v.findViewById(R.id.btnFeedbackClose).setOnClickListener(v2 -> dialog.dismiss());
@@ -6898,7 +10420,7 @@ public class RouteFragment extends Fragment {
         dialog.show();
     }
 
-    private void promptFeedbackComment(String address) {
+    private void promptFeedbackComment(String address, Runnable refreshAction) {
         View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_community_comments, null);
         AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).create();
         if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
@@ -6907,6 +10429,10 @@ public class RouteFragment extends Fragment {
         EditText editInput = v.findViewById(R.id.editCommentInput);
         String currentUserId = sharedPreferences.getString("current_user_id", "anon");
         String userName = sharedPreferences.getString("profile_name", "Entregador");
+
+        FirebaseUser fUser = FirebaseAuth.getInstance().getCurrentUser();
+        String myEmail = fUser != null ? fUser.getEmail() : "";
+        String myUid = fUser != null ? fUser.getUid() : "";
 
         FirebaseHelper.fetchComments(address, new FirebaseHelper.CommentsFetchCallback() {
             @Override public void onSuccess(List<CommentModel> list) {
@@ -6921,12 +10447,58 @@ public class RouteFragment extends Fragment {
                         layoutCommentsList.addView(tv);
                     } else {
                         for (CommentModel c : list) {
-                            TextView tv = new TextView(getContext());
-                            tv.setText(c.user + ": " + c.text);
-                            tv.setTextSize(13);
-                            tv.setPadding(0, 8, 0, 8);
-                            tv.setTextColor(Color.parseColor("#333333"));
-                            layoutCommentsList.addView(tv);
+                            View commentView = LayoutInflater.from(requireContext()).inflate(R.layout.item_quadra_comment, layoutCommentsList, false);
+                            TextView txtUser = commentView.findViewById(R.id.textCommentUser);
+                            TextView txtTime = commentView.findViewById(R.id.textCommentTime);
+                            TextView txtBody = commentView.findViewById(R.id.textCommentBody);
+                            ImageButton btnDel = commentView.findViewById(R.id.btnDeleteComment);
+
+                            if (txtUser != null) txtUser.setText(c.user != null ? c.user : "Anônimo");
+                            if (txtBody != null) txtBody.setText(c.text != null ? c.text : "");
+                            if (txtTime != null) {
+                                if (c.date > 0) {
+                                    txtTime.setText(DateUtils.getRelativeTimeSpanString(c.date, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
+                                } else {
+                                    txtTime.setText("agora");
+                                }
+                            }
+
+                            boolean isCommentMine = (c.userId != null && (c.userId.equals(currentUserId) || c.userId.equals(myUid) || (myEmail != null && !myEmail.isEmpty() && c.userId.equalsIgnoreCase(myEmail))));
+
+                            if (btnDel != null) {
+                                btnDel.setVisibility(isCommentMine ? View.VISIBLE : View.GONE);
+                                btnDel.setOnClickListener(vDel -> {
+                                    showModernConfirmDialog("Excluir Comentário", "Deseja apagar o seu comentário?", "EXCLUIR", () -> {
+                                        FirebaseHelper.deleteComment(address, c.id, new FirebaseHelper.GlobalUploadCallback() {
+                                            @Override public void onSuccess() {
+                                                Activity act = getActivity();
+                                                if (act != null) {
+                                                    act.runOnUiThread(() -> {
+                                                        layoutCommentsList.removeView(commentView);
+                                                        if (layoutCommentsList.getChildCount() == 0) {
+                                                            TextView tvEmpty = new TextView(getContext());
+                                                            tvEmpty.setText("Nenhum comentário ainda.");
+                                                            tvEmpty.setPadding(10, 20, 10, 20);
+                                                            tvEmpty.setGravity(Gravity.CENTER);
+                                                            layoutCommentsList.addView(tvEmpty);
+                                                        }
+                                                        Toast.makeText(getContext(), "Comentário excluído!", Toast.LENGTH_SHORT).show();
+                                                        if (refreshAction != null) refreshAction.run();
+                                                    });
+                                                }
+                                            }
+                                            @Override public void onFailure(String msg) {
+                                                Activity act = getActivity();
+                                                if (act != null) {
+                                                    act.runOnUiThread(() -> Toast.makeText(getContext(), "Erro ao excluir: " + msg, Toast.LENGTH_SHORT).show());
+                                                }
+                                            }
+                                        });
+                                    });
+                                });
+                            }
+
+                            layoutCommentsList.addView(commentView);
                         }
                     }
                 });
@@ -6937,7 +10509,7 @@ public class RouteFragment extends Fragment {
         v.findViewById(R.id.btnSendComment).setOnClickListener(v2 -> {
             String text = editInput.getText().toString().trim();
             if (!text.isEmpty()) {
-                FirebaseHelper.addFeedback(address, null, text, userName, currentUserId);
+                FirebaseHelper.addFeedback(address, null, text, userName, currentUserId, refreshAction);
                 Toast.makeText(getContext(), "Comentário enviado!", Toast.LENGTH_SHORT).show();
                 dialog.dismiss();
             }
@@ -6948,22 +10520,227 @@ public class RouteFragment extends Fragment {
         dialog.show();
     }
 
+    private void exitFixMode() {
+        Activity activity = getActivity();
+        Runnable doExit = () -> {
+            if (cardFixMode != null) {
+                cardFixMode.setVisibility(View.GONE);
+            }
+            if (map != null) {
+                if (currentFixOverlay != null) {
+                    map.getOverlays().remove(currentFixOverlay);
+                    currentFixOverlay = null;
+                }
+                if (homeSelectionOverlay != null) {
+                    map.getOverlays().remove(homeSelectionOverlay);
+                    homeSelectionOverlay = null;
+                }
+                if (loadingSelectionOverlay != null) {
+                    map.getOverlays().remove(loadingSelectionOverlay);
+                    loadingSelectionOverlay = null;
+                }
+                if (quadraSelectionOverlay != null) {
+                    map.getOverlays().remove(quadraSelectionOverlay);
+                    quadraSelectionOverlay = null;
+                }
+                map.getOverlays().removeIf(o -> o instanceof MapEventsOverlay && o != searchMapEventsOverlay);
+                map.invalidate();
+            }
+        };
+        if (activity != null) {
+            activity.runOnUiThread(doExit);
+        } else {
+            doExit.run();
+        }
+    }
+
+    private void promptSubstitutionRequestDialog(CorrectedAddress newAddr, String creatorName) {
+        if (getContext() == null || newAddr == null) return;
+
+        String currentUserId = sharedPreferences.getString("current_user_id", "anon");
+        String userName = sharedPreferences.getString("profile_name", "Entregador");
+
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_modern_confirm, null);
+        TextView title = v.findViewById(R.id.textModernTitle);
+        TextView message = v.findViewById(R.id.textModernMessage);
+        MaterialButton btnCancel = v.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = v.findViewById(R.id.btnModernPositive);
+
+        if (title != null) title.setText("Endereço Já Corrigido");
+        if (message != null) {
+            message.setText("O endereço \"" + newAddr.address + "\" já possui uma correção na comunidade enviada por " 
+                    + (creatorName != null && !creatorName.isEmpty() ? creatorName : "outro entregador") 
+                    + ".\n\nPara evitar divergências, você não pode sobrescrevê-lo diretamente. Deseja enviar uma solicitação de substituição para análise de um desenvolvedor?");
+        }
+
+        if (btnCancel != null) btnCancel.setText("CANCELAR");
+        if (btnConfirm != null) btnConfirm.setText("SOLICITAR SUBSTITUIÇÃO");
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v2 -> dialog.dismiss());
+        if (btnConfirm != null) {
+            btnConfirm.setOnClickListener(v2 -> {
+                dialog.dismiss();
+                promptSubstitutionReasonDialog(newAddr, currentUserId, userName);
+            });
+        }
+
+        dialog.show();
+    }
+
+    private void promptSubstitutionReasonDialog(CorrectedAddress newAddr, String userId, String userName) {
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_community_comments, null);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        EditText editReason = v.findViewById(R.id.editCommentInput);
+        View btnSend = v.findViewById(R.id.btnSendComment);
+        View btnCancel = v.findViewById(R.id.btnCancelComments);
+
+        if (editReason != null) {
+            editReason.setHint("Explique o motivo da alteração (ex: portão correto fica na rua de trás)...");
+        }
+
+        if (btnSend != null) {
+            btnSend.setOnClickListener(v2 -> {
+                String reason = editReason != null ? editReason.getText().toString().trim() : "";
+                if (reason.isEmpty()) {
+                    reason = "Solicitação de substituição de localização";
+                }
+                FirebaseHelper.requestAddressSubstitution(newAddr, userId, userName, reason, new FirebaseHelper.GlobalUploadCallback() {
+                    @Override
+                    public void onSuccess() {
+                        Activity act = getActivity();
+                        if (act != null) {
+                            act.runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Solicitação de substituição enviada para análise!", Toast.LENGTH_LONG).show();
+                                dialog.dismiss();
+                            });
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(String msg) {
+                        Activity act = getActivity();
+                        if (act != null) {
+                            act.runOnUiThread(() -> Toast.makeText(getContext(), "Erro ao solicitar: " + msg, Toast.LENGTH_SHORT).show());
+                        }
+                    }
+                });
+            });
+        }
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v2 -> dialog.dismiss());
+        dialog.show();
+    }
+
+    private void showUndoCorrectionSnackbar(RouteStop stop, double oldLat, double oldLon, CorrectedAddress oldCa, CorrectedAddress newCa) {
+        if (cardUndoCorrection == null || getContext() == null) return;
+
+        if (pendingUndoRunnable != null) {
+            undoHandler.removeCallbacks(pendingUndoRunnable);
+        }
+
+        if (textUndoCorrectionMessage != null) {
+            String addrName = (stop.address != null && !stop.address.isEmpty()) ? stop.address : "Endereço";
+            textUndoCorrectionMessage.setText("📍 Localização de \"" + addrName + "\" corrigida!");
+        }
+
+        if (btnUndoCorrectionAction != null) {
+            btnUndoCorrectionAction.setOnClickListener(v -> {
+                if (pendingUndoRunnable != null) {
+                    undoHandler.removeCallbacks(pendingUndoRunnable);
+                    pendingUndoRunnable = null;
+                }
+                cardUndoCorrection.setVisibility(View.GONE);
+
+                new Thread(() -> {
+                    AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+
+                    stop.latitude = oldLat;
+                    stop.longitude = oldLon;
+                    dao.updateRouteStop(stop);
+
+                    if (oldCa == null) {
+                        if (newCa != null) dao.deleteCorrectedAddress(newCa);
+                    } else {
+                        dao.updateCorrectedAddress(oldCa);
+                    }
+
+                    Activity activity = getActivity();
+                    if (activity != null) {
+                        activity.runOnUiThread(() -> {
+                            refreshMarkers();
+                            Toast.makeText(getContext(), "↩️ Correção desfeita com sucesso!", Toast.LENGTH_SHORT).show();
+                            CloudSyncHelper.syncNow(requireContext(), "Desfazer Correção");
+                        });
+                    }
+                }).start();
+            });
+        }
+
+        cardUndoCorrection.setVisibility(View.VISIBLE);
+
+        pendingUndoRunnable = () -> {
+            if (cardUndoCorrection != null) {
+                cardUndoCorrection.setVisibility(View.GONE);
+            }
+            pendingUndoRunnable = null;
+
+            // 🔥 O envio para a comunidade ocorre SOMENTE APÓS os 5 segundos expirarem sem clicar em Desfazer!
+            boolean isManualStop = stop.atId == null || stop.atId.isEmpty();
+            if (!isManualStop && sharedPreferences != null && sharedPreferences.getBoolean("auto_share_corrections", true)) {
+                String currentUserId = sharedPreferences.getString("current_user_id", "anon");
+                String uName = sharedPreferences.getString("profile_name", "Entregador");
+                AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+
+                FirebaseHelper.uploadCorrection(currentUserId, uName, newCa, new FirebaseHelper.GlobalUploadCallback() {
+                    @Override public void onSuccess() {
+                        new Thread(() -> {
+                            newCa.creatorId = currentUserId;
+                            dao.updateCorrectedAddress(newCa);
+                        }).start();
+                    }
+                    @Override public void onFailure(String msg) {
+                        if (msg != null && msg.startsWith("ALREADY_CORRECTED_BY_OTHER")) {
+                            String[] parts = msg.split(":");
+                            String creatorName = (parts.length > 1 && !parts[1].isEmpty()) ? parts[1] : "outro entregador";
+                            Activity act = getActivity();
+                            if (act != null) {
+                                act.runOnUiThread(() -> promptSubstitutionRequestDialog(newCa, creatorName));
+                            }
+                        }
+                    }
+                });
+            }
+        };
+
+        undoHandler.postDelayed(pendingUndoRunnable, 5000);
+    }
+
     private void promptCorrectLocation(RouteStop stop) {
-        cardFixMode.setVisibility(View.VISIBLE);
+        if (cardFixMode != null) {
+            TextView textFix = cardFixMode.findViewById(R.id.textFixTitle);
+            if (textFix != null) textFix.setText("Toque no mapa para corrigir");
+            cardFixMode.setVisibility(View.VISIBLE);
+        }
         Toast.makeText(getContext(), "Toque no local correto", Toast.LENGTH_LONG).show();
         currentFixOverlay = new MapEventsOverlay(new MapEventsReceiver() {
             @Override public boolean singleTapConfirmedHelper(GeoPoint p) {
                 new Thread(() -> {
                     AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
-                    // Garante que usamos EXCLUSIVAMENTE o ponto tocado no mapa (p)
+
+                    double oldLat = stop.latitude;
+                    double oldLon = stop.longitude;
+                    CorrectedAddress oldCa = dao.getCorrectedAddress(stop.address);
+
                     stop.latitude = p.getLatitude(); 
                     stop.longitude = p.getLongitude();
                     dao.updateRouteStop(stop);
                     
-                    // 🔥 Salva na lista global de "Meus Endereços"
-                    CorrectedAddress ca = dao.getCorrectedAddress(stop.address);
-                    String currentUserId = sharedPreferences.getString("current_user_id", "anon");
-                    String uName = sharedPreferences.getString("profile_name", "Entregador");
+                    CorrectedAddress ca = oldCa;
 
                     if (ca == null) {
                         ca = new CorrectedAddress(stop.address, stop.neighborhood, stop.latitude, stop.longitude);
@@ -6971,33 +10748,21 @@ public class RouteFragment extends Fragment {
                         ca.latitude = stop.latitude;
                         ca.longitude = stop.longitude;
                     }
-                    ca.creatorId = null; // Inicialmente local (não enviado)
+                    ca.creatorId = null;
                     ca.updatedAt = System.currentTimeMillis();
                     long newId = dao.insertCorrectedAddress(ca);
                     ca.id = (int) newId;
                     final CorrectedAddress finalCa = ca;
 
-                    // 🔥 Compartilhamento Automático se ativado
-                    // Somente para paradas vindas de planilha (que possuem atId)
-                    boolean isManualStop = stop.atId == null || stop.atId.isEmpty();
-                    if (!isManualStop && sharedPreferences.getBoolean("auto_share_corrections", true)) {
-                        FirebaseHelper.uploadCorrection(currentUserId, uName, ca, new FirebaseHelper.GlobalUploadCallback() {
-                            @Override public void onSuccess() {
-                                new Thread(() -> {
-                                    finalCa.creatorId = currentUserId;
-                                    dao.updateCorrectedAddress(finalCa);
-                                }).start();
-                            }
-                            @Override public void onFailure(String msg) {}
+                    Activity activity = getActivity();
+                    if (activity != null) {
+                        activity.runOnUiThread(() -> {
+                            refreshMarkers();
+                            showUndoCorrectionSnackbar(stop, oldLat, oldLon, oldCa, finalCa);
                         });
                     }
 
-                    Activity activity = getActivity();
-                    if (activity != null) activity.runOnUiThread(() -> { 
-                            cardFixMode.setVisibility(View.GONE); 
-                            map.getOverlays().remove(currentFixOverlay); 
-                            map.invalidate(); 
-                        });
+                    exitFixMode();
                 }).start();
                 return true;
             }
@@ -7005,6 +10770,64 @@ public class RouteFragment extends Fragment {
         });
         map.getOverlays().add(currentFixOverlay);
     }
+    public void showRouteTimerOptionsPopup(View v) {
+        if (getContext() == null || v == null) return;
+        if (currentRouteHeader != null && currentRouteHeader.startTime == 0) {
+            startRouteTimerManually();
+            return;
+        }
+
+        PopupMenu p = new PopupMenu(requireContext(), v);
+
+        boolean homeDefined = sharedPreferences != null && sharedPreferences.getFloat("home_lat", 0) != 0;
+        if (!homeDefined) {
+            p.getMenu().add("Definir Endereço de Casa");
+        }
+
+        if (currentRouteHeader != null && currentRouteHeader.startTime > 0 && currentRouteHeader.endTime == 0) {
+            if (currentRouteHeader.lastPauseStartTime > 0) {
+                p.getMenu().add("Retomar Cronômetro");
+            } else {
+                p.getMenu().add("Pausar Cronômetro");
+            }
+        }
+
+        if (currentRouteHeader != null && currentRouteHeader.startTime > 0) {
+            p.getMenu().add("Estatísticas da Rota");
+        }
+        p.getMenu().add("Reiniciar Rota");
+
+        p.setOnMenuItemClickListener(item -> {
+            if ("Definir Endereço de Casa".equals(item.getTitle())) {
+                startHomeSelection();
+            } else if ("Retomar Cronômetro".equals(item.getTitle())) {
+                long now = System.currentTimeMillis();
+                if (currentRouteHeader != null && currentRouteHeader.lastPauseStartTime > 0) {
+                    long pauseDuration = now - currentRouteHeader.lastPauseStartTime;
+                    currentRouteHeader.totalPausedMs += pauseDuration;
+                    currentRouteHeader.lastPauseStartTime = 0;
+                    final RouteHeader h = currentRouteHeader;
+                    new Thread(() -> AppDatabase.getInstance(requireContext()).appDao().updateRouteHeader(h)).start();
+                    Toast.makeText(getContext(), "▶️ Cronômetro retomado!", Toast.LENGTH_SHORT).show();
+                }
+            } else if ("Pausar Cronômetro".equals(item.getTitle())) {
+                long now = System.currentTimeMillis();
+                if (currentRouteHeader != null && currentRouteHeader.lastPauseStartTime == 0) {
+                    currentRouteHeader.lastPauseStartTime = now;
+                    final RouteHeader h = currentRouteHeader;
+                    new Thread(() -> AppDatabase.getInstance(requireContext()).appDao().updateRouteHeader(h)).start();
+                    Toast.makeText(getContext(), "⏸️ Cronômetro pausado!", Toast.LENGTH_SHORT).show();
+                }
+            } else if ("Estatísticas da Rota".equals(item.getTitle())) {
+                showRouteStatsPopup();
+            } else if ("Reiniciar Rota".equals(item.getTitle())) {
+                promptResetRoute();
+            }
+            return true;
+        });
+        p.show();
+    }
+
     private void showNoConnectionPopup() {
         if (getContext() == null) return;
         View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_modern_confirm, null);
@@ -7026,6 +10849,9 @@ public class RouteFragment extends Fragment {
 
     private void toggleStatsSummary() {
         if (layoutStatsGroup == null) return;
+        boolean isOptPending = sharedPreferences != null && sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+        if (isOptPending) return;
+
         boolean isVisible = layoutStatsGroup.getVisibility() == View.VISIBLE;
         
         if (isVisible) {
@@ -7132,11 +10958,13 @@ public class RouteFragment extends Fragment {
                 for (RouteStop s : stopsNeedingGlobalCheck) {
                     FirebaseHelper.searchGlobal(s.address, new FirebaseHelper.GlobalCorrectionCallback() {
                         @Override
-                        public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date) {
+                        public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date, boolean hasCoordinateFix) {
+                            if (!hasCoordinateFix || lat == 0.0 || lon == 0.0 || Math.abs(lat) < 0.001) {
+                                return; // Ignora se não houver uma correção de coordenadas real na nuvem!
+                            }
+
                             boolean alreadyApplied = Math.abs(s.latitude - lat) < 0.00001 && Math.abs(s.longitude - lon) < 0.00001;
 
-                            // Se a parada na rota atual ainda não está aplicada nesta localização corrigida,
-                            // adiciona como correção disponível na comunidade!
                             if (!alreadyApplied) {
                                 CorrectedAddress globalCa = new CorrectedAddress(s.address, s.neighborhood, lat, lon);
                                 globalCa.notes = note;
@@ -7295,7 +11123,7 @@ public class RouteFragment extends Fragment {
 
                 for (RouteStop s : stopsToFix) {
                     CorrectedAddress ca = caMap.get(s.id);
-                    if (ca != null) {
+                    if (ca != null && ca.latitude != 0.0 && ca.longitude != 0.0 && Math.abs(ca.latitude) > 0.001) {
                         CorrectedAddress localCa = dao.getCorrectedAddress(s.address);
                         if (localCa == null) {
                             dao.insertCorrectedAddress(ca);
@@ -7322,21 +11150,46 @@ public class RouteFragment extends Fragment {
         }).start();
     }
 
+    private void cleanupInvalidLocalFixes(Context context) {
+        if (context == null) return;
+        new Thread(() -> {
+            try {
+                AppDao dao = AppDatabase.getInstance(context.getApplicationContext()).appDao();
+                List<CorrectedAddress> all = dao.getAllCorrectedAddresses();
+                for (CorrectedAddress ca : all) {
+                    if (ca.latitude == 0.0 || ca.longitude == 0.0 || Math.abs(ca.latitude) < 0.001) {
+                        dao.deleteCorrectedAddress(ca);
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
     private void flashStatsSummary(View targetCard) {
-        if (layoutStatsGroup == null || targetCard == null) return;
-        
-        // Se o painel estiver configurado para ficar permanentemente visível, não fazemos o flash
-        boolean isExpandedPermanently = sharedPreferences.getBoolean("stats_summary_expanded", true);
+        if (layoutStatsGroup == null || targetCard == null || getContext() == null) return;
+        boolean isOptPending = sharedPreferences != null && sharedPreferences.getBoolean("route_optimization_pending_" + currentRouteId, false);
+        boolean isManualPending = sharedPreferences != null && sharedPreferences.getBoolean("route_manual_list_pending_" + currentRouteId, false);
+        if (isOptPending || isManualPending) return;
+
+        boolean isExpandedPermanently = sharedPreferences != null && sharedPreferences.getBoolean("stats_summary_expanded", true);
+
+        // Se o painel já estiver visível permanentemente, não precisamos fazer o flash temporário
         if (isExpandedPermanently && layoutStatsGroup.getVisibility() == View.VISIBLE && autoHideRunnable == null) {
             return;
         }
 
-        // Esconde os outros cards para mostrar apenas o referente à ação
-        if (cardSuccessSummary != null) cardSuccessSummary.setVisibility(targetCard == cardSuccessSummary ? View.VISIBLE : View.GONE);
-        if (cardFailedSummary != null) cardFailedSummary.setVisibility(targetCard == cardFailedSummary ? View.VISIBLE : View.GONE);
-        if (cardPendingSummary != null) cardPendingSummary.setVisibility(targetCard == cardPendingSummary ? View.VISIBLE : View.GONE);
+        // Exibe temporariamente o card referente à ação
+        int errStops = 0;
+        if (currentStops != null) {
+            for (RouteStop s : currentStops) if (s.deliveryStatus == 2) errStops++;
+        }
 
-        // Se o grupo está oculto, mostra com animação
+        if (cardSuccessSummary != null) cardSuccessSummary.setVisibility((targetCard == cardSuccessSummary || isExpandedPermanently) ? View.VISIBLE : View.GONE);
+        if (cardPendingSummary != null) cardPendingSummary.setVisibility((targetCard == cardSuccessSummary || targetCard == cardPendingSummary || targetCard == cardFailedSummary || isExpandedPermanently) ? View.VISIBLE : View.GONE);
+        if (cardFailedSummary != null) cardFailedSummary.setVisibility((targetCard == cardFailedSummary || (isExpandedPermanently && errStops > 0)) ? View.VISIBLE : View.GONE);
+
         if (layoutStatsGroup.getVisibility() != View.VISIBLE) {
             layoutStatsGroup.setVisibility(View.VISIBLE);
             layoutStatsGroup.setAlpha(0f);
@@ -7351,21 +11204,32 @@ public class RouteFragment extends Fragment {
         if (autoHideRunnable != null) autoHideHandler.removeCallbacks(autoHideRunnable);
         autoHideRunnable = () -> {
             if (isAdded() && layoutStatsGroup != null) {
-                layoutStatsGroup.animate()
-                        .alpha(0f)
-                        .translationY(-20f)
-                        .setDuration(250)
-                        .withEndAction(() -> {
-                            layoutStatsGroup.setVisibility(View.GONE);
-                            // Restaura visibilidade padrão para quando o usuário expandir manualmente
-                            if (cardSuccessSummary != null) cardSuccessSummary.setVisibility(View.VISIBLE);
-                            if (cardPendingSummary != null) cardPendingSummary.setVisibility(View.VISIBLE);
-                            // cardFailedSummary será resolvido pelo observer no próximo ciclo ou mantido GONE
-                            autoHideRunnable = null;
-                        })
-                        .start();
+                boolean currentExpandedSetting = sharedPreferences.getBoolean("stats_summary_expanded", true);
+                if (!currentExpandedSetting) {
+                    layoutStatsGroup.animate()
+                            .alpha(0f)
+                            .translationY(-20f)
+                            .setDuration(250)
+                            .withEndAction(() -> {
+                                layoutStatsGroup.setVisibility(View.GONE);
+                                autoHideRunnable = null;
+                            })
+                            .start();
+                } else {
+                    autoHideRunnable = null;
+                    if (cardSuccessSummary != null) cardSuccessSummary.setVisibility(View.VISIBLE);
+                    if (cardPendingSummary != null) cardPendingSummary.setVisibility(View.VISIBLE);
+                    if (cardFailedSummary != null) {
+                        int currentErrStops = 0;
+                        if (currentStops != null) {
+                            for (RouteStop s : currentStops) if (s.deliveryStatus == 2) currentErrStops++;
+                        }
+                        cardFailedSummary.setVisibility(currentErrStops > 0 ? View.VISIBLE : View.GONE);
+                    }
+                }
             }
         };
+
         autoHideHandler.postDelayed(autoHideRunnable, 3000);
     }
 
@@ -7754,6 +11618,471 @@ public class RouteFragment extends Fragment {
         }
     }
 
+    public String getFormattedSeqInfo(RouteStop s) {
+        if (s == null) return "";
+        String seqStr = (s.allSequences != null && !s.allSequences.isEmpty()) ? s.allSequences : String.valueOf(s.sequence);
+        if (s.vehicleLocation == null || s.vehicleLocation.trim().isEmpty()) {
+            return "Seq: " + seqStr;
+        }
+        
+        String loc = s.vehicleLocation.trim();
+        if (!loc.contains(":")) {
+            return "Seq: " + seqStr + " (" + loc + ")";
+        }
+        
+        Map<String, String> map = new HashMap<>();
+        String[] parts = loc.split(";");
+        for (String p : parts) {
+            String[] kv = p.split(":");
+            if (kv.length == 2) {
+                map.put(kv[0].trim(), kv[1].trim());
+            }
+        }
+        
+        String[] seqArray = seqStr.split(",\\s*");
+        Set<String> uniqueLocs = new HashSet<>(map.values());
+        
+        // Se TODAS as sequências possuem EXATAMENTE a mesma localização
+        if (map.size() == seqArray.length && uniqueLocs.size() == 1) {
+            String singleLoc = uniqueLocs.iterator().next();
+            return "Seq: " + seqStr + " (" + singleLoc + ")";
+        }
+        
+        // Mapeia a localização especificamente ao lado de cada sequência definida!
+        StringBuilder sb = new StringBuilder("Seq: ");
+        for (int i = 0; i < seqArray.length; i++) {
+            String seqNum = seqArray[i].trim();
+            sb.append(seqNum);
+            if (map.containsKey(seqNum)) {
+                sb.append(" (").append(map.get(seqNum)).append(")");
+            }
+            if (i < seqArray.length - 1) sb.append(", ");
+        }
+        return sb.toString();
+    }
+
+    public void showVehicleLocationPicker(RouteStop s, View anchorView) {
+        if (getContext() == null || s == null) return;
+
+        String seqStr = (s.allSequences != null && !s.allSequences.isEmpty()) ? s.allSequences : String.valueOf(s.sequence);
+        String[] seqArray = seqStr.split(",\\s*");
+
+        if (seqArray.length <= 1) {
+            PopupMenu popup = new PopupMenu(requireContext(), anchorView);
+            popup.getMenu().add("Frente");
+            popup.getMenu().add("Passageiro");
+            popup.getMenu().add("Porta Mala");
+            popup.getMenu().add("❌ Remover Localização");
+
+            popup.setOnMenuItemClickListener(item -> {
+                CharSequence title = item.getTitle();
+                if ("❌ Remover Localização".equals(title)) {
+                    s.vehicleLocation = null;
+                } else {
+                    s.vehicleLocation = title.toString();
+                }
+                updateStopInDb(s);
+                if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                return true;
+            });
+            popup.show();
+        } else {
+            showMultiPackageLocationDialog(s, seqArray);
+        }
+    }
+
+    private void showMultiPackageLocationDialog(RouteStop s, String[] seqArray) {
+        if (getContext() == null) return;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_multi_package_location, null);
+        builder.setView(v);
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        TextView textTitle = v.findViewById(R.id.textMultiLocTitle);
+        LinearLayout container = v.findViewById(R.id.containerPackageLocs);
+        MaterialButton btnSave = v.findViewById(R.id.btnSaveMultiLoc);
+        MaterialButton btnClear = v.findViewById(R.id.btnClearMultiLoc);
+
+        if (textTitle != null) textTitle.setText("🚗 Local dos Pacotes (#" + s.stopNumber + ")");
+
+        Map<String, String> currentMap = new HashMap<>();
+        if (s.vehicleLocation != null && !s.vehicleLocation.trim().isEmpty()) {
+            String loc = s.vehicleLocation.trim();
+            if (!loc.contains(":")) {
+                for (String seq : seqArray) currentMap.put(seq.trim(), loc);
+            } else {
+                String[] parts = loc.split(";");
+                for (String p : parts) {
+                    String[] kv = p.split(":");
+                    if (kv.length == 2) currentMap.put(kv[0].trim(), kv[1].trim());
+                }
+            }
+        }
+
+        String[] options = new String[]{"-- Selecionar --", "Frente", "Passageiro", "Porta Mala"};
+        Map<String, Spinner> spinnerMap = new HashMap<>();
+
+        if (container != null) {
+            container.removeAllViews();
+            for (String seq : seqArray) {
+                String trimmedSeq = seq.trim();
+                LinearLayout row = new LinearLayout(requireContext());
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, 12, 0, 12);
+
+                TextView label = new TextView(requireContext());
+                label.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                label.setText("📦 Seq " + trimmedSeq + ":");
+                label.setTextSize(13);
+                label.setTypeface(null, Typeface.BOLD);
+                label.setTextColor(Color.parseColor("#333333"));
+
+                Spinner spinner = new Spinner(requireContext());
+                ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_dropdown_item, options);
+                spinner.setAdapter(adapter);
+
+                String existingLoc = currentMap.get(trimmedSeq);
+                if ("Frente".equals(existingLoc)) spinner.setSelection(1);
+                else if ("Passageiro".equals(existingLoc)) spinner.setSelection(2);
+                else if ("Porta Mala".equals(existingLoc)) spinner.setSelection(3);
+                else spinner.setSelection(0);
+
+                spinnerMap.put(trimmedSeq, spinner);
+
+                row.addView(label);
+                row.addView(spinner);
+                container.addView(row);
+            }
+        }
+
+        if (btnSave != null) {
+            btnSave.setOnClickListener(vSave -> {
+                StringBuilder sb = new StringBuilder();
+                Set<String> uniqueLocs = new HashSet<>();
+                int selectedCount = 0;
+
+                for (String seq : seqArray) {
+                    String trimmedSeq = seq.trim();
+                    Spinner sp = spinnerMap.get(trimmedSeq);
+                    if (sp != null) {
+                        int pos = sp.getSelectedItemPosition();
+                        if (pos > 0 && pos < options.length) {
+                            String selectedLoc = options[pos];
+                            uniqueLocs.add(selectedLoc);
+                            selectedCount++;
+                            if (sb.length() > 0) sb.append(";");
+                            sb.append(trimmedSeq).append(":").append(selectedLoc);
+                        }
+                    }
+                }
+
+                if (selectedCount == 0) {
+                    s.vehicleLocation = null;
+                } else if (uniqueLocs.size() == 1 && selectedCount == seqArray.length) {
+                    s.vehicleLocation = uniqueLocs.iterator().next();
+                } else {
+                    s.vehicleLocation = sb.toString();
+                }
+
+                updateStopInDb(s);
+                if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                dialog.dismiss();
+                Toast.makeText(getContext(), "Localização salva!", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        if (btnClear != null) {
+            btnClear.setOnClickListener(vClear -> {
+                s.vehicleLocation = null;
+                updateStopInDb(s);
+                if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                dialog.dismiss();
+                Toast.makeText(getContext(), "Localização removida!", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        dialog.show();
+    }
+
+    private void showPackageOrganizationDialog() {
+        if (getContext() == null || currentStops == null) return;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_package_organization, null);
+        builder.setView(v);
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        TextInputEditText editFrente = v.findViewById(R.id.editOrgFrente);
+        TextInputEditText editPassageiros = v.findViewById(R.id.editOrgPassageiros);
+        TextInputEditText editPortaMalas = v.findViewById(R.id.editOrgPortaMalas);
+        MaterialButton btnSave = v.findViewById(R.id.btnSaveOrg);
+        MaterialButton btnCancel = v.findViewById(R.id.btnCancelOrg);
+
+        // Preenche os campos com as sequências ou números de parada atuais
+        Set<Integer> frenteSeqSet = new TreeSet<>();
+        Set<Integer> passageirosSeqSet = new TreeSet<>();
+        Set<Integer> portaMalasSeqSet = new TreeSet<>();
+
+        for (RouteStop s : currentStops) {
+            if (s.vehicleLocation == null || s.vehicleLocation.trim().isEmpty()) continue;
+            String loc = s.vehicleLocation.trim();
+            String seqStr = (s.allSequences != null && !s.allSequences.isEmpty()) ? s.allSequences : String.valueOf(s.sequence);
+            String[] seqArray = seqStr.split(",\\s*");
+
+            if (!loc.contains(":")) {
+                // Localização simples para a parada/pacotes
+                for (String seq : seqArray) {
+                    int num = parseSeqOrStopNum(seq, s.stopNumber);
+                    if (num > 0) {
+                        if ("Frente".equalsIgnoreCase(loc)) frenteSeqSet.add(num);
+                        else if ("Passageiro".equalsIgnoreCase(loc) || "Passageiros".equalsIgnoreCase(loc)) passageirosSeqSet.add(num);
+                        else if ("Porta Mala".equalsIgnoreCase(loc) || "Porta Malas".equalsIgnoreCase(loc)) portaMalasSeqSet.add(num);
+                    }
+                }
+            } else {
+                // Localização por sequência específica, ex: "19:Frente;20:Porta Mala" ou "-:Porta Mala"
+                String[] parts = loc.split(";");
+                for (String p : parts) {
+                    String[] kv = p.split(":");
+                    if (kv.length == 2) {
+                        String seqKey = kv[0].trim();
+                        String locVal = kv[1].trim();
+                        int num = parseSeqOrStopNum(seqKey, s.stopNumber);
+                        if (num > 0) {
+                            if ("Frente".equalsIgnoreCase(locVal)) frenteSeqSet.add(num);
+                            else if ("Passageiro".equalsIgnoreCase(locVal) || "Passageiros".equalsIgnoreCase(locVal)) passageirosSeqSet.add(num);
+                            else if ("Porta Mala".equalsIgnoreCase(locVal) || "Porta Malas".equalsIgnoreCase(locVal)) portaMalasSeqSet.add(num);
+                        }
+                    }
+                }
+            }
+        }
+
+        List<String> frenteList = new ArrayList<>();
+        for (Integer num : frenteSeqSet) frenteList.add(String.valueOf(num));
+        List<String> passageirosList = new ArrayList<>();
+        for (Integer num : passageirosSeqSet) passageirosList.add(String.valueOf(num));
+        List<String> portaMalasList = new ArrayList<>();
+        for (Integer num : portaMalasSeqSet) portaMalasList.add(String.valueOf(num));
+
+        if (editFrente != null) editFrente.setText(String.join(", ", frenteList));
+        if (editPassageiros != null) editPassageiros.setText(String.join(", ", passageirosList));
+        if (editPortaMalas != null) editPortaMalas.setText(String.join(", ", portaMalasList));
+
+        setupUnsequencedTriggerWatcher(editFrente, "Frente");
+        setupUnsequencedTriggerWatcher(editPassageiros, "Passageiros");
+        setupUnsequencedTriggerWatcher(editPortaMalas, "Porta Malas");
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v1 -> dialog.dismiss());
+
+        if (btnSave != null) {
+            btnSave.setOnClickListener(v1 -> {
+                Set<String> frenteInputSet = parseNumberSet(editFrente != null && editFrente.getText() != null ? editFrente.getText().toString() : "");
+                Set<String> passageirosInputSet = parseNumberSet(editPassageiros != null && editPassageiros.getText() != null ? editPassageiros.getText().toString() : "");
+                Set<String> portaMalasInputSet = parseNumberSet(editPortaMalas != null && editPortaMalas.getText() != null ? editPortaMalas.getText().toString() : "");
+
+                new Thread(() -> {
+                    AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                    for (RouteStop s : currentStops) {
+                        String stopNumStr = String.valueOf(s.stopNumber);
+                        String seqStr = (s.allSequences != null && !s.allSequences.isEmpty()) ? s.allSequences : String.valueOf(s.sequence);
+                        String[] seqArray = seqStr.split(",\\s*");
+
+                        StringBuilder sb = new StringBuilder();
+                        Set<String> uniqueLocs = new HashSet<>();
+                        int matchedCount = 0;
+
+                        for (String seq : seqArray) {
+                            String trimmedSeq = seq.trim();
+                            // Se a sequência for "-" ou vazia, aceita tanto o número da parada quanto a própria indicação
+                            String seqKeyToMatch = ("-".equals(trimmedSeq) || trimmedSeq.isEmpty()) ? stopNumStr : trimmedSeq;
+                            String locForSeq = null;
+
+                            if (frenteInputSet.contains(seqKeyToMatch)) {
+                                locForSeq = "Frente";
+                            } else if (passageirosInputSet.contains(seqKeyToMatch)) {
+                                locForSeq = "Passageiro";
+                            } else if (portaMalasInputSet.contains(seqKeyToMatch)) {
+                                locForSeq = "Porta Mala";
+                            }
+
+                            if (locForSeq != null) {
+                                uniqueLocs.add(locForSeq);
+                                matchedCount++;
+                                if (sb.length() > 0) sb.append(";");
+                                sb.append(trimmedSeq).append(":").append(locForSeq);
+                            }
+                        }
+
+                        if (matchedCount == 0) {
+                            s.vehicleLocation = null;
+                        } else if (uniqueLocs.size() == 1 && matchedCount == seqArray.length) {
+                            s.vehicleLocation = uniqueLocs.iterator().next();
+                        } else {
+                            s.vehicleLocation = sb.toString();
+                        }
+
+                        dao.updateRouteStop(s);
+                    }
+
+                    Activity activity = getActivity();
+                    if (activity != null) {
+                        activity.runOnUiThread(() -> {
+                            if (stopsCardAdapter != null) stopsCardAdapter.notifyDataSetChanged();
+                            if (stopsListAdapter != null) stopsListAdapter.notifyDataSetChanged();
+                            dialog.dismiss();
+                            Toast.makeText(getContext(), "Organização dos pacotes salva!", Toast.LENGTH_SHORT).show();
+                        });
+                    }
+                }).start();
+            });
+        }
+
+        dialog.show();
+    }
+
+    private Set<String> parseNumberSet(String text) {
+        Set<String> set = new HashSet<>();
+        if (text == null || text.trim().isEmpty()) return set;
+        String[] parts = text.split("[,;\\s]+");
+        for (String p : parts) {
+            String trimmed = p.trim().replaceAll("^[#pP]+", "");
+            if (!trimmed.isEmpty()) {
+                set.add(trimmed);
+            }
+        }
+        return set;
+    }
+
+    private int parseSeqOrStopNum(String seqKey, int defaultStopNum) {
+        if (seqKey == null || seqKey.trim().isEmpty() || "-".equals(seqKey.trim())) {
+            return defaultStopNum;
+        }
+        try {
+            return Integer.parseInt(seqKey.trim());
+        } catch (NumberFormatException e) {
+            return defaultStopNum;
+        }
+    }
+
+    private void setupUnsequencedTriggerWatcher(TextInputEditText editText, String positionName) {
+        if (editText == null) return;
+        editText.addTextChangedListener(new TextWatcher() {
+            private boolean isInternalChange = false;
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (isInternalChange) return;
+                if (count == 1 && s != null && start < s.length() && s.charAt(start) == '-') {
+                    isInternalChange = true;
+                    showUnsequencedPackagesSelectorDialog(editText, positionName);
+                    isInternalChange = false;
+                }
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
+    }
+
+    private void showUnsequencedPackagesSelectorDialog(TextInputEditText targetEdit, String positionName) {
+        if (getContext() == null || currentStops == null) return;
+
+        List<RouteStop> unsequencedStops = new ArrayList<>();
+        for (RouteStop s : currentStops) {
+            String seqStr = (s.allSequences != null && !s.allSequences.isEmpty()) ? s.allSequences : String.valueOf(s.sequence);
+            if (seqStr.contains("-") || s.sequence == 0) {
+                unsequencedStops.add(s);
+            }
+        }
+
+        if (unsequencedStops.isEmpty()) {
+            Toast.makeText(getContext(), "Nenhum pacote sem sequência (-) encontrado na rota.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_select_unsequenced_package, null);
+        builder.setView(v);
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        TextView title = v.findViewById(R.id.textSelectUnseqTitle);
+        RecyclerView recycler = v.findViewById(R.id.recyclerUnsequencedStops);
+        MaterialButton btnClose = v.findViewById(R.id.btnCloseUnseqDialog);
+
+        if (title != null) title.setText("📦 Pacotes Sem Sequência (-) em " + positionName);
+
+        if (recycler != null) {
+            recycler.setLayoutManager(new LinearLayoutManager(requireContext()));
+            recycler.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+                @NonNull @Override
+                public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+                    View itemView = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_dialog_stop_info, parent, false);
+                    return new RecyclerView.ViewHolder(itemView) {};
+                }
+
+                @Override
+                public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+                    RouteStop s = unsequencedStops.get(position);
+                    TextView tNum = holder.itemView.findViewById(R.id.textDialogStopNumber);
+                    TextView tAddr = holder.itemView.findViewById(R.id.textDialogStopAddress);
+                    TextView tSeq = holder.itemView.findViewById(R.id.textDialogStopSeq);
+                    TextView btnLoc = holder.itemView.findViewById(R.id.btnDialogVehicleLocation);
+
+                    if (tNum != null) tNum.setText(String.valueOf(s.stopNumber));
+                    if (tAddr != null) tAddr.setText(s.address);
+                    if (tSeq != null) {
+                        String neighborhood = (s.neighborhood != null && !s.neighborhood.isEmpty()) ? " - " + s.neighborhood : "";
+                        tSeq.setText("Endereço: " + s.address + neighborhood);
+                    }
+
+                    if (btnLoc != null) {
+                        btnLoc.setText("Selecionar ➕");
+                    }
+
+                    holder.itemView.setOnClickListener(vClick -> {
+                        if (targetEdit != null) {
+                            String currentText = targetEdit.getText() != null ? targetEdit.getText().toString().trim() : "";
+                            if (currentText.endsWith("-")) {
+                                currentText = currentText.substring(0, currentText.length() - 1).trim();
+                            }
+                            if (currentText.endsWith(",")) {
+                                currentText = currentText.substring(0, currentText.length() - 1).trim();
+                            }
+
+                            String stopNumStr = String.valueOf(s.stopNumber);
+                            Set<String> parsedSet = parseNumberSet(currentText);
+                            if (!parsedSet.contains(stopNumStr)) {
+                                if (!currentText.isEmpty()) {
+                                    currentText += ", " + stopNumStr;
+                                } else {
+                                    currentText = stopNumStr;
+                                }
+                                targetEdit.setText(currentText);
+                                targetEdit.setSelection(targetEdit.getText().length());
+                            }
+                        }
+                        dialog.dismiss();
+                        Toast.makeText(getContext(), "Parada #" + s.stopNumber + " selecionada!", Toast.LENGTH_SHORT).show();
+                    });
+                }
+
+                @Override
+                public int getItemCount() {
+                    return unsequencedStops.size();
+                }
+            });
+        }
+
+        if (btnClose != null) btnClose.setOnClickListener(vClose -> dialog.dismiss());
+        dialog.show();
+    }
+
     private static class HourlyWeatherAdapter extends RecyclerView.Adapter<HourlyWeatherAdapter.ViewHolder> {
         private final List<HourlyWeather> list;
         HourlyWeatherAdapter(List<HourlyWeather> l) { this.list = new ArrayList<>(l); }
@@ -7809,24 +12138,50 @@ public class RouteFragment extends Fragment {
         }
 
         private void updateTimer(ViewHolder h) {
-            if (routeHeader != null && routeHeader.startTime > 0) {
-                long elapsed;
-                if (routeHeader.endTime > 0) {
-                    elapsed = routeHeader.endTime - routeHeader.startTime;
-                } else {
-                    elapsed = System.currentTimeMillis() - routeHeader.startTime;
-                }
-                
+            if (routeHeader != null && routeHeader.startTime > 0 && fragment != null) {
+                long now = System.currentTimeMillis();
+                long currentPausedMs = routeHeader.totalPausedMs +
+                    (routeHeader.lastPauseStartTime > 0 ? (now - routeHeader.lastPauseStartTime) : 0);
+                long elapsed = (routeHeader.endTime > 0 ? routeHeader.endTime : now) - routeHeader.startTime - currentPausedMs;
+                if (elapsed < 0) elapsed = 0;
+
                 long s = elapsed / 1000;
                 long m = s / 60;
                 long h_val = m / 60;
                 String time = String.format(Locale.getDefault(), "%02d:%02d:%02d", h_val, m % 60, s % 60);
-                h.textStopTimer.setText(time);
-                
+                if (routeHeader.lastPauseStartTime > 0 && routeHeader.endTime == 0) {
+                    time += " ⏸️";
+                }
+
+                if (h.textRouteTotalTime != null) {
+                    h.textRouteTotalTime.setText(time);
+                }
+
                 boolean timerOnCardsOnly = fragment.sharedPreferences.getBoolean("timer_on_cards_only", false);
-                h.textStopTimer.setVisibility(timerOnCardsOnly ? View.VISIBLE : View.GONE);
+                boolean showCard = !timerOnCardsOnly || routeHeader.endTime > 0;
+
+                if (h.cardRouteTotalTime != null) {
+                    h.cardRouteTotalTime.setVisibility(showCard ? View.VISIBLE : View.GONE);
+                }
+
+                if (h.imageHomeWarning != null) {
+                    boolean homeDefined = fragment.sharedPreferences != null && fragment.sharedPreferences.getFloat("home_lat", 0) != 0;
+                    h.imageHomeWarning.setVisibility(homeDefined ? View.GONE : View.VISIBLE);
+                }
+            } else if (routeHeader != null && fragment != null) {
+                // Rota ainda não iniciada (startTime == 0)
+                boolean timerOnCardsOnly = fragment.sharedPreferences.getBoolean("timer_on_cards_only", false);
+                boolean isOptPending = fragment.sharedPreferences.getBoolean("route_optimization_pending_" + routeHeader.id, false);
+
+                if (!timerOnCardsOnly && !isOptPending) {
+                    if (h.textRouteTotalTime != null) h.textRouteTotalTime.setText("Iniciar Rota");
+                    if (h.imageHomeWarning != null) h.imageHomeWarning.setVisibility(View.GONE);
+                    if (h.cardRouteTotalTime != null) h.cardRouteTotalTime.setVisibility(View.VISIBLE);
+                } else {
+                    if (h.cardRouteTotalTime != null) h.cardRouteTotalTime.setVisibility(View.GONE);
+                }
             } else {
-                h.textStopTimer.setVisibility(View.GONE);
+                if (h.cardRouteTotalTime != null) h.cardRouteTotalTime.setVisibility(View.GONE);
             }
         }
 
@@ -7864,11 +12219,15 @@ public class RouteFragment extends Fragment {
             h.textPackageCount.setText(s.packageCount > 1 ? s.packageCount + " Pacotes" : "1 Pacote");
 
             // --- Novas Métricas: Compradores e Sequências ---
-            String seqInfo = (s.allSequences != null && !s.allSequences.isEmpty()) ? "Seq: " + s.allSequences : "Seq: " + s.sequence;
+            String seqInfo = fragment.getFormattedSeqInfo(s);
             h.textDownloadedStatus.setVisibility(View.VISIBLE); // Reutilizando campo ou garantindo visibilidade
             
             // Note: I will use a dedicated TextView if available, otherwise appending to secondary info
             h.textPackageCount.setText(h.textPackageCount.getText() + " | " + s.buyerCount + " Comp. | " + seqInfo);
+
+            if (h.btnCarLocation != null) {
+                h.btnCarLocation.setOnClickListener(v -> fragment.showVehicleLocationPicker(s, v));
+            }
 
             // --- Verificação de Correção Local e Global ---
             new Thread(() -> {
@@ -7897,22 +12256,27 @@ public class RouteFragment extends Fragment {
                 // Feedback Global da Comunidade (Sempre busca se houver algo na nuvem)
                 FirebaseHelper.searchGlobal(s.address, new FirebaseHelper.GlobalCorrectionCallback() {
                     @Override
-                    public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date) {
+                    public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date, boolean hasCoordinateFix) {
                         if (h.getBindingAdapterPosition() == pos) {
                             Activity activity = fragment.getActivity();
                             if (activity != null) activity.runOnUiThread(() -> {
-                                h.layoutGlobalFeedback.setVisibility(View.VISIBLE);
-                                h.textGlobalStats.setText(likes + " 👍 | " + dislikes + " 👎");
+                                boolean hasVotesOrNotes = (likes > 0 || dislikes > 0 || (note != null && !note.isEmpty()));
+                                if (hasVotesOrNotes) {
+                                    h.layoutGlobalFeedback.setVisibility(View.VISIBLE);
+                                    h.textGlobalStats.setText(likes + " 👍 | " + dislikes + " 👎");
 
-                                if (note != null && !note.isEmpty()) {
-                                    h.textGlobalNote.setVisibility(View.VISIBLE);
-                                    h.textGlobalNote.setText("Obs: " + note);
+                                    if (note != null && !note.isEmpty()) {
+                                        h.textGlobalNote.setVisibility(View.VISIBLE);
+                                        h.textGlobalNote.setText("Obs: " + note);
+                                    } else {
+                                        h.textGlobalNote.setVisibility(View.GONE);
+                                    }
                                 } else {
-                                    h.textGlobalNote.setVisibility(View.GONE);
+                                    h.layoutGlobalFeedback.setVisibility(View.GONE);
                                 }
                                 
-                                // Se não tem correção local, mostra que há uma disponível para baixar
-                                if (localFix == null) {
+                                // Se não tem correção local e EXISTE CORREÇÃO DE COORDENADA VÁLIDA, mostra disponível
+                                if (localFix == null && hasCoordinateFix && lat != 0.0 && lon != 0.0 && Math.abs(lat) > 0.001) {
                                     h.textDownloadedStatus.setVisibility(View.VISIBLE);
                                     h.textDownloadedStatus.setText("Correção disponível");
                                     h.textDownloadedStatus.setTextColor(Color.parseColor("#F44336")); // Vermelho
@@ -7952,6 +12316,9 @@ public class RouteFragment extends Fragment {
 
             h.layoutAddress.setOnClickListener(v -> listener.onAction(s, 7)); 
             h.layoutGlobalFeedback.setOnClickListener(v -> listener.onAction(s, 8)); 
+            if (h.cardRouteTotalTime != null) {
+                h.cardRouteTotalTime.setOnClickListener(v -> fragment.showRouteTimerOptionsPopup(v));
+            } 
 
             h.itemView.setOnLongClickListener(v -> {
                 listener.onAction(s, 4); // 4 é o código para excluir
@@ -7959,9 +12326,10 @@ public class RouteFragment extends Fragment {
             });
         }
         @Override public int getItemCount() { return list.size(); }
-        static class ViewHolder extends RecyclerView.ViewHolder { TextView textNumber, textStopTimer, textAddress, textRawAddress, textNeighborhood, textStatus, textPackageCount, textGlobalStats, textGlobalNote, textDownloadedStatus; View btnSuccess, btnFailed, btnNavigate, btnFixLocation, btnReset, layoutAddress, layoutGlobalFeedback; MaterialCardView card; ViewHolder(View v) { super(v); card = v.findViewById(R.id.cardStop); textNumber = v.findViewById(R.id.textStopNumber); textStopTimer = v.findViewById(R.id.textStopTimer); textAddress = v.findViewById(R.id.textStopAddress); textRawAddress = v.findViewById(R.id.textRawAddress); textNeighborhood = v.findViewById(R.id.textStopNeighborhood); textStatus = v.findViewById(R.id.textStopStatus); textPackageCount = v.findViewById(R.id.textPackageCount); textGlobalStats = v.findViewById(R.id.textGlobalStats); textGlobalNote = v.findViewById(R.id.textGlobalNote); textDownloadedStatus = v.findViewById(R.id.textDownloadedStatus); btnSuccess = v.findViewById(R.id.btnSuccess); btnFailed = v.findViewById(R.id.btnFailed); btnNavigate = v.findViewById(R.id.btnNavigate); btnFixLocation = v.findViewById(R.id.btnFixLocation); btnReset = v.findViewById(R.id.btnReset); layoutAddress = v.findViewById(R.id.layoutStopText); layoutGlobalFeedback = v.findViewById(R.id.layoutGlobalFeedback); } }
+        static class ViewHolder extends RecyclerView.ViewHolder { TextView textNumber, textStopTimer, textAddress, textRawAddress, textNeighborhood, textStatus, textPackageCount, textGlobalStats, textGlobalNote, textDownloadedStatus, textRouteTotalTime; View btnSuccess, btnFailed, btnNavigate, btnFixLocation, btnReset, btnCarLocation, layoutAddress, layoutGlobalFeedback, imageHomeWarning; MaterialCardView card, cardRouteTotalTime; ViewHolder(View v) { super(v); card = v.findViewById(R.id.cardStop); cardRouteTotalTime = v.findViewById(R.id.cardRouteTotalTime); textRouteTotalTime = v.findViewById(R.id.textRouteTotalTime); imageHomeWarning = v.findViewById(R.id.imageHomeWarning); textNumber = v.findViewById(R.id.textStopNumber); textStopTimer = v.findViewById(R.id.textStopTimer); textAddress = v.findViewById(R.id.textStopAddress); textRawAddress = v.findViewById(R.id.textRawAddress); textNeighborhood = v.findViewById(R.id.textStopNeighborhood); textStatus = v.findViewById(R.id.textStopStatus); textPackageCount = v.findViewById(R.id.textPackageCount); btnCarLocation = v.findViewById(R.id.btnCarLocation); textGlobalStats = v.findViewById(R.id.textGlobalStats); textGlobalNote = v.findViewById(R.id.textGlobalNote); textDownloadedStatus = v.findViewById(R.id.textDownloadedStatus); btnSuccess = v.findViewById(R.id.btnSuccess); btnFailed = v.findViewById(R.id.btnFailed); btnNavigate = v.findViewById(R.id.btnNavigate); btnFixLocation = v.findViewById(R.id.btnFixLocation); btnReset = v.findViewById(R.id.btnReset); layoutAddress = v.findViewById(R.id.layoutStopText); layoutGlobalFeedback = v.findViewById(R.id.layoutGlobalFeedback); } }
     }
     private static class StopsListAdapter extends RecyclerView.Adapter<StopsListAdapter.ViewHolder> {
+        private final RouteFragment fragment;
         private List<RouteStop> fullList = new ArrayList<>();
         private List<RouteStop> filteredList = new ArrayList<>();
         private final OnItemClickListener click; 
@@ -7973,7 +12341,8 @@ public class RouteFragment extends Fragment {
         interface OnItemClickListener { void onItemClick(RouteStop s); } 
         interface OnItemLongClickListener { void onItemLongClick(RouteStop s); }
         
-        StopsListAdapter(List<RouteStop> l, OnItemClickListener c, OnItemLongClickListener lc) { 
+        StopsListAdapter(RouteFragment fragment, List<RouteStop> l, OnItemClickListener c, OnItemLongClickListener lc) { 
+            this.fragment = fragment;
             this.fullList = l; 
             this.filteredList = new ArrayList<>(l);
             this.click = c; 
@@ -8031,6 +12400,30 @@ public class RouteFragment extends Fragment {
             h.textNumber.setText(String.valueOf(s.stopNumber));
             h.textAddress.setText(s.address); 
 
+            // --- Status Colorido na Lista ---
+            String statusStr = "Pendente";
+            int statusColor = Color.parseColor("#FF9800"); // Laranja
+            int iconRes = android.R.drawable.ic_menu_agenda;
+
+            if (s.deliveryStatus == 1) { // Entregue
+                statusStr = "Entregue";
+                statusColor = Color.parseColor("#388E3C"); // Verde
+                iconRes = android.R.drawable.checkbox_on_background;
+            } else if (s.deliveryStatus == 2) { // Falha
+                statusStr = "Falha";
+                statusColor = Color.parseColor("#D32F2F"); // Vermelho
+                iconRes = android.R.drawable.ic_delete;
+            }
+
+            if (h.textStatus != null) {
+                h.textStatus.setText(statusStr);
+                h.textStatus.setTextColor(statusColor);
+            }
+            if (h.imageStatus != null) {
+                h.imageStatus.setImageResource(iconRes);
+                h.imageStatus.setColorFilter(statusColor);
+            } 
+
             if (s.buyerCount == 1 && s.allAddresses != null && !s.allAddresses.isEmpty()) {
                 // Pega apenas a primeira linha do endereço original para não repetir se houver + de 1 pacote
                 String firstAddr = s.allAddresses.split("\n")[0];
@@ -8072,17 +12465,22 @@ public class RouteFragment extends Fragment {
 
                     // Verifica global SEMPRE para mostrar os likes/deslikes se existirem
                     FirebaseHelper.searchGlobal(boundAddress, new FirebaseHelper.GlobalCorrectionCallback() {
-                        @Override public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date) {
+                        @Override public void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String note, int comments, String creatorName, long date, boolean hasCoordinateFix) {
                             h.itemView.post(() -> {
                                 if (boundAddress.equals(h.textDownloadedStatus.getTag())) {
-                                    if (localFix == null) {
+                                    if (localFix == null && hasCoordinateFix && lat != 0.0 && lon != 0.0 && Math.abs(lat) > 0.001) {
                                         h.textDownloadedStatus.setVisibility(View.VISIBLE);
                                         h.textDownloadedStatus.setText("Correção disponível");
                                         h.textDownloadedStatus.setTextColor(Color.parseColor("#F44336")); // Vermelho
                                     }
                                     
-                                    h.layoutGlobalFeedback.setVisibility(View.VISIBLE);
-                                    h.textGlobalStats.setText(likes + " 👍 | " + dislikes + " 👎");
+                                    boolean hasVotes = (likes > 0 || dislikes > 0);
+                                    if (hasVotes) {
+                                        h.layoutGlobalFeedback.setVisibility(View.VISIBLE);
+                                        h.textGlobalStats.setText(likes + " 👍 | " + dislikes + " 👎");
+                                    } else {
+                                        h.layoutGlobalFeedback.setVisibility(View.GONE);
+                                    }
                                 }
                             });
                         }
@@ -8113,6 +12511,17 @@ public class RouteFragment extends Fragment {
                 h.card.setStrokeWidth(0);
             }
 
+            if (h.btnListVehicleLocation != null) {
+                if (s.vehicleLocation != null && !s.vehicleLocation.trim().isEmpty()) {
+                    h.btnListVehicleLocation.setText("📍 " + s.vehicleLocation + " ▾");
+                } else {
+                    h.btnListVehicleLocation.setText("📍 Local ▾");
+                }
+                h.btnListVehicleLocation.setOnClickListener(v -> {
+                    if (fragment != null) fragment.showVehicleLocationPicker(s, v);
+                });
+            }
+
             h.itemView.setOnClickListener(v -> {
                 if (isUnifyMode) {
                     if (selectedStops.contains(s)) selectedStops.remove(s);
@@ -8127,7 +12536,7 @@ public class RouteFragment extends Fragment {
         }
         @Override public int getItemCount() { return filteredList.size(); }
         static class ViewHolder extends RecyclerView.ViewHolder { 
-            TextView textNumber, textAddress, textRawAddress, textNeighborhood, textStatus, textDownloadedStatus, textGlobalStats; 
+            TextView textNumber, textAddress, textRawAddress, textNeighborhood, textStatus, textDownloadedStatus, textGlobalStats, btnListVehicleLocation; 
             ImageView imageStatus; 
             CheckBox checkBox;
             MaterialCardView card; 
@@ -8142,6 +12551,7 @@ public class RouteFragment extends Fragment {
                 textNeighborhood = v.findViewById(R.id.textListNeighborhood); 
                 textStatus = v.findViewById(R.id.textListStatus); 
                 imageStatus = v.findViewById(R.id.imageListStatus); 
+                btnListVehicleLocation = v.findViewById(R.id.btnListVehicleLocation);
                 textDownloadedStatus = v.findViewById(R.id.textListDownloadedStatus); 
                 checkBox = v.findViewById(R.id.checkListUnify);
                 layoutGlobalFeedback = v.findViewById(R.id.layoutListGlobalFeedback);
@@ -8326,7 +12736,7 @@ public class RouteFragment extends Fragment {
         if (layoutSearchContainer != null) layoutSearchContainer.setVisibility(View.VISIBLE);
         if (layoutSummary != null) layoutSummary.setVisibility(View.VISIBLE);
         if (layoutLeftSummary != null) layoutLeftSummary.setVisibility(View.VISIBLE);
-        if (layoutSwitchContainer != null) layoutSwitchContainer.setVisibility(View.VISIBLE);
+        updateNavigationButtonStyle();
         if (cardToggleSystemUI != null && sharedPreferences.getInt("app_mode", 0) != 1) {
             cardToggleSystemUI.setVisibility(View.VISIBLE);
         }

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 public class FirebaseHelper {
 
@@ -82,7 +83,7 @@ public class FirebaseHelper {
     }
 
     public interface GlobalCorrectionCallback {
-        void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String publicNote, int commentCount, String creatorName, long updateDate);
+        void onResult(double lat, double lon, int likes, int dislikes, String creatorId, String publicNote, int commentCount, String creatorName, long updateDate, boolean hasCoordinateFix);
         void onError(String msg);
     }
 
@@ -101,6 +102,7 @@ public class FirebaseHelper {
         data.put("address", addr.address);
         data.put("latitude", addr.latitude);
         data.put("longitude", addr.longitude);
+        data.put("isCoordinateFix", true);
         data.put("neighborhood", addr.neighborhood);
         data.put("city", addr.city != null ? addr.city : "Cidade não informada");
         data.put("lastUpdate", FieldValue.serverTimestamp());
@@ -116,14 +118,34 @@ public class FirebaseHelper {
             data.put("publicNoteDate", FieldValue.delete());
         }
 
-        // Inicializa contadores apenas se o documento for novo
         db.collection(COLLECTION_GLOBAL_FIX).document(docId).get()
                 .addOnSuccessListener(doc -> {
-                    if (!doc.exists()) {
+                    if (doc.exists()) {
+                        String existingCreatorId = doc.getString("creatorId");
+                        String existingCreatorName = doc.getString("creatorName");
+                        Double exLat = doc.getDouble("latitude");
+                        Double exLon = doc.getDouble("longitude");
+                        Boolean isCoordinateFix = doc.getBoolean("isCoordinateFix");
+
+                        boolean hasValidCoords = (exLat != null && exLon != null && Math.abs(exLat) > 0.001 && Math.abs(exLon) > 0.001);
+                        boolean isCorrectedByOther = (existingCreatorId != null 
+                                && !existingCreatorId.trim().isEmpty() 
+                                && !existingCreatorId.equalsIgnoreCase(userId) 
+                                && (Boolean.TRUE.equals(isCoordinateFix) || hasValidCoords));
+
+                        if (isCorrectedByOther) {
+                            String nameToReport = (existingCreatorName != null && !existingCreatorName.trim().isEmpty()) ? existingCreatorName : "outro entregador";
+                            if (callback != null) {
+                                callback.onFailure("ALREADY_CORRECTED_BY_OTHER:" + nameToReport + ":" + existingCreatorId);
+                            }
+                            return;
+                        }
+                    } else {
                         data.put("likes", 0);
                         data.put("dislikes", 0);
                         data.put("commentCount", 0);
                     }
+
                     db.collection(COLLECTION_GLOBAL_FIX).document(docId)
                             .set(data, SetOptions.merge())
                             .addOnSuccessListener(aVoid -> {
@@ -134,6 +156,9 @@ public class FirebaseHelper {
                                 Log.e("FirebaseHelper", "Erro no envio: " + e.getMessage());
                                 if (callback != null) callback.onFailure(e.getMessage());
                             });
+                })
+                .addOnFailureListener(e -> {
+                    if (callback != null) callback.onFailure(e.getMessage());
                 });
     }
 
@@ -155,30 +180,43 @@ public class FirebaseHelper {
                         Timestamp ts = doc.getTimestamp("publicNoteDate");
                         if (ts == null) ts = doc.getTimestamp("lastUpdate");
                         long updateDate = ts != null ? ts.toDate().getTime() : 0;
+                        Boolean isCoordinateFix = doc.getBoolean("isCoordinateFix");
 
-                        if (lat != null && lon != null) {
-                            callback.onResult(lat, lon, 
-                                (likes != null ? likes.intValue() : 0), 
-                                (dislikes != null ? dislikes.intValue() : 0),
-                                creatorId, publicNote,
-                                (commentCount != null ? commentCount.intValue() : 0),
-                                (creatorName != null ? creatorName : "Entregador"),
-                                updateDate);
-                        } else {
-                            callback.onError("Dados incompletos");
-                        }
+                        boolean hasValidCoords = (lat != null && lon != null && Math.abs(lat) > 0.001 && Math.abs(lon) > 0.001);
+                        boolean hasCoordinateFix = (isCoordinateFix != null ? isCoordinateFix : (creatorId != null && hasValidCoords)) && hasValidCoords;
+
+                        callback.onResult(
+                            (hasValidCoords ? lat : 0.0), 
+                            (hasValidCoords ? lon : 0.0), 
+                            (likes != null ? likes.intValue() : 0), 
+                            (dislikes != null ? dislikes.intValue() : 0),
+                            creatorId, publicNote,
+                            (commentCount != null ? commentCount.intValue() : 0),
+                            (creatorName != null ? creatorName : "Entregador"),
+                            updateDate,
+                            hasCoordinateFix);
                     } else {
-                        callback.onError("Não encontrado");
+                        // Se não existe documento no Firestore, retorna 0 likes/dislikes e hasCoordinateFix = false!
+                        callback.onResult(0.0, 0.0, 0, 0, null, null, 0, null, 0, false);
                     }
                 })
                 .addOnFailureListener(e -> callback.onError(e.getMessage()));
     }
 
     public static void addFeedback(String address, Boolean isLike, String comment, String userName, String userId) {
+        addFeedback(address, isLike, comment, userName, userId, null);
+    }
+
+    public static void addFeedback(String address, Boolean isLike, String comment, String userName, String userId, Runnable onSuccess) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         String docId = sanitizeAddressId(address);
         DocumentReference docRef = db.collection(COLLECTION_GLOBAL_FIX).document(docId);
-        DocumentReference userVoteRef = docRef.collection("user_votes").document(userId);
+        
+        String safeUserId = (userId != null && !userId.trim().isEmpty() && !"anon".equalsIgnoreCase(userId)) 
+                ? userId 
+                : "user_" + UUID.randomUUID().toString().substring(0, 8);
+                
+        DocumentReference userVoteRef = docRef.collection("user_votes").document(safeUserId);
 
         if (isLike != null) {
             db.runTransaction(transaction -> {
@@ -238,6 +276,8 @@ public class FirebaseHelper {
                 
                 transaction.set(docRef, addrData, SetOptions.merge());
                 return null;
+            }).addOnSuccessListener(aVoid -> {
+                if (onSuccess != null) onSuccess.run();
             }).addOnFailureListener(e -> Log.e("FirebaseHelper", "Voto falhou: " + e.getMessage()));
         }
 
@@ -248,7 +288,10 @@ public class FirebaseHelper {
             commentData.put("userId", userId);
             commentData.put("date", FieldValue.serverTimestamp());
             docRef.collection("comments").add(commentData)
-                .addOnSuccessListener(ref -> docRef.update("commentCount", FieldValue.increment(1)));
+                .addOnSuccessListener(ref -> {
+                    docRef.update("commentCount", FieldValue.increment(1));
+                    if (onSuccess != null) onSuccess.run();
+                });
         }
     }
 
@@ -401,6 +444,36 @@ public class FirebaseHelper {
                 });
     }
 
+    public static void requestAddressSubstitution(CorrectedAddress newAddr, String userId, String userName, String reason, GlobalUploadCallback callback) {
+        if (newAddr == null || newAddr.address == null) return;
+
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String docId = sanitizeAddressId(newAddr.address);
+
+        Map<String, Object> requestData = new HashMap<>();
+        requestData.put("type", "SUBSTITUTION");
+        requestData.put("address", newAddr.address);
+        requestData.put("neighborhood", newAddr.neighborhood != null ? newAddr.neighborhood : "");
+        requestData.put("city", newAddr.city != null ? newAddr.city : "");
+        requestData.put("newLatitude", newAddr.latitude);
+        requestData.put("newLongitude", newAddr.longitude);
+        requestData.put("requesterId", userId != null ? userId : "anon");
+        requestData.put("requesterName", userName != null ? userName : "Entregador");
+        requestData.put("reason", reason != null && !reason.trim().isEmpty() ? reason : "Solicitação de substituição de endereço por divergência");
+        requestData.put("requestDate", FieldValue.serverTimestamp());
+        requestData.put("originalDocId", docId);
+
+        db.collection(COLLECTION_DELETION_REQUESTS).add(requestData)
+                .addOnSuccessListener(ref -> {
+                    Log.d("FirebaseHelper", "Solicitação de substituição enviada com sucesso: " + ref.getId());
+                    if (callback != null) callback.onSuccess();
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("FirebaseHelper", "Erro ao enviar solicitação de substituição: " + e.getMessage());
+                    if (callback != null) callback.onFailure(e.getMessage());
+                });
+    }
+
     public static void requestAddressDeletion(CorrectedAddress addr, String userId, String reason, GlobalUploadCallback callback) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         String docId = sanitizeAddressId(addr.address);
@@ -444,6 +517,32 @@ public class FirebaseHelper {
                 })
                 .addOnFailureListener(e -> {
                     if (callback != null) callback.onFailure(e.getMessage());
+                });
+    }
+
+    public interface PixKeyCallback {
+        void onResult(String pixKey);
+    }
+
+    public static void updateDevPixKey(String pixKey) {
+        if (pixKey == null || pixKey.trim().isEmpty()) return;
+        Map<String, Object> data = new HashMap<>();
+        data.put("pix_key", pixKey.trim());
+        data.put("updatedAt", System.currentTimeMillis());
+
+        FirebaseFirestore.getInstance().collection("admin_config").document("donation_config")
+                .set(data, SetOptions.merge());
+    }
+
+    public static void listenDevPixKey(PixKeyCallback callback) {
+        FirebaseFirestore.getInstance().collection("admin_config").document("donation_config")
+                .addSnapshotListener((snapshot, error) -> {
+                    if (snapshot != null && snapshot.exists()) {
+                        String key = snapshot.getString("pix_key");
+                        if (key != null && !key.trim().isEmpty() && callback != null) {
+                            callback.onResult(key.trim());
+                        }
+                    }
                 });
     }
 
@@ -1689,6 +1788,30 @@ public class FirebaseHelper {
 
     public interface UserVoteCallback {
         void onVote(Boolean isLike);
+    }
+
+    public static void getUserAddressVote(String address, String userId, UserVoteCallback callback) {
+        if (address == null || userId == null || userId.isEmpty()) {
+            if (callback != null) callback.onVote(null);
+            return;
+        }
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        String docId = sanitizeAddressId(address);
+
+        db.collection(COLLECTION_GLOBAL_FIX).document(docId)
+                .collection("user_votes").document(userId)
+                .get()
+                .addOnSuccessListener(doc -> {
+                    if (doc.exists()) {
+                        Boolean isLike = doc.getBoolean("isLike");
+                        if (callback != null) callback.onVote(isLike);
+                    } else {
+                        if (callback != null) callback.onVote(null);
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    if (callback != null) callback.onVote(null);
+                });
     }
 
     public static void getUserQuadraVote(String name, String neighborhood, String userId, UserVoteCallback callback) {

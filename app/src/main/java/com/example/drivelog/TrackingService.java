@@ -9,12 +9,15 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.location.Location;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
@@ -36,6 +39,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import android.os.PowerManager;
+import android.util.Log;
 
 public class TrackingService extends Service {
 
@@ -80,53 +84,37 @@ public class TrackingService extends Service {
     private static final int AUTO_PAUSE_RADIUS = 40;
 
     // --- Lógica de Geração de CPF por Intervalo ---
-    private long lastCpfGenerationTime = 0;
     private final android.os.Handler cpfHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable cpfRunnable = new Runnable() {
         @Override
         public void run() {
-            android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
+            SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
             boolean enabled = prefs.getBoolean("cpf_interval_enabled", false);
             
             if (enabled) {
                 long now = System.currentTimeMillis();
-                long lastInteraction = prefs.getLong("last_drivelog_interaction", 0);
-                int inactivityMinutes = prefs.getInt("cpf_inactivity_minutes", 5);
-                long inactivityMs = inactivityMinutes * 60000L;
-                
-                // Se passou o tempo configurado sem entrar no app, para de gerar
-                if (now - lastInteraction > inactivityMs) {
-                    if (lastCpfGenerationTime != 0) {
-                        android.util.Log.d("TrackingService", "CPF Timer suspenso: " + inactivityMinutes + " min de inatividade no DriveLog.");
-                        lastCpfGenerationTime = 0; 
-                    }
-                    cpfHandler.postDelayed(this, 10000);
-                    return;
-                }
-
                 int minutes = prefs.getInt("cpf_interval_minutes", 2);
+                if (minutes <= 0) minutes = 2;
                 long intervalMs = minutes * 60000L;
 
-                // Se for a primeira execução do ciclo, marca o tempo atual
-                if (lastCpfGenerationTime == 0) {
-                    lastCpfGenerationTime = now;
-                    android.util.Log.d("TrackingService", "CPF Timer iniciado: Próxima geração em " + minutes + " min.");
+                long lastGenTime = prefs.getLong("last_cpf_gen_time", 0);
+
+                if (lastGenTime == 0) {
+                    lastGenTime = now;
+                    prefs.edit().putLong("last_cpf_gen_time", now).apply();
+                    Log.d("TrackingService", "CPF Timer iniciado: Próxima geração em " + minutes + " min.");
                 }
 
-                if (now - lastCpfGenerationTime >= intervalMs) {
-                    lastCpfGenerationTime = now;
-                    android.util.Log.d("TrackingService", "⏲️ Gerando CPF por tempo...");
-                    // 🔥 Garante que a UI (Toast) rode na Main Thread
-                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> 
+                if (now - lastGenTime >= intervalMs) {
+                    prefs.edit().putLong("last_cpf_gen_time", now).apply();
+                    Log.d("TrackingService", "⏲️ Gerando CPF por tempo...");
+                    new Handler(Looper.getMainLooper()).post(() ->
                         CpfHelper.generateAndCopyCpf(TrackingService.this)
                     );
                 }
-            } else {
-                lastCpfGenerationTime = 0; // Reseta se for desativado
             }
-            
-            // Verifica com mais frequência para não perder o "timing"
-            cpfHandler.postDelayed(this, 5000); 
+
+            cpfHandler.postDelayed(this, 3000); 
         }
     };
 
@@ -191,11 +179,12 @@ public class TrackingService extends Service {
                 acquireWakeLock();
                 updateNotification("Gerador de CPF Ativo", "Automação por tempo em execução.");
             } else if ("RESET_CPF_TIMER".equals(action)) {
-                lastCpfGenerationTime = System.currentTimeMillis();
-                android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
-                prefs.edit().putLong("last_drivelog_interaction", lastCpfGenerationTime).apply();
+                long now = System.currentTimeMillis();
+                SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
+                prefs.edit().putLong("last_drivelog_interaction", now)
+                        .putLong("last_cpf_gen_time", now).apply();
                 
-                android.util.Log.d("TrackingService", "⏲️ Timer de CPF reiniciado pelo clique no atalho.");
+                Log.d("TrackingService", "⏲️ Timer de CPF reiniciado pelo clique no atalho.");
                 if (wakeLock == null) acquireWakeLock();
                 updateNotification("Gerador de CPF Ativo", "Ciclo reiniciado pelo último acesso.");
             }
@@ -828,7 +817,6 @@ public class TrackingService extends Service {
         isTrackingActive = false;
         isTracking.postValue(false);
         isPaused.postValue(false);
-        lastCpfGenerationTime = 0;
         hasLeftHome = false;
 
         if (locationCallback != null) {

@@ -50,12 +50,12 @@
         android:layout_height="wrap_content"
         android:text="Fica logo após a feira coberta, bloco B."
         android:textSize="12sp"
-        android:textColor="#333333"
+        android:textColor="?android:attr/textColorPrimary"
         android:layout_marginTop="2dp"/>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#F0F0F0"
+        android:background="?attr/colorSurfaceVariant"
         android:layout_marginTop="6dp"/>
 </LinearLayout>

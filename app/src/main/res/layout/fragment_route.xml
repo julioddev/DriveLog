@@ -59,6 +59,216 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Balão Temporário de Desfazer Correção (Aparece por 5 segundos) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardUndoCorrection"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="64dp"
+            android:visibility="gone"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="12dp"
+            app:cardBackgroundColor="#323232"
+            app:strokeWidth="0dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/textUndoCorrectionMessage"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📍 Localização corrigida!"
+                    android:textSize="13sp"
+                    android:textColor="#FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnUndoCorrectionAction"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="↩️ DESFAZER"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFB74D"
+                    android:paddingHorizontal="8dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Balão de Otimização Pendente (Parte Inferior da Tela) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardPendingOptimization"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="20dp"
+            android:visibility="gone"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="12dp"
+            app:cardBackgroundColor="#FFF3E0"
+            app:strokeColor="#FF9800"
+            app:strokeWidth="1.5dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@android:drawable/ic_dialog_alert"
+                        app:tint="#E65100"
+                        android:layout_marginEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="⚡ Otimização Pendente"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="#E65100" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Esta rota ainda não foi otimizada. Clique para otimizar e exibir as paradas no mapa."
+                    android:textSize="12sp"
+                    android:textColor="#5D4037"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="10dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnFinishOptimizationNow"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="⚡ OTIMIZAR AGORA"
+                    app:backgroundTint="#FF9800"
+                    android:textColor="#FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCancelAndDeleteOptimizationRoute"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="4dp"
+                    android:text="Cancelar e excluir rota"
+                    android:textSize="11sp"
+                    android:textColor="#F44336" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Balão de Lista em Edição (Parte Inferior da Tela) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardPendingManualList"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginBottom="20dp"
+            android:visibility="gone"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="12dp"
+            app:cardBackgroundColor="#E3F2FD"
+            app:strokeColor="#2196F3"
+            app:strokeWidth="1.5dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@android:drawable/ic_menu_edit"
+                        app:tint="#1565C0"
+                        android:layout_marginEnd="8dp" />
+
+                    <TextView
+                        android:id="@+id/textPendingManualListTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📝 Lista em Edição"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="#1565C0" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/textPendingManualListSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Você possui uma lista de paradas em edição. Clique abaixo para continuar cadastrando pacotes."
+                    android:textSize="12sp"
+                    android:textColor="#1A237E"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="10dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnContinueManualListEditing"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📝 CONTINUAR EDIÇÃO"
+                    app:backgroundTint="#1976D2"
+                    android:textColor="#FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCancelAndDeleteManualRoute"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="4dp"
+                    android:text="Cancelar e excluir rota"
+                    android:textSize="11sp"
+                    android:textColor="#F44336" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Barra de Busca e Menu (Modo Mapa) -->
         <RelativeLayout
             android:id="@+id/layoutSearchContainer"
@@ -84,7 +294,7 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:background="@drawable/bg_circle_dark"
-                    android:src="@drawable/ic_menu_white"
+                    android:src="@drawable/ic_menu_animated"
                     android:padding="12dp"
                     android:scaleType="centerInside"
                     android:elevation="8dp"
@@ -92,33 +302,10 @@
             </FrameLayout>
 
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/btnToggleStatsSummary"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_alignParentEnd="true"
-                android:layout_alignParentTop="true"
-                android:layout_marginTop="8dp"
-                android:layout_marginStart="8dp"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="8dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground">
-                <ImageView
-                    android:id="@+id/imageToggleStatsSummary"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/ic_arrow_up"
-                    android:padding="8dp"
-                    app:tint="?attr/colorPrimary"
-                    android:contentDescription="Ocultar Estatísticas" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardSearch"
                 android:layout_width="wrap_content"
                 android:layout_height="48dp"
-                android:layout_toStartOf="@id/btnToggleStatsSummary"
+                android:layout_alignParentEnd="true"
                 android:layout_marginStart="8dp"
                 android:layout_alignParentTop="true"
                 app:cardCornerRadius="24dp"
@@ -166,18 +353,6 @@
                             android:contentDescription="Mostrar Busca" />
 
                         <ImageButton
-                            android:id="@+id/btnSearchAddress"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:src="@android:drawable/ic_menu_search"
-                            android:padding="12dp"
-                            android:scaleType="centerInside"
-                            app:tint="?attr/colorPrimary"
-                            android:contentDescription="Pesquisar"
-                            android:visibility="gone" />
-
-                        <ImageButton
                             android:id="@+id/btnAddStopManual"
                             android:layout_width="48dp"
                             android:layout_height="48dp"
@@ -189,6 +364,17 @@
                             android:contentDescription="Adicionar Parada Manual" />
 
                         <ImageButton
+                            android:id="@+id/btnPackageOrganization"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_package"
+                            android:padding="13.5dp"
+                            android:scaleType="centerInside"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Organização dos Pacotes" />
+
+                        <ImageButton
                             android:id="@+id/btnRouteMenu"
                             android:layout_width="48dp"
                             android:layout_height="48dp"
@@ -198,6 +384,65 @@
                             android:scaleType="centerInside"
                             app:tint="?attr/colorPrimary"
                             android:contentDescription="Menu da Rota" />
+
+                        <!-- Botão de Navegação (Estilo Ícone no Balão) -->
+                        <FrameLayout
+                            android:id="@+id/layoutNavMapIconContainer"
+                            android:layout_width="46dp"
+                            android:layout_height="48dp"
+                            android:visibility="gone">
+
+                            <ImageButton
+                                android:id="@+id/btnNavMapIcon"
+                                android:layout_width="46dp"
+                                android:layout_height="48dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_map"
+                                android:padding="12.5dp"
+                                android:scaleType="centerInside"
+                                app:tint="?attr/colorPrimary"
+                                android:contentDescription="Ativar Navegação" />
+                        </FrameLayout>
+
+                        <!-- Notificações da Comunidade -->
+                        <FrameLayout
+                            android:id="@+id/layoutNotificationsContainer"
+                            android:layout_width="46dp"
+                            android:layout_height="48dp">
+
+                            <ImageButton
+                                android:id="@+id/btnNotifications"
+                                android:layout_width="46dp"
+                                android:layout_height="48dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_notifications"
+                                android:padding="12.5dp"
+                                android:scaleType="centerInside"
+                                app:tint="?attr/colorPrimary"
+                                android:contentDescription="Notificações da Comunidade" />
+
+                            <View
+                                android:id="@+id/badgeNotificationDot"
+                                android:layout_width="9dp"
+                                android:layout_height="9dp"
+                                android:layout_gravity="top|end"
+                                android:layout_marginTop="8.5dp"
+                                android:layout_marginEnd="7dp"
+                                android:background="@drawable/bg_circle_red"
+                                android:visibility="gone" />
+                        </FrameLayout>
+
+                        <ImageButton
+                            android:id="@+id/btnSearchAddress"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@android:drawable/ic_menu_search"
+                            android:padding="12dp"
+                            android:scaleType="centerInside"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Pesquisar"
+                            android:visibility="gone" />
                     </LinearLayout>
 
                     <androidx.recyclerview.widget.RecyclerView
@@ -208,6 +453,35 @@
                         android:visibility="gone"
                         android:padding="8dp"/>
                 </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Balão Azul de Distância (Estilo Ícone no Balão) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardSearchNavDistance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignTop="@id/cardSearch"
+                android:layout_alignEnd="@id/cardSearch"
+                android:layout_marginTop="38dp"
+                android:layout_marginEnd="50dp"
+                android:visibility="gone"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="#0077CC"
+                app:strokeWidth="0dp">
+
+                <TextView
+                    android:id="@+id/textSearchNavDistance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="5dp"
+                    android:text="0m"
+                    android:textColor="@android:color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
             </com.google.android.material.card.MaterialCardView>
         </RelativeLayout>
 
@@ -231,6 +505,7 @@
             android:paddingVertical="8dp"
             android:gravity="center_vertical">
             <TextView
+                android:id="@+id/textFixTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Toque no mapa para corrigir"
@@ -528,10 +803,15 @@
                 android:id="@+id/cardNavigationMode"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:maxWidth="210dp"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="6dp"
+                app:cardElevation="0dp"
+                android:outlineProvider="none"
+                app:strokeWidth="0dp"
+                app:strokeColor="@android:color/transparent"
                 app:cardBackgroundColor="@android:color/white"
                 android:visibility="gone">
+
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -539,6 +819,7 @@
                     android:paddingHorizontal="12dp"
                     android:paddingVertical="8dp"
                     android:gravity="center_vertical">
+
                     <ImageView
                         android:id="@+id/imageNavManeuver"
                         android:layout_width="24dp"
@@ -546,15 +827,18 @@
                         android:src="@android:drawable/ic_menu_directions"
                         app:tint="?attr/colorPrimary"
                         android:layout_marginEnd="8dp" />
+
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:orientation="vertical">
+
                         <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal"
                             android:gravity="center_vertical">
+
                             <TextView
                                 android:id="@+id/textNavDistance"
                                 android:layout_width="wrap_content"
@@ -563,6 +847,7 @@
                                 android:textSize="14sp"
                                 android:textStyle="bold"
                                 android:textColor="?attr/colorPrimary" />
+
                             <TextView
                                 android:id="@+id/textNavTotalTime"
                                 android:layout_width="wrap_content"
@@ -574,15 +859,32 @@
                                 android:layout_marginStart="4dp"
                                 android:visibility="gone"/>
                         </LinearLayout>
+
                         <TextView
                             android:id="@+id/textNavInstruction"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:maxWidth="145dp"
                             android:text="Dobre à esquerda"
                             android:textSize="11sp"
                             android:textColor="#666666" />
+
                     </LinearLayout>
+
+                    <ImageButton
+                        android:id="@+id/btnMuteVoiceNav"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginStart="4dp"
+                        android:padding="0dp"
+                        android:scaleType="fitCenter"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@android:drawable/ic_lock_silent_mode_off"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Mutar / Ativar Voz" />
+
                 </LinearLayout>
+
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
 
@@ -621,7 +923,8 @@
                 android:layout_width="38dp"
                 android:layout_height="38dp"
                 android:background="@drawable/custom_switch_thumb"
-                android:elevation="10dp"
+                android:elevation="0dp"
+                android:outlineProvider="none"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent">
@@ -640,7 +943,8 @@
                 android:layout_width="38dp"
                 android:layout_height="38dp"
                 android:alpha="0"
-                android:elevation="12dp"
+                android:elevation="0dp"
+                android:outlineProvider="none"
                 android:checked="true"
                 app:layout_constraintTop_toTopOf="@id/layoutFakeThumb"
                 app:layout_constraintBottom_toBottomOf="@id/layoutFakeThumb"
@@ -648,48 +952,9 @@
                 app:layout_constraintEnd_toEndOf="@id/layoutFakeThumb" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardRouteTotalTime"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginEnd="12dp"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="@android:color/white"
-            android:visibility="gone"
-            app:layout_constraintTop_toBottomOf="@id/layoutSwitchContainer"
-            app:layout_constraintEnd_toEndOf="parent">
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="8dp"
-                android:gravity="center_vertical">
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:src="@android:drawable/ic_menu_recent_history"
-                    app:tint="?attr/colorPrimary"
-                    android:layout_marginEnd="4dp" />
-                <TextView
-                    android:id="@+id/textRouteTotalTime"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="00:00:00"
-                    android:textStyle="bold"
-                    android:textColor="#333333"
-                    android:textSize="12sp" />
-                <ImageView
-                    android:id="@+id/imageHomeWarning"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:src="@android:drawable/stat_sys_warning"
-                    app:tint="#F44336"
-                    android:layout_marginStart="4dp"
-                    android:visibility="gone" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+
+
+
 
         <!-- Balão de Correções de Endereço Disponíveis da Rota -->
         <com.google.android.material.card.MaterialCardView
@@ -706,7 +971,7 @@
             android:focusable="true"
             android:foreground="?attr/selectableItemBackground"
             app:layout_goneMarginTop="8dp"
-            app:layout_constraintTop_toBottomOf="@id/cardRouteTotalTime"
+            app:layout_constraintTop_toBottomOf="@id/layoutSwitchContainer"
             app:layout_constraintEnd_toEndOf="parent">
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -749,7 +1014,10 @@
                 android:layout_height="48dp"
                 android:layout_marginBottom="8dp"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp"
+                app:cardElevation="0dp"
+                android:outlineProvider="none"
+                app:strokeWidth="1dp"
+                app:strokeColor="#E0E0E0"
                 app:cardBackgroundColor="@android:color/white"
                 android:clickable="true"
                 android:focusable="true">
@@ -768,8 +1036,10 @@
                 android:layout_marginBottom="8dp"
                 android:src="@drawable/ic_map"
                 app:backgroundTint="@android:color/white"
-                app:elevation="4dp"
+                app:elevation="0dp"
+                app:pressedTranslationZ="0dp"
                 app:borderWidth="0dp"
+                android:outlineProvider="none"
                 app:fabCustomSize="48dp"
                 app:maxImageSize="30dp"
                 app:tint="@null"
@@ -783,6 +1053,10 @@
                 android:layout_marginBottom="8dp"
                 android:src="@drawable/ic_route_history"
                 app:backgroundTint="@android:color/white"
+                app:elevation="0dp"
+                app:pressedTranslationZ="0dp"
+                app:borderWidth="0dp"
+                android:outlineProvider="none"
                 app:fabCustomSize="48dp"
                 app:maxImageSize="30dp"
                 app:tint="?attr/colorPrimary"
@@ -795,6 +1069,10 @@
                 android:layout_marginBottom="8dp"
                 android:src="@android:drawable/ic_dialog_alert"
                 app:backgroundTint="@android:color/white"
+                app:elevation="0dp"
+                app:pressedTranslationZ="0dp"
+                app:borderWidth="0dp"
+                android:outlineProvider="none"
                 app:fabCustomSize="48dp"
                 app:maxImageSize="30dp"
                 app:tint="@android:color/holo_orange_dark"
@@ -807,6 +1085,10 @@
                 android:layout_marginBottom="8dp"
                 android:src="@drawable/ic_my_location"
                 app:backgroundTint="@android:color/white"
+                app:elevation="0dp"
+                app:pressedTranslationZ="0dp"
+                app:borderWidth="0dp"
+                android:outlineProvider="none"
                 app:fabCustomSize="48dp"
                 app:maxImageSize="30dp"
                 app:tint="?attr/colorPrimary"
@@ -819,6 +1101,10 @@
                 android:layout_marginBottom="8dp"
                 android:src="@android:drawable/ic_menu_compass"
                 app:backgroundTint="@android:color/white"
+                app:elevation="0dp"
+                app:pressedTranslationZ="0dp"
+                app:borderWidth="0dp"
+                android:outlineProvider="none"
                 app:fabCustomSize="48dp"
                 app:maxImageSize="30dp"
                 app:tint="?attr/colorPrimary"
@@ -831,6 +1117,10 @@
                 android:layout_marginBottom="8dp"
                 android:src="@android:drawable/ic_input_add"
                 app:backgroundTint="?attr/colorPrimary"
+                app:elevation="0dp"
+                app:pressedTranslationZ="0dp"
+                app:borderWidth="0dp"
+                android:outlineProvider="none"
                 app:fabCustomSize="48dp"
                 app:maxImageSize="30dp"
                 app:tint="@android:color/white"
@@ -842,6 +1132,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:src="@android:drawable/ic_menu_add"
+                app:elevation="0dp"
+                app:pressedTranslationZ="0dp"
+                app:borderWidth="0dp"
+                android:outlineProvider="none"
                 app:fabCustomSize="48dp"
                 app:maxImageSize="30dp"
                 app:backgroundTint="@android:color/holo_green_dark"
@@ -1006,24 +1300,18 @@
         android:layout_height="match_parent"
         android:background="@android:color/transparent"
         android:orientation="vertical"
+        android:layout_marginBottom="16dp"
         app:behavior_hideable="false"
-        app:behavior_peekHeight="110dp"
+        app:behavior_peekHeight="136dp"
         app:paddingBottomSystemWindowInsets="false"
         app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
 
-        <!-- Handle -->
-        <View
-            android:layout_width="60dp"
-            android:layout_height="6dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="0dp"
-            android:background="@drawable/bg_handle" />
+        <!-- Handle agora foi movido para o item_route_stop_card -->
 
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginTop="4dp">
+            android:layout_marginTop="0dp">
 
             <!-- ViewPager (Visible when collapsed) -->
             <androidx.viewpager2.widget.ViewPager2

@@ -1,0 +1,12 @@
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_menu_split">
+    <target
+        android:name="top_line"
+        android:animation="@animator/menu_line_fade_1" />
+    <target
+        android:name="mid_line"
+        android:animation="@animator/menu_line_fade_2" />
+    <target
+        android:name="bot_line"
+        android:animation="@animator/menu_line_fade_3" />
+</animated-vector>

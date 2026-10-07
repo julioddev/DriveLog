@@ -133,10 +133,6 @@
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:background="@android:color/white"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="16dp"
-        android:paddingTop="0dp"
         android:clickable="true"
         android:focusable="true">
 
@@ -146,7 +142,6 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:paddingBottom="16dp"
             android:clipToPadding="false">
 
             <!-- Espaçador para desviar da barra de notificações -->
@@ -238,33 +233,6 @@
                         android:background="?attr/selectableItemBackground"
                         app:tint="?attr/colorPrimary"
                         android:contentDescription="Relatórios"/>
-
-                    <!-- Notificações da Comunidade -->
-                    <FrameLayout
-                        android:id="@+id/layoutLeftNotificationsContainer"
-                        android:layout_width="0dp"
-                        android:layout_height="48dp"
-                        android:layout_weight="1">
-
-                        <ImageButton
-                            android:id="@+id/btnLeftNotifications"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:src="@drawable/ic_notifications"
-                            android:background="?attr/selectableItemBackground"
-                            app:tint="?attr/colorPrimary"
-                            android:contentDescription="Notificações da Comunidade"/>
-
-                        <View
-                            android:id="@+id/badgeDrawerNotificationDot"
-                            android:layout_width="10dp"
-                            android:layout_height="10dp"
-                            android:layout_gravity="top|end"
-                            android:layout_marginTop="6dp"
-                            android:layout_marginEnd="6dp"
-                            android:background="@drawable/bg_circle_red"
-                            android:visibility="gone" />
-                    </FrameLayout>
                 </LinearLayout>
 
                 <View
@@ -272,7 +240,119 @@
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
                     android:background="#EEEEEE"
-                    android:layout_marginBottom="16dp"/>
+                    android:layout_marginBottom="12dp"/>
+            </LinearLayout>
+
+            <!-- Seção de Rota Ativa -->
+            <LinearLayout
+                android:id="@+id/layoutDrawerActiveRoute"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:id="@+id/textDrawerActiveRouteTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Rota Ativa"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary"
+                    android:layout_marginBottom="8dp"/>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardDrawerActiveRoute"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardCornerRadius="14dp"
+                    app:cardElevation="2dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="#2196F3"
+                    app:cardBackgroundColor="#E3F2FD">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:id="@+id/textDrawerActiveRouteName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Nenhuma Rota Ativa"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:textColor="#0D47A1"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:id="@+id/textDrawerActiveRouteStops"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="📦 0 paradas"
+                                android:textSize="12sp"
+                                android:textColor="#1565C0" />
+
+                            <TextView
+                                android:id="@+id/textDrawerActiveRoutePackages"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="✉️ 0 pacotes"
+                                android:textSize="12sp"
+                                android:textColor="#1565C0" />
+
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp">
+
+                            <TextView
+                                android:id="@+id/textDrawerActiveRouteKm"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="📍 Distância: -- km"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:textColor="#1E88E5" />
+
+                            <TextView
+                                android:id="@+id/textDrawerActiveRouteTime"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="⏱️ Tempo: -- min"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:textColor="#1E88E5" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+                <View
+                    android:id="@+id/dividerDrawerActiveRoute"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#EEEEEE"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp"/>
             </LinearLayout>
 
             <TextView
@@ -349,16 +429,42 @@
                 app:icon="@android:drawable/ic_menu_add"
                 android:layout_marginTop="8dp"/>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnDrawerSettings"
-                style="@style/Widget.Material3.Button.TextButton"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Ajustes"
-                android:gravity="start|center_vertical"
-                app:icon="@drawable/ic_settings"
-                android:layout_marginTop="16dp"
-                android:visibility="gone"/>
+                android:orientation="horizontal"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="24dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDrawerSettings"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:text="Ajustes"
+                    app:icon="@drawable/ic_settings" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDrawerDonate"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:text="Apoiar"
+                    app:icon="@android:drawable/ic_menu_send"
+                    app:backgroundTint="#2E7D32"
+                    android:textColor="#FFFFFF" />
+
+            </LinearLayout>
+
+            <!-- Espaçador Extra para garantir área livre acima da navegação do sistema -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="80dp" />
+
         </LinearLayout>
 
         <!-- Layout de Todas as Rotas (Novo) -->

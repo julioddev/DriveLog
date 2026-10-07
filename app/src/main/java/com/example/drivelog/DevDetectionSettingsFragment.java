@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -11,12 +12,17 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.textfield.TextInputEditText;
+
 import java.util.List;
 import java.util.Map;
 
@@ -30,10 +36,10 @@ public class DevDetectionSettingsFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_dev_detection_settings, container, false);
         sharedPreferences = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
 
-        com.google.android.material.checkbox.MaterialCheckBox cbLocalOffer = view.findViewById(R.id.cbLocalOffer);
-        com.google.android.material.checkbox.MaterialCheckBox cbGlobalOffer = view.findViewById(R.id.cbGlobalOffer);
-        com.google.android.material.checkbox.MaterialCheckBox cbLocalNoOffer = view.findViewById(R.id.cbLocalNoOffer);
-        com.google.android.material.checkbox.MaterialCheckBox cbGlobalNoOffer = view.findViewById(R.id.cbGlobalNoOffer);
+        MaterialCheckBox cbLocalOffer = view.findViewById(R.id.cbLocalOffer);
+        MaterialCheckBox cbGlobalOffer = view.findViewById(R.id.cbGlobalOffer);
+        MaterialCheckBox cbLocalNoOffer = view.findViewById(R.id.cbLocalNoOffer);
+        MaterialCheckBox cbGlobalNoOffer = view.findViewById(R.id.cbGlobalNoOffer);
 
         RadioGroup rgFilterMode = view.findViewById(R.id.rgScannerFilterMode);
         RadioButton rbNone = view.findViewById(R.id.rbFilterNone);
@@ -52,10 +58,10 @@ public class DevDetectionSettingsFragment extends Fragment {
             checkBatteryOptimization(textBatteryWarning);
             textBatteryWarning.setOnClickListener(v -> {
                 try {
-                    android.content.Intent intent = new android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                    Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
                     startActivity(intent);
                 } catch (Exception e) {
-                    android.content.Intent intent = new android.content.Intent(android.provider.Settings.ACTION_SETTINGS);
+                    Intent intent = new Intent(Settings.ACTION_SETTINGS);
                     startActivity(intent);
                 }
             });
@@ -183,6 +189,26 @@ public class DevDetectionSettingsFragment extends Fragment {
         }
 
         setupDevList(view);
+
+        TextInputEditText editDevPixKey = view.findViewById(R.id.editDevPixKey);
+        View btnSavePixKey = view.findViewById(R.id.btnSaveDevPixKey);
+
+        if (editDevPixKey != null) {
+            String currentPixKey = sharedPreferences.getString("dev_pix_key", "pix@drivelog.app");
+            editDevPixKey.setText(currentPixKey);
+        }
+
+        if (btnSavePixKey != null && editDevPixKey != null) {
+            btnSavePixKey.setOnClickListener(v -> {
+                String newKey = editDevPixKey.getText().toString().trim();
+                if (newKey.isEmpty()) {
+                    newKey = "pix@drivelog.app";
+                }
+                sharedPreferences.edit().putString("dev_pix_key", newKey).apply();
+                FirebaseHelper.updateDevPixKey(newKey);
+                Toast.makeText(getContext(), "Chave Pix salva com sucesso!", Toast.LENGTH_SHORT).show();
+            });
+        }
 
         return view;
     }

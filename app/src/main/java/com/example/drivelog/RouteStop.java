@@ -2,8 +2,11 @@ package com.example.drivelog;
 
 import androidx.room.Entity;
 import androidx.room.ForeignKey;
+import androidx.room.Ignore;
 import androidx.room.Index;
 import androidx.room.PrimaryKey;
+
+import java.util.Objects;
 
 @Entity(tableName = "route_stops",
         foreignKeys = @ForeignKey(entity = RouteHeader.class,
@@ -39,18 +42,42 @@ public class RouteStop {
     
     public int sortOrder = 0;
     public Integer groupId = null;
+    public String vehicleLocation; // Localização do pacote no veículo (ex: "Frente", "Porta Malas")
     
     public long createdAt;
     public long deliveryTimestamp = 0; // Novo: Horário da entrega
 
     public RouteStop() {}
 
-    @androidx.room.Ignore
+    @Ignore
     public RouteStop(String address, double latitude, double longitude) {
         this.address = address;
         this.latitude = latitude;
         this.longitude = longitude;
         this.createdAt = System.currentTimeMillis();
         this.packageCount = 1;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        RouteStop routeStop = (RouteStop) o;
+        if (id > 0 && routeStop.id > 0) {
+            return id == routeStop.id;
+        }
+        return stopNumber == routeStop.stopNumber &&
+               routeId == routeStop.routeId &&
+               Double.compare(routeStop.latitude, latitude) == 0 &&
+               Double.compare(routeStop.longitude, longitude) == 0 &&
+               Objects.equals(address, routeStop.address);
+    }
+
+    @Override
+    public int hashCode() {
+        if (id > 0) {
+            return Objects.hash(id);
+        }
+        return Objects.hash(stopNumber, routeId, address, latitude, longitude);
     }
 }

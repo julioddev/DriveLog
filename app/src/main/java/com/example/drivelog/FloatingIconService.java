@@ -1,18 +1,25 @@
 package com.example.drivelog;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -20,6 +27,9 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.Toast;
+import com.google.android.material.progressindicator.CircularProgressIndicator;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.view.ContextThemeWrapper;
@@ -32,6 +42,62 @@ public class FloatingIconService extends Service {
     private View dismissView;
     private View btnPausePlay;
     private ImageView imgPausePlay;
+    private CircularProgressIndicator progressCpfTimer;
+    private final Handler cpfProgressHandler = new Handler(Looper.getMainLooper());
+
+    private final Runnable cpfProgressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
+                boolean enabled = prefs.getBoolean("cpf_interval_enabled", false);
+
+                if (enabled && progressCpfTimer != null) {
+                    long now = System.currentTimeMillis();
+                    int minutes = prefs.getInt("cpf_interval_minutes", 2);
+                    if (minutes <= 0) minutes = 2;
+                    long intervalMs = minutes * 60000L;
+
+                    long lastGenTime = prefs.getLong("last_cpf_gen_time", 0);
+
+                    if (lastGenTime == 0) {
+                        lastGenTime = now;
+                        prefs.edit().putLong("last_cpf_gen_time", now).apply();
+                    }
+
+                    long elapsed = now - lastGenTime;
+                    if (elapsed < 0) {
+                        elapsed = 0;
+                        lastGenTime = now;
+                        prefs.edit().putLong("last_cpf_gen_time", now).apply();
+                    }
+
+                    if (elapsed >= intervalMs) {
+                        lastGenTime = now;
+                        prefs.edit().putLong("last_cpf_gen_time", now).apply();
+                        elapsed = 0;
+
+                        CpfHelper.generateAndCopyCpf(FloatingIconService.this);
+                        performHapticAndVisualEffect();
+                    }
+
+                    int percent = (int) Math.min(100, Math.max(0, (elapsed * 100L) / intervalMs));
+
+                    progressCpfTimer.setVisibility(View.VISIBLE);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        progressCpfTimer.setProgress(percent, true);
+                    } else {
+                        progressCpfTimer.setProgress(percent);
+                    }
+                } else if (progressCpfTimer != null) {
+                    progressCpfTimer.setVisibility(View.GONE);
+                }
+            } catch (Exception ignored) {}
+
+            cpfProgressHandler.postDelayed(this, 300);
+        }
+    };
+
     private WindowManager.LayoutParams params;
     private WindowManager.LayoutParams dismissParams;
     private PowerManager.WakeLock wakeLock;
@@ -79,7 +145,7 @@ public class FloatingIconService extends Service {
             params.gravity = Gravity.TOP | Gravity.START;
             
             // 🔥 Carrega a última posição salva
-            android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
+            SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
             params.x = prefs.getInt("floating_icon_x", 100);
             params.y = prefs.getInt("floating_icon_y", 200);
 
@@ -88,6 +154,10 @@ public class FloatingIconService extends Service {
 
             btnPausePlay = floatingView.findViewById(R.id.btn_pause_play);
             imgPausePlay = floatingView.findViewById(R.id.img_pause_play);
+            progressCpfTimer = floatingView.findViewById(R.id.progressCpfTimer);
+            if (cpfProgressHandler != null) {
+                cpfProgressHandler.post(cpfProgressRunnable);
+            }
             
             checkDeveloperStatus();
             setupPausePlayLogic();
@@ -138,7 +208,7 @@ public class FloatingIconService extends Service {
     }
 
     private void checkDeveloperStatus() {
-        com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user != null && user.getEmail() != null) {
             FirebaseHelper.checkDeveloperAccess(user.getEmail(), isDev -> {
                 this.isDeveloper = isDev;
@@ -224,7 +294,7 @@ public class FloatingIconService extends Service {
             private float initialTouchY;
             private long touchStartTime;
             private boolean isLongPressTriggered = false;
-            private final android.os.Handler handler = new android.os.Handler();
+            private final Handler handler = new Handler();
             private final Runnable longPressRunnable = new Runnable() {
                 @Override
                 public void run() {
@@ -317,7 +387,7 @@ public class FloatingIconService extends Service {
     private void snapToEdge() {
         if (floatingView == null || windowManager == null) return;
         
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+        DisplayMetrics metrics = new DisplayMetrics();
         windowManager.getDefaultDisplay().getMetrics(metrics);
         int screenWidth = metrics.widthPixels;
         int viewWidth = floatingView.getWidth();
@@ -330,7 +400,7 @@ public class FloatingIconService extends Service {
         }
         
         // Animação suave de "deslize" para a borda
-        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofInt(params.x, finalX);
+        ValueAnimator animator = ValueAnimator.ofInt(params.x, finalX);
         animator.setDuration(250);
         animator.addUpdateListener(animation -> {
             params.x = (int) animation.getAnimatedValue();
@@ -338,9 +408,9 @@ public class FloatingIconService extends Service {
                 windowManager.updateViewLayout(floatingView, params);
             }
         });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+        animator.addListener(new AnimatorListenerAdapter() {
             @Override
-            public void onAnimationEnd(android.animation.Animator animation) {
+            public void onAnimationEnd(Animator animation) {
                 getSharedPreferences("AppConfig", MODE_PRIVATE).edit()
                         .putInt("floating_icon_x", params.x)
                         .putInt("floating_icon_y", params.y)
@@ -386,7 +456,7 @@ public class FloatingIconService extends Service {
     }
 
     private void acquireWakeLock() {
-        android.content.SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
+        SharedPreferences prefs = getSharedPreferences("AppConfig", MODE_PRIVATE);
         boolean wakeLockEnabled = prefs.getBoolean("scanner_wakelock_enabled", true);
 
         if (wakeLockEnabled) {
@@ -411,6 +481,9 @@ public class FloatingIconService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        if (cpfProgressHandler != null) {
+            cpfProgressHandler.removeCallbacks(cpfProgressRunnable);
+        }
         releaseWakeLock();
         if (floatingView != null && windowManager != null) windowManager.removeView(floatingView);
         if (dismissView != null && windowManager != null) windowManager.removeView(dismissView);

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginVertical="4dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="?attr/colorSurfaceVariant"
+    app:cardBackgroundColor="?attr/colorSurface">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:gravity="center_vertical">
+
+        <!-- Checkbox para Unificação -->
+        <CheckBox
+            android:id="@+id/chkPreviewSelect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp" />
+
+        <!-- Informações da Parada -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/textPreviewStopTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Parada #1"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorPrimary" />
+
+            <TextView
+                android:id="@+id/textPreviewAddress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Endereço, 123"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary" />
+
+            <TextView
+                android:id="@+id/textPreviewNeighborhood"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Bairro - Cidade"
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary" />
+
+            <TextView
+                android:id="@+id/textPreviewPackagesSeq"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📦 1 pacote | Seq: 10"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorSecondary"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+
+        <!-- Ações do Lado Direito: Arrastar e Excluir -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Ícone Indicador de Arraste (Pressione e Arraste) -->
+            <ImageView
+                android:id="@+id/imgPreviewDragHandle"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:padding="4dp"
+                android:src="@drawable/ic_drag_handle"
+                app:tint="?attr/colorPrimary"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Arrastar para reordenar"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Botão Excluir -->
+            <ImageButton
+                android:id="@+id/btnPreviewDelete"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_delete"
+                app:tint="#F44336"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Excluir Parada" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

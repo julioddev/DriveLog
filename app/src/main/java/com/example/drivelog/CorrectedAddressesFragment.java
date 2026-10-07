@@ -1,9 +1,16 @@
 package com.example.drivelog;
 
+import android.content.Context;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,27 +26,44 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.button.MaterialButton;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 public class CorrectedAddressesFragment extends Fragment {
 
     private RecyclerView recyclerView;
     private CorrectedAdapter adapter;
     private TextView textEmpty;
-    private android.widget.EditText editSearch;
+    private EditText editSearch;
     private List<CorrectedAddress> fullList = new ArrayList<>();
     private String currentUserId;
+    private boolean isDev = false;
+
+    private void checkDevAccess() {
+        FirebaseUser fUser = FirebaseAuth.getInstance().getCurrentUser();
+        String myEmail = fUser != null ? fUser.getEmail() : "";
+        FirebaseHelper.checkDeveloperAccess(myEmail, result -> {
+            if (isAdded() && getActivity() != null) {
+                getActivity().runOnUiThread(() -> this.isDev = result);
+            }
+        });
+    }
 
     private final ActivityResultLauncher<Intent> importLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
@@ -60,19 +84,20 @@ public class CorrectedAddressesFragment extends Fragment {
         textEmpty = view.findViewById(R.id.textEmpty);
         editSearch = view.findViewById(R.id.editSearchCorrected);
         
-        currentUserId = requireContext().getSharedPreferences("AppConfig", android.content.Context.MODE_PRIVATE).getString("current_user_id", "anon");
+        currentUserId = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE).getString("current_user_id", "anon");
         
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new CorrectedAdapter(new ArrayList<>(), currentUserId, this::onDeleteClicked);
         recyclerView.setAdapter(adapter);
         
         loadCorrected();
+        checkDevAccess();
 
         if (editSearch != null) {
-            editSearch.addTextChangedListener(new android.text.TextWatcher() {
+            editSearch.addTextChangedListener(new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) { filter(s.toString()); }
-                @Override public void afterTextChanged(android.text.Editable s) {}
+                @Override public void afterTextChanged(Editable s) {}
             });
         }
 
@@ -83,8 +108,55 @@ public class CorrectedAddressesFragment extends Fragment {
             intent.setType("*/*");
             importLauncher.launch(intent);
         });
+
+        View btnDeleteDownloaded = view.findViewById(R.id.btnDeleteDownloaded);
+        if (btnDeleteDownloaded != null) {
+            btnDeleteDownloaded.setOnClickListener(v -> confirmDeleteAllDownloaded());
+        }
         
         return view;
+    }
+
+    private void confirmDeleteAllDownloaded() {
+        if (fullList == null || fullList.isEmpty()) {
+            Toast.makeText(getContext(), "Nenhum endereço para excluir.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        List<CorrectedAddress> downloadedList = new ArrayList<>();
+        for (CorrectedAddress addr : fullList) {
+            if (addr.creatorId != null && !addr.creatorId.equals(currentUserId)) {
+                downloadedList.add(addr);
+            }
+        }
+
+        if (downloadedList.isEmpty()) {
+            Toast.makeText(getContext(), "Nenhum endereço baixado da comunidade para excluir.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        int count = downloadedList.size();
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Excluir Correções Baixadas")
+                .setMessage("Deseja excluir todas as " + count + " correções baixadas da comunidade?\n\nSuas correções locais e enviadas serão preservadas, e as paradas das rotas voltarão para a posição original da planilha.")
+                .setPositiveButton("Excluir " + count + " Correção(ões)", (dialog, which) -> {
+                    new Thread(() -> {
+                        AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                        for (CorrectedAddress addr : downloadedList) {
+                            dao.deleteCorrectedAddress(addr);
+                            restoreStopsForDeletedAddress(dao, addr.address);
+                        }
+                        Activity activity = getActivity();
+                        if (activity != null) {
+                            activity.runOnUiThread(() -> {
+                                Toast.makeText(getContext(), count + " correções baixadas excluídas e coordenadas originais restauradas!", Toast.LENGTH_SHORT).show();
+                                CloudSyncHelper.syncNow(requireContext(), "Limpeza de Baixados");
+                            });
+                        }
+                    }).start();
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
     }
 
     private void loadCorrected() {
@@ -287,7 +359,7 @@ public class CorrectedAddressesFragment extends Fragment {
 
     private void onDeleteClicked(CorrectedAddress corrected) {
         boolean isAlreadyShared = corrected.creatorId != null && corrected.creatorId.equals(currentUserId);
-        String coordsInfo = String.format(java.util.Locale.US, "📍 Lat: %.6f\n📍 Lon: %.6f", corrected.latitude, corrected.longitude);
+        String coordsInfo = String.format(Locale.US, "📍 Lat: %.6f\n📍 Lon: %.6f", corrected.latitude, corrected.longitude);
         
         List<String> optionsList = new ArrayList<>();
         optionsList.add(coordsInfo);
@@ -296,10 +368,19 @@ public class CorrectedAddressesFragment extends Fragment {
         if (!isAlreadyShared) {
             optionsList.add("📤 Compartilhar com a Comunidade");
         }
+        if (isDev || isAlreadyShared) {
+            if (isAlreadyShared && !isDev) {
+                optionsList.add("🗑️ Excluir Minha Correção da Comunidade");
+            } else if (isDev && !isAlreadyShared) {
+                optionsList.add("🗑️ Excluir da Comunidade (Dev)");
+            } else {
+                optionsList.add("🗑️ Excluir da Comunidade");
+            }
+        }
 
         String[] options = optionsList.toArray(new String[0]);
         
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        new AlertDialog.Builder(requireContext())
                 .setTitle(corrected.address)
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) {
@@ -319,6 +400,8 @@ public class CorrectedAddressesFragment extends Fragment {
                             confirmDelete(corrected);
                         } else if (selected.contains("Compartilhar")) {
                             shareWithCommunity(corrected, currentUserId);
+                        } else if (selected.contains("Excluir da Comunidade")) {
+                            confirmDeleteFromCommunity(corrected);
                         }
                     }
                 })
@@ -326,8 +409,48 @@ public class CorrectedAddressesFragment extends Fragment {
                 .show();
     }
 
+    private void confirmDeleteFromCommunity(CorrectedAddress corrected) {
+        boolean isMine = corrected.creatorId != null && corrected.creatorId.equals(currentUserId);
+        String message = (isDev && !isMine) 
+                ? "Você é desenvolvedor. Deseja excluir permanentemente o endereço \"" + corrected.address + "\" da comunidade?"
+                : "Deseja excluir permanentemente a sua correção do endereço \"" + corrected.address + "\" da comunidade?";
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Excluir da Comunidade")
+                .setMessage(message)
+                .setPositiveButton("Excluir", (dialog, which) -> {
+                    FirebaseHelper.deleteAddressFromCommunity(corrected.address, new FirebaseHelper.GlobalUploadCallback() {
+                        @Override
+                        public void onSuccess() {
+                            new Thread(() -> {
+                                AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                                CorrectedAddress local = dao.getCorrectedAddress(corrected.address);
+                                if (local != null) dao.deleteCorrectedAddress(local);
+                                restoreStopsForDeletedAddress(dao, corrected.address);
+                                if (getActivity() != null) {
+                                    getActivity().runOnUiThread(() -> 
+                                        Toast.makeText(getContext(), "Endereço excluído da comunidade e posição original restaurada!", Toast.LENGTH_SHORT).show()
+                                    );
+                                }
+                            }).start();
+                        }
+
+                        @Override
+                        public void onFailure(String msg) {
+                            if (getActivity() != null) {
+                                getActivity().runOnUiThread(() -> 
+                                    Toast.makeText(getContext(), "Erro ao excluir da comunidade: " + msg, Toast.LENGTH_SHORT).show()
+                                );
+                            }
+                        }
+                    });
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
     private void shareWithCommunity(CorrectedAddress corrected, String currentUserId) {
-        String uName = requireContext().getSharedPreferences("AppConfig", android.content.Context.MODE_PRIVATE).getString("profile_name", "Entregador");
+        String uName = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE).getString("profile_name", "Entregador");
         FirebaseHelper.uploadCorrection(currentUserId, uName, corrected, new FirebaseHelper.GlobalUploadCallback() {
             @Override
             public void onSuccess() {
@@ -343,16 +466,101 @@ public class CorrectedAddressesFragment extends Fragment {
             @Override
             public void onFailure(String msg) {
                 if (getActivity() != null) {
-                    getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "Erro ao compartilhar: " + msg, Toast.LENGTH_SHORT).show());
+                    getActivity().runOnUiThread(() -> {
+                        if (msg != null && msg.startsWith("ALREADY_CORRECTED_BY_OTHER")) {
+                            String[] parts = msg.split(":");
+                            String creatorName = (parts.length > 1 && !parts[1].isEmpty()) ? parts[1] : "outro entregador";
+                            promptSubstitutionRequestDialog(corrected, creatorName, currentUserId, uName);
+                        } else {
+                            Toast.makeText(getContext(), "Erro ao compartilhar: " + msg, Toast.LENGTH_SHORT).show();
+                        }
+                    });
                 }
             }
         });
     }
 
+    private void promptSubstitutionRequestDialog(CorrectedAddress newAddr, String creatorName, String userId, String userName) {
+        if (getContext() == null || newAddr == null) return;
+
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_modern_confirm, null);
+        TextView title = v.findViewById(R.id.textModernTitle);
+        TextView message = v.findViewById(R.id.textModernMessage);
+        MaterialButton btnCancel = v.findViewById(R.id.btnModernNegative);
+        MaterialButton btnConfirm = v.findViewById(R.id.btnModernPositive);
+
+        if (title != null) title.setText("Endereço Já Corrigido");
+        if (message != null) {
+            message.setText("O endereço \"" + newAddr.address + "\" já possui uma correção na comunidade enviada por " 
+                    + (creatorName != null && !creatorName.isEmpty() ? creatorName : "outro entregador") 
+                    + ".\n\nPara evitar divergências na comunidade, você não pode sobrescrevê-lo diretamente. Deseja enviar um pedido de substituição para análise de um desenvolvedor?");
+        }
+
+        if (btnCancel != null) btnCancel.setText("CANCELAR");
+        if (btnConfirm != null) btnConfirm.setText("SOLICITAR SUBSTITUIÇÃO");
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v2 -> dialog.dismiss());
+        if (btnConfirm != null) {
+            btnConfirm.setOnClickListener(v2 -> {
+                dialog.dismiss();
+                promptSubstitutionReasonDialog(newAddr, userId, userName);
+            });
+        }
+
+        dialog.show();
+    }
+
+    private void promptSubstitutionReasonDialog(CorrectedAddress newAddr, String userId, String userName) {
+        View v = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_community_comments, null);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext()).setView(v).create();
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+
+        EditText editReason = v.findViewById(R.id.editCommentInput);
+        View btnSend = v.findViewById(R.id.btnSendComment);
+        View btnCancel = v.findViewById(R.id.btnCancelComments);
+
+        if (editReason != null) {
+            editReason.setHint("Explique o motivo da alteração (ex: portão correto fica na rua de trás)...");
+        }
+
+        if (btnSend != null) {
+            btnSend.setOnClickListener(v2 -> {
+                String reason = editReason != null ? editReason.getText().toString().trim() : "";
+                if (reason.isEmpty()) {
+                    reason = "Solicitação de substituição de localização";
+                }
+                FirebaseHelper.requestAddressSubstitution(newAddr, userId, userName, reason, new FirebaseHelper.GlobalUploadCallback() {
+                    @Override
+                    public void onSuccess() {
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Solicitação de substituição enviada para análise!", Toast.LENGTH_LONG).show();
+                                dialog.dismiss();
+                            });
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(String msg) {
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "Erro ao solicitar: " + msg, Toast.LENGTH_SHORT).show());
+                        }
+                    }
+                });
+            });
+        }
+
+        if (btnCancel != null) btnCancel.setOnClickListener(v2 -> dialog.dismiss());
+        dialog.show();
+    }
+
     private void showMoveToNeighborhoodDialog(CorrectedAddress corrected) {
         new Thread(() -> {
             List<CorrectedAddress> all = AppDatabase.getInstance(requireContext()).appDao().getAllCorrectedAddresses();
-            java.util.Set<String> neighborhoods = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            Set<String> neighborhoods = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             for (CorrectedAddress addr : all) {
                 if (addr.neighborhood != null && !addr.neighborhood.isEmpty()) {
                     neighborhoods.add(addr.neighborhood);
@@ -362,22 +570,22 @@ public class CorrectedAddressesFragment extends Fragment {
 
             if (getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
-                    android.widget.LinearLayout layout = new android.widget.LinearLayout(requireContext());
-                    layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+                    LinearLayout layout = new LinearLayout(requireContext());
+                    layout.setOrientation(LinearLayout.VERTICAL);
                     layout.setPadding(50, 40, 50, 10);
 
-                    final android.widget.AutoCompleteTextView input = new android.widget.AutoCompleteTextView(requireContext());
+                    final AutoCompleteTextView input = new AutoCompleteTextView(requireContext());
                     input.setHint("Nome do Bairro ou Pasta");
                     input.setText(corrected.neighborhood != null ? corrected.neighborhood : "");
                     
-                    android.widget.ArrayAdapter<String> suggestAdapter = new android.widget.ArrayAdapter<>(requireContext(),
+                    ArrayAdapter<String> suggestAdapter = new ArrayAdapter<>(requireContext(),
                             android.R.layout.simple_dropdown_item_1line, neighborhoodList);
                     input.setAdapter(suggestAdapter);
                     input.setThreshold(1); // Sugere ao digitar 1 letra
 
                     layout.addView(input);
 
-                    new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    new AlertDialog.Builder(requireContext())
                             .setTitle("Organizar em Pasta")
                             .setMessage(neighborhoodList.isEmpty() ? 
                                     "Digite o nome da pasta para agrupar." : 
@@ -401,19 +609,63 @@ public class CorrectedAddressesFragment extends Fragment {
     }
 
     private void confirmDelete(CorrectedAddress corrected) {
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        new AlertDialog.Builder(requireContext())
                 .setTitle("Remover Fixação")
-                .setMessage("Deseja remover a correção deste endereço?")
+                .setMessage("Deseja remover a correção deste endereço e voltar para a localização original da planilha?")
                 .setPositiveButton("Remover", (d, w) -> {
                     new Thread(() -> {
-                        AppDatabase.getInstance(requireContext()).appDao().deleteCorrectedAddress(corrected);
+                        AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                        dao.deleteCorrectedAddress(corrected);
+                        restoreStopsForDeletedAddress(dao, corrected.address);
                         if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> CloudSyncHelper.syncNow(requireContext(), "Fixação Removida"));
+                            getActivity().runOnUiThread(() -> {
+                                Toast.makeText(getContext(), "Correção removida e localização original restaurada!", Toast.LENGTH_SHORT).show();
+                                CloudSyncHelper.syncNow(requireContext(), "Fixação Removida");
+                            });
                         }
                     }).start();
                 })
                 .setNegativeButton("Cancelar", null)
                 .show();
+    }
+
+    public static void restoreStopsForDeletedAddress(AppDao dao, String addressText) {
+        if (dao == null || addressText == null || addressText.isEmpty()) return;
+        List<RouteStop> allStops = dao.getAllRouteStops();
+        if (allStops == null || allStops.isEmpty()) return;
+
+        String normTarget = normalizeAddress(addressText);
+
+        for (RouteStop stop : allStops) {
+            if (stop.originalLatitude == 0.0 && stop.originalLongitude == 0.0) continue;
+
+            String normStopAddr = stop.address != null ? normalizeAddress(stop.address) : "";
+            String normAllAddr = stop.allAddresses != null ? normalizeAddress(stop.allAddresses) : "";
+
+            boolean matches = (normStopAddr.contains(normTarget) || normTarget.contains(normStopAddr)
+                    || normAllAddr.contains(normTarget) || normTarget.contains(normAllAddr));
+
+            if (matches) {
+                CorrectedAddress remainingCorr = dao.getCorrectedAddress(stop.address);
+                if (remainingCorr != null) {
+                    stop.latitude = remainingCorr.latitude;
+                    stop.longitude = remainingCorr.longitude;
+                } else {
+                    stop.latitude = stop.originalLatitude;
+                    stop.longitude = stop.originalLongitude;
+                }
+                dao.updateRouteStop(stop);
+            }
+        }
+    }
+
+    private static String normalizeAddress(String input) {
+        if (input == null) return "";
+        return Normalizer.normalize(input.toUpperCase(), Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .replaceAll("[.,\\-]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     private static class CorrectedAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {

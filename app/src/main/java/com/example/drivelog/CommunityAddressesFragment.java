@@ -1,14 +1,18 @@
 package com.example.drivelog;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.text.format.DateUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.text.Editable;
@@ -16,14 +20,21 @@ import android.text.TextWatcher;
 import android.net.Uri;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.ListenerRegistration;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -36,7 +47,8 @@ public class CommunityAddressesFragment extends Fragment {
     private SwipeRefreshLayout swipeRefresh;
     private EditText editSearch;
     private SharedPreferences prefs;
-    private com.google.firebase.firestore.ListenerRegistration communityListener;
+    private ListenerRegistration communityListener;
+    private boolean isDev = false;
 
     @Nullable
     @Override
@@ -51,11 +63,12 @@ public class CommunityAddressesFragment extends Fragment {
         prefs = requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
         
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        adapter = new CommunityAdapter(new ArrayList<>(), this::toggleFavoriteCity, this::onLikeClicked, this::onDislikeClicked, this::showCommentsDialog, this::onDownloadClicked);
+        adapter = new CommunityAdapter(new ArrayList<>(), this::toggleFavoriteCity, this::onLikeClicked, this::onDislikeClicked, this::showCommentsDialog, this::onDownloadClicked, this::onDeleteCommunityClicked);
         recyclerView.setAdapter(adapter);
         
         swipeRefresh.setOnRefreshListener(this::loadCommunityData);
         loadCommunityData();
+        checkDevAccess();
 
         editSearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -66,6 +79,21 @@ public class CommunityAddressesFragment extends Fragment {
         });
         
         return view;
+    }
+
+    private void checkDevAccess() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        String myEmail = user != null ? user.getEmail() : "";
+        FirebaseHelper.checkDeveloperAccess(myEmail, result -> {
+            if (isAdded()) {
+                getActivity().runOnUiThread(() -> {
+                    this.isDev = result;
+                    if (adapter != null) {
+                        adapter.setDevMode(result);
+                    }
+                });
+            }
+        });
     }
 
     private void loadCommunityData() {
@@ -127,6 +155,8 @@ public class CommunityAddressesFragment extends Fragment {
     private void onLikeClicked(CorrectedAddress item) {
         String userName = prefs.getString("profile_name", "Entregador");
         String userId = prefs.getString("current_user_id", "anon");
+        item.likes++;
+        if (adapter != null) adapter.notifyDataSetChanged();
         FirebaseHelper.addFeedback(item.address, true, null, userName, userId);
         Toast.makeText(getContext(), "Voto processado!", Toast.LENGTH_SHORT).show();
     }
@@ -134,6 +164,8 @@ public class CommunityAddressesFragment extends Fragment {
     private void onDislikeClicked(CorrectedAddress item) {
         String userName = prefs.getString("profile_name", "Entregador");
         String userId = prefs.getString("current_user_id", "anon");
+        item.dislikes++;
+        if (adapter != null) adapter.notifyDataSetChanged();
         FirebaseHelper.addFeedback(item.address, false, null, userName, userId);
         Toast.makeText(getContext(), "Voto processado!", Toast.LENGTH_SHORT).show();
     }
@@ -146,9 +178,57 @@ public class CommunityAddressesFragment extends Fragment {
         }).start();
     }
 
+    private void onDeleteCommunityClicked(CorrectedAddress item) {
+        if (getContext() == null || item == null) return;
+
+        FirebaseUser fUser = FirebaseAuth.getInstance().getCurrentUser();
+        String currentUserId = prefs.getString("current_user_id", "anon");
+        String myEmail = fUser != null ? fUser.getEmail() : "";
+        String myUid = fUser != null ? fUser.getUid() : "";
+
+        boolean isMine = item.creatorId != null && (item.creatorId.equals(currentUserId) || item.creatorId.equals(myUid) || (myEmail != null && !myEmail.isEmpty() && item.creatorId.equalsIgnoreCase(myEmail)));
+
+        String message = (isDev && !isMine) 
+                ? "Você é desenvolvedor. Deseja excluir permanentemente o endereço \"" + item.address + "\" da comunidade?"
+                : "Deseja excluir permanentemente a sua correção do endereço \"" + item.address + "\" da comunidade?";
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Excluir da Comunidade")
+                .setMessage(message)
+                .setPositiveButton("Excluir", (dialog, which) -> {
+                    FirebaseHelper.deleteAddressFromCommunity(item.address, new FirebaseHelper.GlobalUploadCallback() {
+                        @Override
+                        public void onSuccess() {
+                            new Thread(() -> {
+                                AppDao dao = AppDatabase.getInstance(requireContext()).appDao();
+                                CorrectedAddress local = dao.getCorrectedAddress(item.address);
+                                if (local != null) dao.deleteCorrectedAddress(local);
+                                CorrectedAddressesFragment.restoreStopsForDeletedAddress(dao, item.address);
+                                if (getActivity() != null) {
+                                    getActivity().runOnUiThread(() -> 
+                                        Toast.makeText(getContext(), "Endereço excluído da comunidade e posição original restaurada!", Toast.LENGTH_SHORT).show()
+                                    );
+                                }
+                            }).start();
+                        }
+
+                        @Override
+                        public void onFailure(String msg) {
+                            if (getActivity() != null) {
+                                getActivity().runOnUiThread(() -> 
+                                    Toast.makeText(getContext(), "Erro ao excluir da comunidade: " + msg, Toast.LENGTH_SHORT).show()
+                                );
+                            }
+                        }
+                    });
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
     private void showCommentsDialog(CorrectedAddress item) {
-        android.widget.LinearLayout layout = new android.widget.LinearLayout(requireContext());
-        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        LinearLayout layout = new LinearLayout(requireContext());
+        layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(40, 20, 40, 20);
 
         TextView textTitle = new TextView(requireContext());
@@ -156,17 +236,22 @@ public class CommunityAddressesFragment extends Fragment {
         textTitle.setPadding(0, 0, 0, 20);
         layout.addView(textTitle);
 
-        final android.widget.LinearLayout listContainer = new android.widget.LinearLayout(requireContext());
-        listContainer.setOrientation(android.widget.LinearLayout.VERTICAL);
+        final LinearLayout listContainer = new LinearLayout(requireContext());
+        listContainer.setOrientation(LinearLayout.VERTICAL);
         layout.addView(listContainer);
 
         TextView textLoading = new TextView(requireContext());
         textLoading.setText("Carregando comentários...");
         listContainer.addView(textLoading);
 
+        String currentUserId = prefs.getString("current_user_id", "anon");
+        FirebaseUser fUser = FirebaseAuth.getInstance().getCurrentUser();
+        String myEmail = fUser != null ? fUser.getEmail() : "";
+        String myUid = fUser != null ? fUser.getUid() : "";
+
         FirebaseHelper.fetchComments(item.address, new FirebaseHelper.CommentsFetchCallback() {
             @Override
-            public void onSuccess(List<FirebaseHelper.CommentsFetchCallback.CommentModel> comments) {
+            public void onSuccess(List<CommentModel> comments) {
                 if (isAdded()) {
                     getActivity().runOnUiThread(() -> {
                         listContainer.removeAllViews();
@@ -175,11 +260,61 @@ public class CommunityAddressesFragment extends Fragment {
                             empty.setText("Nenhum comentário ainda.");
                             listContainer.addView(empty);
                         } else {
-                            for (FirebaseHelper.CommentsFetchCallback.CommentModel c : comments) {
-                                TextView tv = new TextView(requireContext());
-                                tv.setText(c.user + ": " + c.text);
-                                tv.setPadding(0, 10, 0, 10);
-                                listContainer.addView(tv);
+                            for (CommentModel c : comments) {
+                                View commentView = LayoutInflater.from(requireContext()).inflate(R.layout.item_quadra_comment, listContainer, false);
+                                TextView txtUser = commentView.findViewById(R.id.textCommentUser);
+                                TextView txtTime = commentView.findViewById(R.id.textCommentTime);
+                                TextView txtBody = commentView.findViewById(R.id.textCommentBody);
+                                ImageButton btnDel = commentView.findViewById(R.id.btnDeleteComment);
+
+                                if (txtUser != null) txtUser.setText(c.user != null ? c.user : "Anônimo");
+                                if (txtBody != null) txtBody.setText(c.text != null ? c.text : "");
+                                if (txtTime != null) {
+                                    if (c.date > 0) {
+                                        txtTime.setText(DateUtils.getRelativeTimeSpanString(c.date, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
+                                    } else {
+                                        txtTime.setText("agora");
+                                    }
+                                }
+
+                                boolean isCommentMine = (c.userId != null && (c.userId.equals(currentUserId) || c.userId.equals(myUid) || (myEmail != null && !myEmail.isEmpty() && c.userId.equalsIgnoreCase(myEmail))));
+
+                                if (btnDel != null) {
+                                    btnDel.setVisibility((isCommentMine || isDev) ? View.VISIBLE : View.GONE);
+                                    btnDel.setOnClickListener(vDel -> {
+                                        new AlertDialog.Builder(requireContext())
+                                                .setTitle("Excluir Comentário")
+                                                .setMessage((isDev && !isCommentMine) ? "Você é desenvolvedor. Deseja apagar este comentário?" : "Deseja apagar o seu comentário?")
+                                                .setPositiveButton("Excluir", (dlg, which) -> {
+                                                    FirebaseHelper.deleteComment(item.address, c.id, new FirebaseHelper.GlobalUploadCallback() {
+                                                        @Override public void onSuccess() {
+                                                            if (getActivity() != null) {
+                                                                getActivity().runOnUiThread(() -> {
+                                                                    listContainer.removeView(commentView);
+                                                                    item.commentCount = Math.max(0, item.commentCount - 1);
+                                                                    if (adapter != null) adapter.notifyDataSetChanged();
+                                                                    if (listContainer.getChildCount() == 0) {
+                                                                        TextView tvEmpty = new TextView(requireContext());
+                                                                        tvEmpty.setText("Nenhum comentário ainda.");
+                                                                        listContainer.addView(tvEmpty);
+                                                                    }
+                                                                    Toast.makeText(getContext(), "Comentário excluído!", Toast.LENGTH_SHORT).show();
+                                                                });
+                                                            }
+                                                        }
+                                                        @Override public void onFailure(String msg) {
+                                                            if (getActivity() != null) {
+                                                                getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "Erro ao excluir: " + msg, Toast.LENGTH_SHORT).show());
+                                                            }
+                                                        }
+                                                    });
+                                                })
+                                                .setNegativeButton("Cancelar", null)
+                                                .show();
+                                    });
+                                }
+
+                                listContainer.addView(commentView);
                             }
                         }
                     });
@@ -199,11 +334,11 @@ public class CommunityAddressesFragment extends Fragment {
             }
         });
 
-        final android.widget.EditText input = new android.widget.EditText(requireContext());
+        final EditText input = new EditText(requireContext());
         input.setHint("Escreva um comentário...");
         layout.addView(input);
 
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        new AlertDialog.Builder(requireContext())
                 .setTitle("Comunidade: " + item.address)
                 .setView(layout)
                 .setPositiveButton("Comentar", (d, w) -> {
@@ -230,10 +365,12 @@ public class CommunityAddressesFragment extends Fragment {
         private final OnItemInteractionListener dislikeListener;
         private final OnItemInteractionListener commentListener;
         private final OnItemInteractionListener downloadListener;
+        private final OnItemInteractionListener deleteCommunityListener;
 
         private Set<String> favorites = new HashSet<>();
         private List<CorrectedAddress> originalList = new ArrayList<>();
         private String currentFilter = "";
+        private boolean isDev = false;
 
         interface OnFavoriteListener { void onToggle(String city); }
         interface OnItemInteractionListener { void onAction(CorrectedAddress item); }
@@ -243,12 +380,19 @@ public class CommunityAddressesFragment extends Fragment {
                          OnItemInteractionListener likeListener,
                          OnItemInteractionListener dislikeListener,
                          OnItemInteractionListener commentListener,
-                         OnItemInteractionListener downloadListener) {
+                         OnItemInteractionListener downloadListener,
+                         OnItemInteractionListener deleteCommunityListener) {
             this.favoriteListener = favoriteListener;
             this.interactionListener = likeListener;
             this.dislikeListener = dislikeListener;
             this.commentListener = commentListener;
             this.downloadListener = downloadListener;
+            this.deleteCommunityListener = deleteCommunityListener;
+        }
+
+        void setDevMode(boolean isDev) {
+            this.isDev = isDev;
+            notifyDataSetChanged();
         }
 
         void setData(List<CorrectedAddress> list) {
@@ -354,26 +498,55 @@ public class CommunityAddressesFragment extends Fragment {
                 
                 // Permitir clique no item para ver detalhes/coordenadas
                 h.itemView.setOnClickListener(v -> {
-                    String coordsInfo = String.format(java.util.Locale.US, "📍 Lat: %.6f\n📍 Lon: %.6f", item.latitude, item.longitude);
-                    String[] options = {"Abrir no Google Maps", "👍 Like", "👎 Dislike", "📥 Baixar Correção", "💬 Comentar"};
+                    String coordsInfo = String.format(Locale.US, "📍 Lat: %.6f\n📍 Lon: %.6f", item.latitude, item.longitude);
+                    List<String> optionsList = new ArrayList<>();
+                    optionsList.add("Abrir no Google Maps");
+                    optionsList.add("👍 Like");
+                    optionsList.add("👎 Dislike");
+                    optionsList.add("📥 Baixar Correção");
+                    optionsList.add("💬 Comentar");
+
+                    FirebaseUser fUser = FirebaseAuth.getInstance().getCurrentUser();
+                    SharedPreferences p = v.getContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE);
+                    String cUserId = p != null ? p.getString("current_user_id", "anon") : "anon";
+                    String myEmail = fUser != null ? fUser.getEmail() : "";
+                    String myUid = fUser != null ? fUser.getUid() : "";
+
+                    boolean isMine = item.creatorId != null && (item.creatorId.equals(cUserId) || item.creatorId.equals(myUid) || (myEmail != null && !myEmail.isEmpty() && item.creatorId.equalsIgnoreCase(myEmail)));
+
+                    if (isDev || isMine) {
+                        if (isMine && !isDev) {
+                            optionsList.add("🗑️ Excluir Minha Correção da Comunidade");
+                        } else if (isDev && !isMine) {
+                            optionsList.add("🗑️ Excluir da Comunidade (Dev)");
+                        } else {
+                            optionsList.add("🗑️ Excluir da Comunidade");
+                        }
+                    }
+
+                    String[] options = optionsList.toArray(new String[0]);
                     
-                    new androidx.appcompat.app.AlertDialog.Builder(v.getContext())
+                    new AlertDialog.Builder(v.getContext())
                             .setTitle(item.address)
                             .setMessage(coordsInfo)
                             .setItems(options, (dialog, which) -> {
-                                if (which == 0) {
+                                String selected = options[which];
+                                if (selected.equals("Abrir no Google Maps")) {
                                     try {
                                         Uri gmmIntentUri = Uri.parse("geo:" + item.latitude + "," + item.longitude + "?q=" + item.latitude + "," + item.longitude + "(" + Uri.encode(item.address) + ")");
-                                        android.content.Intent mapIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW, gmmIntentUri);
+                                        Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
                                         mapIntent.setPackage("com.google.android.apps.maps");
                                         v.getContext().startActivity(mapIntent);
                                     } catch (Exception e) {
                                         Toast.makeText(v.getContext(), "Google Maps não encontrado", Toast.LENGTH_SHORT).show();
                                     }
-                                } else if (which == 1) interactionListener.onAction(item);
-                                else if (which == 2) dislikeListener.onAction(item);
-                                else if (which == 3) downloadListener.onAction(item);
-                                else if (which == 4) commentListener.onAction(item);
+                                } else if (selected.contains("Like") && !selected.contains("Dislike")) interactionListener.onAction(item);
+                                else if (selected.contains("Dislike")) dislikeListener.onAction(item);
+                                else if (selected.contains("Baixar")) downloadListener.onAction(item);
+                                else if (selected.contains("Comentar")) commentListener.onAction(item);
+                                else if (selected.contains("Excluir da Comunidade")) {
+                                    if (deleteCommunityListener != null) deleteCommunityListener.onAction(item);
+                                }
                             })
                             .setNegativeButton("Fechar", null)
                             .show();
