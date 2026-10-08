@@ -306,6 +306,20 @@
                             android:visibility="gone" />
                     </LinearLayout>
                 </ScrollView>
+
+                <!-- Botão para Ocultar Card de Paradas (Seta para Baixo) -->
+                <ImageButton
+                    android:id="@+id/btnHideStopsCard"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_arrow_down"
+                    app:tint="?attr/colorPrimary"
+                    android:padding="6dp"
+                    android:scaleType="centerInside"
+                    android:contentDescription="Ocultar Card de Paradas" />
             </LinearLayout>
 
             <LinearLayout

@@ -334,6 +334,7 @@ public class RouteFragment extends Fragment {
     private TextView textWeatherTemp, textWeatherCity, textRouteTotalTime, textRouteCorrections, textSheetHeader, textPendingManualListTitle, textPendingManualListSubtitle;
     private View cardWeatherSummary, cardRouteTotalTime, cardRouteCorrections, cardSuccessSummary, cardFailedSummary, cardPendingSummary, layoutStatsGroup, btnToggleStatsSummary;
     private MaterialCardView cardPendingOptimization, cardPendingManualList, cardUndoCorrection, cardSearchNavDistance;
+    private View cardRestoreStopsSheet;
     private MaterialButton btnFinishOptimizationNow, btnContinueManualListEditing, btnCancelAndDeleteManualRoute, btnCancelAndDeleteOptimizationRoute, btnUndoCorrectionAction;
     private TextView textUndoCorrectionMessage, textSearchNavDistance;
     private final Handler undoHandler = new Handler(Looper.getMainLooper());
@@ -1081,6 +1082,16 @@ public class RouteFragment extends Fragment {
                 cardRouteTotalTime.setLayoutParams(pTime);
             }
         }
+
+        if (cardRestoreStopsSheet != null) {
+            ViewGroup.LayoutParams lpRestore = cardRestoreStopsSheet.getLayoutParams();
+            if (lpRestore instanceof ConstraintLayout.LayoutParams) {
+                ConstraintLayout.LayoutParams pRestore = (ConstraintLayout.LayoutParams) lpRestore;
+                int restoreMargin = (int) (24 * getResources().getDisplayMetrics().density) + systemBottom;
+                pRestore.bottomMargin = restoreMargin;
+                cardRestoreStopsSheet.setLayoutParams(pRestore);
+            }
+        }
     }
 
     private void showCompassCalibrationDialog() {
@@ -1225,6 +1236,7 @@ public class RouteFragment extends Fragment {
             if (cardPendingOptimization != null) {
                 cardPendingOptimization.setVisibility(isOptPending && !isManualPending ? View.VISIBLE : View.GONE);
             }
+            if (cardRestoreStopsSheet != null) cardRestoreStopsSheet.setVisibility(View.GONE);
             return;
         } else {
             if (cardPendingManualList != null) cardPendingManualList.setVisibility(View.GONE);
@@ -1270,6 +1282,11 @@ public class RouteFragment extends Fragment {
 
         if (bottomSheet != null) {
             bottomSheet.setVisibility((!hasStops || !showStopsCard) ? View.GONE : View.VISIBLE);
+        }
+
+        if (cardRestoreStopsSheet != null) {
+            boolean shouldShowRestoreButton = hasStops && !showStopsCard;
+            cardRestoreStopsSheet.setVisibility(shouldShowRestoreButton ? View.VISIBLE : View.GONE);
         }
 
         if (hasStops && autoHideRunnable == null) {
@@ -1670,6 +1687,15 @@ public class RouteFragment extends Fragment {
                 if (getActivity() instanceof MainActivity) {
                     ((MainActivity) getActivity()).showCommunityNotificationsDialog();
                 }
+            });
+        }
+
+        cardRestoreStopsSheet = view.findViewById(R.id.cardRestoreStopsSheet);
+        if (cardRestoreStopsSheet != null) {
+            cardRestoreStopsSheet.setOnClickListener(v -> {
+                sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", true).apply();
+                updateFloatingButtonsVisibility();
+                updateFabsPosition();
             });
         }
 
@@ -12528,7 +12554,17 @@ public class RouteFragment extends Fragment {
             h.layoutGlobalFeedback.setOnClickListener(v -> listener.onAction(s, 8)); 
             if (h.cardRouteTotalTime != null) {
                 h.cardRouteTotalTime.setOnClickListener(v -> fragment.showRouteTimerOptionsPopup(v));
-            } 
+            }
+
+            if (h.btnHideStopsCard != null) {
+                h.btnHideStopsCard.setOnClickListener(v -> {
+                    if (fragment != null && fragment.sharedPreferences != null) {
+                        fragment.sharedPreferences.edit().putBoolean("show_bottom_sheet_stops", false).apply();
+                        fragment.updateFloatingButtonsVisibility();
+                        fragment.updateFabsPosition();
+                    }
+                });
+            }
 
             h.itemView.setOnLongClickListener(v -> {
                 listener.onAction(s, 4); // 4 é o código para excluir
@@ -12536,7 +12572,7 @@ public class RouteFragment extends Fragment {
             });
         }
         @Override public int getItemCount() { return list.size(); }
-        static class ViewHolder extends RecyclerView.ViewHolder { TextView textNumber, textStopTimer, textAddress, textRawAddress, textNeighborhood, textStatus, textPackageCount, textGlobalStats, textGlobalNote, textDownloadedStatus, textRouteTotalTime, textRouteStopsProgress; View btnSuccess, btnFailed, btnNavigate, btnFixLocation, btnReset, btnCarLocation, layoutAddress, layoutGlobalFeedback, imageHomeWarning; MaterialCardView card, cardRouteTotalTime, cardRouteStopsProgress; ViewHolder(View v) { super(v); card = v.findViewById(R.id.cardStop); cardRouteTotalTime = v.findViewById(R.id.cardRouteTotalTime); textRouteTotalTime = v.findViewById(R.id.textRouteTotalTime); cardRouteStopsProgress = v.findViewById(R.id.cardRouteStopsProgress); textRouteStopsProgress = v.findViewById(R.id.textRouteStopsProgress); imageHomeWarning = v.findViewById(R.id.imageHomeWarning); textNumber = v.findViewById(R.id.textStopNumber); textStopTimer = v.findViewById(R.id.textStopTimer); textAddress = v.findViewById(R.id.textStopAddress); textRawAddress = v.findViewById(R.id.textRawAddress); textNeighborhood = v.findViewById(R.id.textStopNeighborhood); textStatus = v.findViewById(R.id.textStopStatus); textPackageCount = v.findViewById(R.id.textPackageCount); btnCarLocation = v.findViewById(R.id.btnCarLocation); textGlobalStats = v.findViewById(R.id.textGlobalStats); textGlobalNote = v.findViewById(R.id.textGlobalNote); textDownloadedStatus = v.findViewById(R.id.textDownloadedStatus); btnSuccess = v.findViewById(R.id.btnSuccess); btnFailed = v.findViewById(R.id.btnFailed); btnNavigate = v.findViewById(R.id.btnNavigate); btnFixLocation = v.findViewById(R.id.btnFixLocation); btnReset = v.findViewById(R.id.btnReset); layoutAddress = v.findViewById(R.id.layoutStopText); layoutGlobalFeedback = v.findViewById(R.id.layoutGlobalFeedback); } }
+        static class ViewHolder extends RecyclerView.ViewHolder { TextView textNumber, textStopTimer, textAddress, textRawAddress, textNeighborhood, textStatus, textPackageCount, textGlobalStats, textGlobalNote, textDownloadedStatus, textRouteTotalTime, textRouteStopsProgress; View btnSuccess, btnFailed, btnNavigate, btnFixLocation, btnReset, btnCarLocation, layoutAddress, layoutGlobalFeedback, imageHomeWarning, btnHideStopsCard; MaterialCardView card, cardRouteTotalTime, cardRouteStopsProgress; ViewHolder(View v) { super(v); card = v.findViewById(R.id.cardStop); cardRouteTotalTime = v.findViewById(R.id.cardRouteTotalTime); textRouteTotalTime = v.findViewById(R.id.textRouteTotalTime); cardRouteStopsProgress = v.findViewById(R.id.cardRouteStopsProgress); textRouteStopsProgress = v.findViewById(R.id.textRouteStopsProgress); imageHomeWarning = v.findViewById(R.id.imageHomeWarning); btnHideStopsCard = v.findViewById(R.id.btnHideStopsCard); textNumber = v.findViewById(R.id.textStopNumber); textStopTimer = v.findViewById(R.id.textStopTimer); textAddress = v.findViewById(R.id.textStopAddress); textRawAddress = v.findViewById(R.id.textRawAddress); textNeighborhood = v.findViewById(R.id.textStopNeighborhood); textStatus = v.findViewById(R.id.textStopStatus); textPackageCount = v.findViewById(R.id.textPackageCount); btnCarLocation = v.findViewById(R.id.btnCarLocation); textGlobalStats = v.findViewById(R.id.textGlobalStats); textGlobalNote = v.findViewById(R.id.textGlobalNote); textDownloadedStatus = v.findViewById(R.id.textDownloadedStatus); btnSuccess = v.findViewById(R.id.btnSuccess); btnFailed = v.findViewById(R.id.btnFailed); btnNavigate = v.findViewById(R.id.btnNavigate); btnFixLocation = v.findViewById(R.id.btnFixLocation); btnReset = v.findViewById(R.id.btnReset); layoutAddress = v.findViewById(R.id.layoutStopText); layoutGlobalFeedback = v.findViewById(R.id.layoutGlobalFeedback); } }
     }
     private static class StopsListAdapter extends RecyclerView.Adapter<StopsListAdapter.ViewHolder> {
         private final RouteFragment fragment;

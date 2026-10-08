@@ -485,6 +485,36 @@
             </com.google.android.material.card.MaterialCardView>
         </RelativeLayout>
 
+        <!-- Botão Centralizado na Parte Inferior para Reativar Card de Paradas Oculto -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardRestoreStopsSheet"
+            android:layout_width="48dp"
+            android:layout_height="28dp"
+            android:layout_marginBottom="24dp"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="6dp"
+            app:cardBackgroundColor="@android:color/white"
+            app:strokeWidth="1.5dp"
+            app:strokeColor="?attr/colorPrimary"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <ImageView
+                android:id="@+id/imageRestoreStopsArrow"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_arrow_up"
+                app:tint="?attr/colorPrimary"
+                android:contentDescription="Reativar Card de Paradas" />
+
+        </com.google.android.material.card.MaterialCardView>
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardFixMode"
             android:layout_width="wrap_content"
