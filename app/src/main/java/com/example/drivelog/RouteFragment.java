@@ -37,6 +37,20 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.ShapeDrawable;
+import android.graphics.drawable.shapes.OvalShape;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
@@ -306,9 +320,12 @@ public class RouteFragment extends Fragment {
     private SuggestionsAdapter suggestionsAdapter;
     private ViewPager2 viewPagerStops;
     private StopsCardAdapter stopsCardAdapter;
-    private MaterialCardView cardNavigationMode;
+    private View cardNavigationMode;
     private BorderProgressDrawable borderProgressDrawable;
     private double initialStepDistance = 200.0;
+    private GeoPoint nextStepLocation = null;
+    private float currentStepMaxProgressPct = 0f;
+    private String currentStepInstructionKey = "";
     private ImageView imageNavManeuver;
     private TextView textNavDistance, textNavInstruction, textNavTotalTime;
     private RecyclerView recyclerAllStops;
@@ -363,9 +380,44 @@ public class RouteFragment extends Fragment {
             progressPaint.setStrokeCap(Paint.Cap.ROUND);
         }
 
+        private ValueAnimator progressAnimator;
+
+        public float getProgress() {
+            return this.progressPercent;
+        }
+
         public void setProgress(float percent) {
-            this.progressPercent = Math.max(0f, Math.min(100f, percent));
-            invalidateSelf();
+            setProgress(percent, true);
+        }
+
+        public void setProgress(float percent, boolean animate) {
+            final float target = Math.max(0f, Math.min(100f, percent));
+
+            if (!animate) {
+                if (progressAnimator != null && progressAnimator.isRunning()) {
+                    progressAnimator.cancel();
+                }
+                this.progressPercent = target;
+                invalidateSelf();
+                return;
+            }
+
+            if (Math.abs(this.progressPercent - target) < 0.1f) {
+                return;
+            }
+
+            if (progressAnimator != null && progressAnimator.isRunning()) {
+                progressAnimator.cancel();
+            }
+
+            progressAnimator = ValueAnimator.ofFloat(this.progressPercent, target);
+            progressAnimator.setDuration(450);
+            progressAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
+            progressAnimator.addUpdateListener(animation -> {
+                this.progressPercent = (float) animation.getAnimatedValue();
+                invalidateSelf();
+            });
+            progressAnimator.start();
         }
 
         @Override
@@ -381,6 +433,17 @@ public class RouteFragment extends Fragment {
 
         @Override
         public void draw(@NonNull Canvas canvas) {
+            Rect b = getBounds();
+            if (b.width() > 0 && b.height() > 0) {
+                if (rectF.width() != (b.width() - strokeWidth) || rectF.height() != (b.height() - strokeWidth)) {
+                    float inset = strokeWidth / 2f;
+                    rectF.set(b.left + inset, b.top + inset, b.right - inset, b.bottom - inset);
+                    borderPath.reset();
+                    borderPath.addRoundRect(rectF, cornerRadius, cornerRadius, Path.Direction.CW);
+                    pathMeasure.setPath(borderPath, false);
+                }
+            }
+
             canvas.drawPath(borderPath, trackPaint);
 
             float totalLength = pathMeasure.getLength();
@@ -388,6 +451,7 @@ public class RouteFragment extends Fragment {
                 float drawLength = (progressPercent / 100f) * totalLength;
                 segmentPath.reset();
                 pathMeasure.getSegment(0, drawLength, segmentPath, true);
+                segmentPath.rLineTo(0, 0);
                 canvas.drawPath(segmentPath, progressPaint);
             }
         }
@@ -1095,8 +1159,16 @@ public class RouteFragment extends Fragment {
         String navStyle = sharedPreferences != null ? sharedPreferences.getString("nav_button_style", "original") : "original";
         boolean isSearchBalloonStyle = "search_balloon".equals(navStyle);
 
+        TypedValue typedValue = new TypedValue();
+        int primaryColor = Color.parseColor("#0077B6");
+        if (getContext() != null) {
+            requireContext().getTheme().resolveAttribute(androidx.appcompat.R.attr.colorPrimary, typedValue, true);
+            primaryColor = typedValue.data;
+        }
+
+        btnNavMapIcon.setColorFilter(primaryColor);
+
         if (isTraceActive) {
-            btnNavMapIcon.setColorFilter(Color.parseColor("#2196F3"));
             btnNavMapIcon.setAlpha(1.0f);
 
             if (isSearchBalloonStyle && cardSearchNavDistance != null && editSearch != null && editSearch.getVisibility() != View.VISIBLE) {
@@ -1110,8 +1182,7 @@ public class RouteFragment extends Fragment {
                 cardSearchNavDistance.setVisibility(View.GONE);
             }
         } else {
-            btnNavMapIcon.setColorFilter(Color.parseColor("#888888"));
-            btnNavMapIcon.setAlpha(0.6f);
+            btnNavMapIcon.setAlpha(0.5f);
 
             if (cardSearchNavDistance != null && cardSearchNavDistance.getVisibility() == View.VISIBLE) {
                 cardSearchNavDistance.animate().translationY(-20f).alpha(0f).setDuration(200).withEndAction(() -> {
@@ -1804,7 +1875,7 @@ public class RouteFragment extends Fragment {
         }
         cardLassoMode = view.findViewById(R.id.cardLassoMode); cardRestWarning = view.findViewById(R.id.cardRestWarningRoute);
         cardNavigationMode = view.findViewById(R.id.cardNavigationMode);
-        borderProgressDrawable = new BorderProgressDrawable(2.5f, 12f, Color.parseColor("#E0E0E0"), Color.parseColor("#2196F3"), requireContext());
+        borderProgressDrawable = new BorderProgressDrawable(3.5f, 12f, Color.parseColor("#CCCCCC"), Color.parseColor("#2196F3"), requireContext());
         if (cardNavigationMode != null) {
             cardNavigationMode.setForeground(borderProgressDrawable);
         }
@@ -4661,6 +4732,64 @@ public class RouteFragment extends Fragment {
         dialog.show();
     }
 
+    private boolean isTemporaryNavCardShownForTutorial = false;
+
+    public View getTutorialTargetView(int position) {
+        if (getView() == null) return null;
+
+        if (isTemporaryNavCardShownForTutorial && position != 4) {
+            isTemporaryNavCardShownForTutorial = false;
+            updateFloatingButtonsVisibility();
+        }
+
+        switch (position) {
+            case 0:
+                return (cardSearch != null && cardSearch.getVisibility() == View.VISIBLE) ? cardSearch : btnToggleSearch;
+            case 1:
+                return (btnOpenDrawer != null && btnOpenDrawer.getVisibility() == View.VISIBLE) ? btnOpenDrawer : layoutOpenDrawerInside;
+            case 2:
+                return (fabNewRoute != null && fabNewRoute.getVisibility() == View.VISIBLE) ? fabNewRoute : fabAddStop;
+            case 3:
+                return (btnPackageOrganization != null && btnPackageOrganization.getVisibility() == View.VISIBLE) ? btnPackageOrganization : btnRouteMenu;
+            case 4:
+                if (cardNavigationMode != null) {
+                    if (cardNavigationMode.getVisibility() != View.VISIBLE) {
+                        cardNavigationMode.setVisibility(View.VISIBLE);
+                        cardNavigationMode.setAlpha(1.0f);
+                        isTemporaryNavCardShownForTutorial = true;
+                    }
+                    return cardNavigationMode;
+                }
+                return layoutSwitchContainer;
+            case 5:
+                return (fabDeliveryApp != null && fabDeliveryApp.getVisibility() == View.VISIBLE) ? fabDeliveryApp : fabCompass;
+            case 6:
+                return (fabReportHazard != null && fabReportHazard.getVisibility() == View.VISIBLE) ? fabReportHazard : layoutNotificationsContainer;
+            default:
+                return cardSearch;
+        }
+    }
+
+    public float getTutorialTargetRadiusDp(int position) {
+        switch (position) {
+            case 0: return 24f;
+            case 1: return 24f;
+            case 2: return 28f;
+            case 3: return 20f;
+            case 4: return 16f;
+            case 5: return 28f;
+            case 6: return 28f;
+            default: return 16f;
+        }
+    }
+
+    public void onTutorialDismissed() {
+        if (isTemporaryNavCardShownForTutorial) {
+            isTemporaryNavCardShownForTutorial = false;
+            updateFloatingButtonsVisibility();
+        }
+    }
+
     public static class DialogOptionItem {
         String id;
         String title;
@@ -4746,6 +4875,7 @@ public class RouteFragment extends Fragment {
             items.add(new DialogOptionItem("topic_visibility", "👁️ Visibilidade no Mapa", true, false, false));
             items.add(new DialogOptionItem("topic_layout", "🔘 Botões e Layout", true, false, false));
             items.add(new DialogOptionItem("topic_help", "❓ Ajuda", true, false, false));
+            items.add(new DialogOptionItem("quick_settings", "⚙️ Ajustes", false, false, false));
 
             FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
             if (u != null && u.getEmail() != null) {
@@ -4775,6 +4905,7 @@ public class RouteFragment extends Fragment {
                 if (showHelp) {
                     items.add(new DialogOptionItem("quick_help", "❓ Ajuda e Tutoriais", false, false, false));
                 }
+                items.add(new DialogOptionItem("quick_settings", "⚙️ Ajustes", false, false, false));
             } else if ("topic_optimization".equals(currentPopupTopicId)) {
                 if (textTitle != null) textTitle.setText("🧠 Otimização e Ações");
                 items.add(new DialogOptionItem("opt_v3", "🧠 Otimizar Rota 3.0 (Combustível)", false, false, false));
@@ -4953,6 +5084,9 @@ public class RouteFragment extends Fragment {
                     break;
                 case "quick_reports":
                     if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).openFragmentInSettings(new ReportsFragment(), "Relatórios");
+                    break;
+                case "quick_settings":
+                    if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).openFragmentInSettings(new SettingsParentFragment(), "Ajustes");
                     break;
                 case "help_tutorial":
                     if (getActivity() instanceof MainActivity) {
@@ -6592,6 +6726,7 @@ public class RouteFragment extends Fragment {
                         String maneuverType = "";
                         String modifier = "";
                         List<NavInstruction> allInstructions = new ArrayList<>();
+                        GeoPoint stepLoc = null;
                         
                         if (route.has("legs")) {
                             JSONArray legs = route.getJSONArray("legs");
@@ -6626,6 +6761,13 @@ public class RouteFragment extends Fragment {
                                     JSONObject targetStep = steps.getJSONObject(targetStepIdx);
                                     JSONObject targetMan = targetStep.getJSONObject("maneuver");
 
+                                    if (targetMan.has("location")) {
+                                        JSONArray locArr = targetMan.getJSONArray("location");
+                                        if (locArr.length() >= 2) {
+                                            stepLoc = new GeoPoint(locArr.getDouble(1), locArr.getDouble(0));
+                                        }
+                                    }
+
                                     nextStepDist = accumDist;
                                     maneuverType = targetMan.optString("type", "");
                                     modifier = targetMan.optString("modifier", "");
@@ -6636,12 +6778,17 @@ public class RouteFragment extends Fragment {
                             }
                         }
 
+                        if (stepLoc == null && stop != null) {
+                            stepLoc = new GeoPoint(stop.latitude, stop.longitude);
+                        }
+
                         final String finalInstruction = instruction;
                         final double finalNextDist = nextStepDist;
                         final String finalManeuver = maneuverType;
                         final String finalModifier = modifier;
                         final List<NavInstruction> finalAllInstructions = allInstructions;
                         final double finalDuration = durationSeconds;
+                        final GeoPoint finalNextStepLoc = stepLoc;
 
                         JSONArray co = route.getJSONObject("geometry").getJSONArray("coordinates");
                         List<GeoPoint> pts = new ArrayList<>(); for(int i=0; i<co.length(); i++) pts.add(new GeoPoint(co.getJSONArray(i).getDouble(1), co.getJSONArray(i).getDouble(0)));
@@ -6687,13 +6834,31 @@ public class RouteFragment extends Fragment {
                                 // Modo Navegação (Balão Superior)
                                 if (cardNavigationMode != null) {
                                     animateNavigationCard(true);
-                                    initialStepDistance = finalNextDist > 0 ? finalNextDist : 200.0;
-                                    if (borderProgressDrawable != null) {
-                                        borderProgressDrawable.setProgress(100f);
+                                    nextStepLocation = finalNextStepLoc;
+                                    double initialDistToNext = (nextStepLocation != null && currentLocation != null)
+                                            ? currentLocation.distanceToAsDouble(nextStepLocation)
+                                            : (finalNextDist > 0 ? finalNextDist : 200.0);
+
+                                    initialStepDistance = Math.max(finalNextDist > 0 ? finalNextDist : 200.0, initialDistToNext);
+
+                                    String newStepKey = finalInstruction + "_" + (int) initialStepDistance;
+                                    if (!newStepKey.equals(currentStepInstructionKey)) {
+                                        currentStepInstructionKey = newStepKey;
+                                        currentStepMaxProgressPct = 0f;
                                     }
+
+                                    double completedDist = Math.max(0, initialStepDistance - initialDistToNext);
+                                    float rawPct = (float) Math.max(0, Math.min(100, (completedDist / initialStepDistance) * 100.0));
+                                    currentStepMaxProgressPct = Math.max(currentStepMaxProgressPct, rawPct);
+
+                                    if (borderProgressDrawable != null) {
+                                        borderProgressDrawable.setProgress(currentStepMaxProgressPct);
+                                    }
+                                    cardNavigationMode.invalidate();
+
                                     if (textNavDistance != null) {
-                                        if (finalNextDist < 1000) textNavDistance.setText(String.format(Locale.getDefault(), "%.0fm", finalNextDist));
-                                        else textNavDistance.setText(String.format(Locale.getDefault(), "%.1fkm", finalNextDist / 1000.0));
+                                        if (initialDistToNext < 1000) textNavDistance.setText(String.format(Locale.getDefault(), "%.0fm", initialDistToNext));
+                                        else textNavDistance.setText(String.format(Locale.getDefault(), "%.1fkm", initialDistToNext / 1000.0));
                                     }
 
                                     if (textNavTotalTime != null) {
@@ -6785,9 +6950,28 @@ public class RouteFragment extends Fragment {
                 if (textSearchNavDistance != null) textSearchNavDistance.setText(distStr);
             }
 
+            // Distância e progresso até o próximo passo/manobra da navegação
+            double distToNextStep = (nextStepLocation != null)
+                    ? currentLocation.distanceToAsDouble(nextStepLocation)
+                    : remainingMeters;
+
+            if (textNavDistance != null) {
+                if (distToNextStep < 1000) textNavDistance.setText(String.format(Locale.getDefault(), "%.0fm", distToNextStep));
+                else textNavDistance.setText(String.format(Locale.getDefault(), "%.1fkm", distToNextStep / 1000.0));
+            }
+
             if (borderProgressDrawable != null && initialStepDistance > 0) {
-                float pct = (float) Math.max(0, Math.min(100, (remainingMeters / initialStepDistance) * 100.0));
-                borderProgressDrawable.setProgress(pct);
+                if (distToNextStep > initialStepDistance) {
+                    initialStepDistance = distToNextStep;
+                }
+                double completedDist = Math.max(0, initialStepDistance - distToNextStep);
+                float rawPct = (float) Math.max(0, Math.min(100, (completedDist / initialStepDistance) * 100.0));
+                currentStepMaxProgressPct = Math.max(currentStepMaxProgressPct, rawPct);
+
+                borderProgressDrawable.setProgress(currentStepMaxProgressPct);
+                if (cardNavigationMode != null) {
+                    cardNavigationMode.invalidate();
+                }
             }
 
             if (currentlySelectedStop.id != lastAnnouncedStopId) {
@@ -12190,6 +12374,31 @@ public class RouteFragment extends Fragment {
             RouteStop s = list.get(pos); 
             h.textNumber.setText(String.valueOf(pos + 1)); 
             updateTimer(h);
+
+            int totalStopsCount = (list != null) ? list.size() : 0;
+            int deliveredStopsCount = 0;
+            if (list != null) {
+                for (RouteStop rs : list) {
+                    if (rs != null && rs.deliveryStatus == 1) {
+                        deliveredStopsCount++;
+                    }
+                }
+            }
+
+            if (h.textRouteStopsProgress != null) {
+                h.textRouteStopsProgress.setText(deliveredStopsCount + "/" + totalStopsCount);
+            }
+
+            boolean isOptPending = (fragment != null && fragment.sharedPreferences != null)
+                    && fragment.sharedPreferences.getBoolean("route_optimization_pending_" + fragment.currentRouteId, false);
+
+            if (h.cardRouteStopsProgress != null) {
+                h.cardRouteStopsProgress.setVisibility((totalStopsCount > 0 && !isOptPending) ? View.VISIBLE : View.GONE);
+                h.cardRouteStopsProgress.setOnClickListener(v -> {
+                    if (fragment != null) fragment.showStatsPopup(1);
+                });
+            }
+
             h.textAddress.setText(s.address); 
 
             if (s.buyerCount == 1 && s.allAddresses != null && !s.allAddresses.isEmpty()) {
@@ -12230,8 +12439,9 @@ public class RouteFragment extends Fragment {
             }
 
             // --- Verificação de Correção Local e Global ---
+            final Context cardCtx = h.itemView.getContext();
             new Thread(() -> {
-                AppDao dao = AppDatabase.getInstance(h.itemView.getContext()).appDao();
+                AppDao dao = AppDatabase.getInstance(cardCtx).appDao();
                 CorrectedAddress localFix = dao.getCorrectedAddress(s.address);
                 String currentUserId = fragment.requireContext().getSharedPreferences("AppConfig", Context.MODE_PRIVATE).getString("current_user_id", "anon");
 
@@ -12326,7 +12536,7 @@ public class RouteFragment extends Fragment {
             });
         }
         @Override public int getItemCount() { return list.size(); }
-        static class ViewHolder extends RecyclerView.ViewHolder { TextView textNumber, textStopTimer, textAddress, textRawAddress, textNeighborhood, textStatus, textPackageCount, textGlobalStats, textGlobalNote, textDownloadedStatus, textRouteTotalTime; View btnSuccess, btnFailed, btnNavigate, btnFixLocation, btnReset, btnCarLocation, layoutAddress, layoutGlobalFeedback, imageHomeWarning; MaterialCardView card, cardRouteTotalTime; ViewHolder(View v) { super(v); card = v.findViewById(R.id.cardStop); cardRouteTotalTime = v.findViewById(R.id.cardRouteTotalTime); textRouteTotalTime = v.findViewById(R.id.textRouteTotalTime); imageHomeWarning = v.findViewById(R.id.imageHomeWarning); textNumber = v.findViewById(R.id.textStopNumber); textStopTimer = v.findViewById(R.id.textStopTimer); textAddress = v.findViewById(R.id.textStopAddress); textRawAddress = v.findViewById(R.id.textRawAddress); textNeighborhood = v.findViewById(R.id.textStopNeighborhood); textStatus = v.findViewById(R.id.textStopStatus); textPackageCount = v.findViewById(R.id.textPackageCount); btnCarLocation = v.findViewById(R.id.btnCarLocation); textGlobalStats = v.findViewById(R.id.textGlobalStats); textGlobalNote = v.findViewById(R.id.textGlobalNote); textDownloadedStatus = v.findViewById(R.id.textDownloadedStatus); btnSuccess = v.findViewById(R.id.btnSuccess); btnFailed = v.findViewById(R.id.btnFailed); btnNavigate = v.findViewById(R.id.btnNavigate); btnFixLocation = v.findViewById(R.id.btnFixLocation); btnReset = v.findViewById(R.id.btnReset); layoutAddress = v.findViewById(R.id.layoutStopText); layoutGlobalFeedback = v.findViewById(R.id.layoutGlobalFeedback); } }
+        static class ViewHolder extends RecyclerView.ViewHolder { TextView textNumber, textStopTimer, textAddress, textRawAddress, textNeighborhood, textStatus, textPackageCount, textGlobalStats, textGlobalNote, textDownloadedStatus, textRouteTotalTime, textRouteStopsProgress; View btnSuccess, btnFailed, btnNavigate, btnFixLocation, btnReset, btnCarLocation, layoutAddress, layoutGlobalFeedback, imageHomeWarning; MaterialCardView card, cardRouteTotalTime, cardRouteStopsProgress; ViewHolder(View v) { super(v); card = v.findViewById(R.id.cardStop); cardRouteTotalTime = v.findViewById(R.id.cardRouteTotalTime); textRouteTotalTime = v.findViewById(R.id.textRouteTotalTime); cardRouteStopsProgress = v.findViewById(R.id.cardRouteStopsProgress); textRouteStopsProgress = v.findViewById(R.id.textRouteStopsProgress); imageHomeWarning = v.findViewById(R.id.imageHomeWarning); textNumber = v.findViewById(R.id.textStopNumber); textStopTimer = v.findViewById(R.id.textStopTimer); textAddress = v.findViewById(R.id.textStopAddress); textRawAddress = v.findViewById(R.id.textRawAddress); textNeighborhood = v.findViewById(R.id.textStopNeighborhood); textStatus = v.findViewById(R.id.textStopStatus); textPackageCount = v.findViewById(R.id.textPackageCount); btnCarLocation = v.findViewById(R.id.btnCarLocation); textGlobalStats = v.findViewById(R.id.textGlobalStats); textGlobalNote = v.findViewById(R.id.textGlobalNote); textDownloadedStatus = v.findViewById(R.id.textDownloadedStatus); btnSuccess = v.findViewById(R.id.btnSuccess); btnFailed = v.findViewById(R.id.btnFailed); btnNavigate = v.findViewById(R.id.btnNavigate); btnFixLocation = v.findViewById(R.id.btnFixLocation); btnReset = v.findViewById(R.id.btnReset); layoutAddress = v.findViewById(R.id.layoutStopText); layoutGlobalFeedback = v.findViewById(R.id.layoutGlobalFeedback); } }
     }
     private static class StopsListAdapter extends RecyclerView.Adapter<StopsListAdapter.ViewHolder> {
         private final RouteFragment fragment;
@@ -12439,8 +12649,9 @@ public class RouteFragment extends Fragment {
             final String boundAddress = s.address;
 
             // Verificação de Correção para a Lista
+            final Context listCtx = h.itemView.getContext();
             new Thread(() -> {
-                AppDao dao = AppDatabase.getInstance(h.itemView.getContext()).appDao();
+                AppDao dao = AppDatabase.getInstance(listCtx).appDao();
                 CorrectedAddress localFix = dao.getCorrectedAddress(boundAddress);
                 
                 h.itemView.post(() -> {

@@ -374,17 +374,6 @@
                             app:tint="?attr/colorPrimary"
                             android:contentDescription="Organização dos Pacotes" />
 
-                        <ImageButton
-                            android:id="@+id/btnRouteMenu"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:background="?attr/selectableItemBackgroundBorderless"
-                            android:src="@drawable/ic_more_vert"
-                            android:padding="12dp"
-                            android:scaleType="centerInside"
-                            app:tint="?attr/colorPrimary"
-                            android:contentDescription="Menu da Rota" />
-
                         <!-- Botão de Navegação (Estilo Ícone no Balão) -->
                         <FrameLayout
                             android:id="@+id/layoutNavMapIconContainer"
@@ -433,6 +422,17 @@
                         </FrameLayout>
 
                         <ImageButton
+                            android:id="@+id/btnRouteMenu"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_more_vert"
+                            android:padding="12dp"
+                            android:scaleType="centerInside"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Menu da Rota" />
+
+                        <ImageButton
                             android:id="@+id/btnSearchAddress"
                             android:layout_width="48dp"
                             android:layout_height="48dp"
@@ -463,11 +463,11 @@
                 android:layout_alignTop="@id/cardSearch"
                 android:layout_alignEnd="@id/cardSearch"
                 android:layout_marginTop="38dp"
-                android:layout_marginEnd="50dp"
+                android:layout_marginEnd="92dp"
                 android:visibility="gone"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="2dp"
-                app:cardBackgroundColor="#0077CC"
+                app:cardBackgroundColor="?attr/colorPrimary"
                 app:strokeWidth="0dp">
 
                 <TextView
@@ -799,93 +799,100 @@
             app:layout_constraintStart_toStartOf="parent">
 
             <!-- Navegação: Agora no lado esquerdo, abaixo do menu lateral -->
-            <com.google.android.material.card.MaterialCardView
+            <FrameLayout
                 android:id="@+id/cardNavigationMode"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:maxWidth="210dp"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="0dp"
-                android:outlineProvider="none"
-                app:strokeWidth="0dp"
-                app:strokeColor="@android:color/transparent"
-                app:cardBackgroundColor="@android:color/white"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:visibility="gone">
 
-                <LinearLayout
+                <com.google.android.material.card.MaterialCardView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="8dp"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:id="@+id/imageNavManeuver"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@android:drawable/ic_menu_directions"
-                        app:tint="?attr/colorPrimary"
-                        android:layout_marginEnd="8dp" />
+                    android:maxWidth="210dp"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="2dp"
+                    app:strokeWidth="0dp"
+                    app:strokeColor="@android:color/transparent"
+                    app:cardBackgroundColor="@android:color/white">
 
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical">
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:id="@+id/imageNavManeuver"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/ic_menu_directions"
+                            app:tint="?attr/colorPrimary"
+                            android:layout_marginEnd="8dp" />
 
                         <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
+                            android:orientation="vertical">
 
-                            <TextView
-                                android:id="@+id/textNavDistance"
+                            <LinearLayout
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="200m"
-                                android:textSize="14sp"
-                                android:textStyle="bold"
-                                android:textColor="?attr/colorPrimary" />
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <TextView
+                                    android:id="@+id/textNavDistance"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="200m"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold"
+                                    android:textColor="?attr/colorPrimary" />
+
+                                <TextView
+                                    android:id="@+id/textNavTotalTime"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="(5 min)"
+                                    android:textSize="12sp"
+                                    android:textStyle="normal"
+                                    android:textColor="#888888"
+                                    android:layout_marginStart="4dp"
+                                    android:visibility="gone"/>
+                            </LinearLayout>
 
                             <TextView
-                                android:id="@+id/textNavTotalTime"
+                                android:id="@+id/textNavInstruction"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="(5 min)"
-                                android:textSize="12sp"
-                                android:textStyle="normal"
-                                android:textColor="#888888"
-                                android:layout_marginStart="4dp"
-                                android:visibility="gone"/>
+                                android:maxWidth="145dp"
+                                android:text="Dobre à esquerda"
+                                android:textSize="11sp"
+                                android:textColor="#666666" />
+
                         </LinearLayout>
 
-                        <TextView
-                            android:id="@+id/textNavInstruction"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:maxWidth="145dp"
-                            android:text="Dobre à esquerda"
-                            android:textSize="11sp"
-                            android:textColor="#666666" />
+                        <ImageButton
+                            android:id="@+id/btnMuteVoiceNav"
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:layout_marginStart="4dp"
+                            android:padding="0dp"
+                            android:scaleType="fitCenter"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@android:drawable/ic_lock_silent_mode_off"
+                            app:tint="?attr/colorPrimary"
+                            android:contentDescription="Mutar / Ativar Voz" />
 
                     </LinearLayout>
 
-                    <ImageButton
-                        android:id="@+id/btnMuteVoiceNav"
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:layout_marginStart="4dp"
-                        android:padding="0dp"
-                        android:scaleType="fitCenter"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:src="@android:drawable/ic_lock_silent_mode_off"
-                        app:tint="?attr/colorPrimary"
-                        android:contentDescription="Mutar / Ativar Voz" />
+                </com.google.android.material.card.MaterialCardView>
 
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
+            </FrameLayout>
         </LinearLayout>
 
         <androidx.constraintlayout.widget.ConstraintLayout

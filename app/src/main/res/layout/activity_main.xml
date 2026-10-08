@@ -233,6 +233,16 @@
                         android:background="?attr/selectableItemBackground"
                         app:tint="?attr/colorPrimary"
                         android:contentDescription="Relatórios"/>
+
+                    <ImageButton
+                        android:id="@+id/btnLeftHelp"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:src="@drawable/ic_help"
+                        android:background="?attr/selectableItemBackground"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Ajuda"/>
                 </LinearLayout>
 
                 <View
@@ -422,11 +432,14 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnDrawerNewRoute"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.Material3.Button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Nova Rota"
                 app:icon="@android:drawable/ic_menu_add"
+                app:backgroundTint="#2E7D32"
+                android:textColor="#FFFFFF"
+                app:iconTint="#FFFFFF"
                 android:layout_marginTop="8dp"/>
 
             <LinearLayout

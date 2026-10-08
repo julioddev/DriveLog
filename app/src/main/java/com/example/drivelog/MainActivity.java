@@ -18,6 +18,7 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -27,6 +28,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -541,6 +543,12 @@ public class MainActivity extends AppCompatActivity {
             if (drawerLayout != null) drawerLayout.closeDrawers();
             openFragmentInSettings(new ReportsFragment(), "Relatórios");
         });
+
+        View btnHelp = findViewById(R.id.btnLeftHelp);
+        if (btnHelp != null) btnHelp.setOnClickListener(v -> {
+            if (drawerLayout != null) drawerLayout.closeDrawers();
+            showAppTutorial();
+        });
     }
 
     private void setupAds() {
@@ -661,7 +669,7 @@ public class MainActivity extends AppCompatActivity {
         if (!useRemote) {
             hasOtherTabs = getBoolSafe("tab_earnings_enabled", true) || getBoolSafe("tab_km_enabled", true) || getBoolSafe("tab_fuel_enabled", true) || getBoolSafe("tab_maintenance_enabled", true);
         } else {
-            hasOtherTabs = currentRemoteMenus.contains("earnings") || currentRemoteMenus.contains("km") || currentRemoteMenus.contains("fuel") || currentRemoteMenus.contains("maintenance") || currentRemoteMenus.contains("reports");
+            hasOtherTabs = currentRemoteMenus.contains("earnings") || currentRemoteMenus.contains("km") || currentRemoteMenus.contains("fuel") || currentRemoteMenus.contains("maintenance") || currentRemoteMenus.contains("reports") || currentRemoteMenus.contains("help");
         }
 
         View layoutQuickAccess = findViewById(R.id.layoutDrawerQuickAccess);
@@ -693,6 +701,9 @@ public class MainActivity extends AppCompatActivity {
         
         View btnReportsLeft = findViewById(R.id.btnLeftReports);
         if (btnReportsLeft != null) btnReportsLeft.setVisibility((!useRemote || currentRemoteMenus.contains("reports")) ? View.VISIBLE : View.GONE);
+
+        View btnHelpLeft = findViewById(R.id.btnLeftHelp);
+        if (btnHelpLeft != null) btnHelpLeft.setVisibility((!useRemote || currentRemoteMenus.contains("help")) ? View.VISIBLE : View.GONE);
 
         int backStackCount = getSupportFragmentManager().getBackStackEntryCount();
         boolean isShowingSettings = backStackCount > 0;
@@ -773,20 +784,24 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog = new AlertDialog.Builder(this).setView(view).setCancelable(false).create();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         }
 
+        TutorialSpotlightView spotlightOverlay = view.findViewById(R.id.spotlightOverlay);
+        com.google.android.material.card.MaterialCardView cardTutorialDialog = view.findViewById(R.id.cardTutorialDialog);
         ViewPager2 viewPagerTutorial = view.findViewById(R.id.viewPagerTutorial);
         LinearLayout layoutDots = view.findViewById(R.id.layoutTutorialDots);
         MaterialButton btnSkip = view.findViewById(R.id.btnTutorialSkip);
         MaterialButton btnNext = view.findViewById(R.id.btnTutorialNext);
 
         List<TutorialAdapter.TutorialSlide> slides = new ArrayList<>();
-        slides.add(new TutorialAdapter.TutorialSlide(R.mipmap.ic_launcher_round, "Bem-vindo ao DriveLog", "Seu assistente pessoal e inteligente para controle e roteirização das suas entregas."));
-        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_map, "Roteirização Inteligente", "Otimize suas paradas focando em menos tempo no trânsito ou maior economia de combustível, organizando tudo na melhor ordem."));
-        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_menu_white, "Menu Lateral Rápido", "Acesse facilmente seu mapa, painel de ganhos, rastreamento de quilometragem, histórico de abastecimentos e as configurações do app."));
-        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_package, "Gerenciamento Simplificado", "Adicione pacotes manualmente, por voz, escaneando o código de barras, ou importando as planilhas das transportadoras em um clique."));
-        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_nav_3d, "Navegação Integrada", "Utilize a navegação diretamente no mapa do app com alertas e linhas visuais, sem a necessidade de alternar entre aplicativos o tempo todo."));
-        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_friends, "Comunidade Colaborativa", "Corrija coordenadas de endereços imprecisos no mapa, compartilhe com outros motoristas e ajude a comunidade de entregadores do seu bairro."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.mipmap.ic_launcher_round, "Bem-vindo ao DriveLog", "Seu assistente pessoal e inteligente para controle, roteirização e entregas."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_menu_white, "Menu Lateral Rápido", "Acesse facilmente seu mapa, ganhos, rastreio de KM, abastecimentos, relatórios e ajustes."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_map, "Roteirização Inteligente", "Crie rotas e otimize suas paradas para economizar combustível e tempo no trânsito."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_package, "Organização de Pacotes", "Organize e filtre pacotes por local do veículo (Frente, Passageiro, Porta-Malas) em segundos."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_nav_3d, "Navegação Integrada", "Siga o trajeto visual com progresso suave em volta do balão de orientação do próximo passo."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_map, "Atalhos & Bússola", "Abra seu app de entregas com 1 toque e oriente o mapa para o Norte Fixo ou Seguindo Direção."));
+        slides.add(new TutorialAdapter.TutorialSlide(R.drawable.ic_friends, "Comunidade Colaborativa", "Reporte perigos na pista, corrija endereços e ajude outros entregadores da sua região."));
 
         TutorialAdapter adapter = new TutorialAdapter(slides);
         viewPagerTutorial.setAdapter(adapter);
@@ -805,23 +820,60 @@ public class MainActivity extends AppCompatActivity {
             layoutDots.addView(dots[i], params);
         }
 
+        Runnable updateSpotlightForPage = () -> {
+            int position = viewPagerTutorial.getCurrentItem();
+            for (int i = 0; i < slides.size(); i++) {
+                dots[i].setAlpha(i == position ? 1.0f : 0.3f);
+            }
+            if (position == slides.size() - 1) {
+                btnNext.setText("Começar");
+                btnNext.setIconResource(0);
+            } else {
+                btnNext.setText("Próximo");
+            }
+
+            RouteFragment rf = getActiveRouteFragment();
+            View targetView = (rf != null) ? rf.getTutorialTargetView(position) : null;
+            float radiusDp = (rf != null) ? rf.getTutorialTargetRadiusDp(position) : 16f;
+
+            if (spotlightOverlay != null) {
+                if (targetView != null) {
+                    spotlightOverlay.setTargetView(targetView, radiusDp);
+
+                    if (cardTutorialDialog != null) {
+                        int[] targetLoc = new int[2];
+                        targetView.getLocationOnScreen(targetLoc);
+                        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+
+                        FrameLayout.LayoutParams cardParams = (FrameLayout.LayoutParams) cardTutorialDialog.getLayoutParams();
+                        if (targetLoc[1] > screenHeight * 0.55) {
+                            cardParams.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                            cardParams.topMargin = (int) (60 * getResources().getDisplayMetrics().density);
+                            cardParams.bottomMargin = 0;
+                        } else {
+                            cardParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+                            cardParams.bottomMargin = (int) (16 * getResources().getDisplayMetrics().density);
+                            cardParams.topMargin = 0;
+                        }
+                        cardTutorialDialog.setLayoutParams(cardParams);
+                    }
+                } else {
+                    spotlightOverlay.setTargetView(null, 0f);
+                }
+            }
+        };
+
         viewPagerTutorial.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
-                for (int i = 0; i < slides.size(); i++) {
-                    dots[i].setAlpha(i == position ? 1.0f : 0.3f);
-                }
-                if (position == slides.size() - 1) {
-                    btnNext.setText("Começar");
-                    btnNext.setIconResource(0);
-                } else {
-                    btnNext.setText("Próximo");
-                }
+                updateSpotlightForPage.run();
             }
         });
 
         btnSkip.setOnClickListener(v -> {
             sharedPreferences.edit().putBoolean("tutorial_seen", true).apply();
+            RouteFragment rf = getActiveRouteFragment();
+            if (rf != null) rf.onTutorialDismissed();
             dialog.dismiss();
         });
 
@@ -831,11 +883,23 @@ public class MainActivity extends AppCompatActivity {
                 viewPagerTutorial.setCurrentItem(current + 1);
             } else {
                 sharedPreferences.edit().putBoolean("tutorial_seen", true).apply();
+                RouteFragment rf = getActiveRouteFragment();
+                if (rf != null) rf.onTutorialDismissed();
                 dialog.dismiss();
             }
         });
 
         dialog.show();
+        view.postDelayed(updateSpotlightForPage, 300);
+    }
+
+    private RouteFragment getActiveRouteFragment() {
+        for (Fragment f : getSupportFragmentManager().getFragments()) {
+            if (f instanceof RouteFragment && f.isAdded() && f.getView() != null) {
+                return (RouteFragment) f;
+            }
+        }
+        return null;
     }
 
     private boolean getBoolSafe(String key, boolean def) {
